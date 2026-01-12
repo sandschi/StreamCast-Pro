@@ -45,6 +45,11 @@ function DashboardContent() {
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
 
+    const hasVerifiedAccess = isMasterAdmin ||
+        (userRole === 'broadcaster' && broadcasterStatus === 'approved') ||
+        (userRole === 'mod' && isModAuthorized) ||
+        (userRole === 'viewer'); // Viewers see suggestion mode chat
+
     // Verifying Moderator Permissions
     useEffect(() => {
         if (!user) return;
@@ -201,42 +206,46 @@ function DashboardContent() {
                 </div>
 
                 <nav className="flex-1 space-y-2">
-                    <button
-                        onClick={() => setActiveTab('chat')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                    >
-                        <MessageSquare size={20} />
-                        <span className="font-medium">Live Chat</span>
-                    </button>
+                    {hasVerifiedAccess && (
+                        <>
+                            <button
+                                onClick={() => setActiveTab('chat')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                            >
+                                <MessageSquare size={20} />
+                                <span className="font-medium">Live Chat</span>
+                            </button>
 
-                    {isModAuthorized && (
-                        <button
-                            onClick={() => setActiveTab('history')}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                        >
-                            <HistoryIcon size={20} />
-                            <span className="font-medium">History</span>
-                        </button>
-                    )}
+                            {isModAuthorized && (
+                                <button
+                                    onClick={() => setActiveTab('history')}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                >
+                                    <HistoryIcon size={20} />
+                                    <span className="font-medium">History</span>
+                                </button>
+                            )}
 
-                    {isModAuthorized && (
-                        <button
-                            onClick={() => setActiveTab('users')}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                        >
-                            <Users size={20} />
-                            <span className="font-medium">Users</span>
-                        </button>
-                    )}
+                            {isModAuthorized && (
+                                <button
+                                    onClick={() => setActiveTab('users')}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                >
+                                    <Users size={20} />
+                                    <span className="font-medium">Users</span>
+                                </button>
+                            )}
 
-                    {userRole === 'broadcaster' && (
-                        <button
-                            onClick={() => setActiveTab('settings')}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                        >
-                            <SettingsIcon size={20} />
-                            <span className="font-medium">Settings</span>
-                        </button>
+                            {(userRole === 'broadcaster' || isMasterAdmin) && (
+                                <button
+                                    onClick={() => setActiveTab('settings')}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                >
+                                    <SettingsIcon size={20} />
+                                    <span className="font-medium">Settings</span>
+                                </button>
+                            )}
+                        </>
                     )}
 
                     {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
@@ -250,7 +259,7 @@ function DashboardContent() {
                     )}
 
                     {/* Quick Tools Section */}
-                    {(userRole === 'broadcaster' || isMasterAdmin) && (
+                    {hasVerifiedAccess && (userRole === 'broadcaster' || isMasterAdmin) && (
                         <div className="pt-6 space-y-2">
                             <div className="pb-2 px-3 hidden md:block border-t border-zinc-800/50 pt-6">
                                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
@@ -312,46 +321,48 @@ function DashboardContent() {
 
             {/* Main Content */}
             <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-                <header className="mb-8 flex justify-between items-start">
-                    <div>
-                        <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
-                            {activeTab === 'chat' && 'Moderation Dashboard'}
-                            {activeTab === 'history' && 'Message History'}
-                            {activeTab === 'users' && 'Manage Users'}
-                            {activeTab === 'settings' && 'Overlay Customization'}
-                            {activeTab === 'broadcasters' && 'Manage Broadcasters'}
-                        </h2>
-                        <p className="text-zinc-500 text-sm md:text-base">
-                            {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
-                            {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
-                            {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
-                            {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
-                            {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {isMasterAdmin && (
-                            <div className="px-3 py-1 bg-purple-600/10 border border-purple-500/20 rounded-full flex items-center gap-2">
-                                <Shield size={12} className="text-purple-400" />
-                                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Master Admin</span>
-                            </div>
-                        )}
-                        <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                            userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                    'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                            }`}>
-                            {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
-                            {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
-                            {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
-                            {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
-                            <span className="uppercase tracking-widest whitespace-nowrap">
-                                {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
-                            </span>
+                {hasVerifiedAccess && (
+                    <header className="mb-8 flex justify-between items-start">
+                        <div>
+                            <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
+                                {activeTab === 'chat' && 'Moderation Dashboard'}
+                                {activeTab === 'history' && 'Message History'}
+                                {activeTab === 'users' && 'Manage Users'}
+                                {activeTab === 'settings' && 'Overlay Customization'}
+                                {activeTab === 'broadcasters' && 'Manage Broadcasters'}
+                            </h2>
+                            <p className="text-zinc-500 text-sm md:text-base">
+                                {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
+                                {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
+                                {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
+                                {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
+                                {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
+                            </p>
                         </div>
-                    </div>
-                </header>
+
+                        <div className="flex items-center gap-2">
+                            {isMasterAdmin && (
+                                <div className="px-3 py-1 bg-purple-600/10 border border-purple-500/20 rounded-full flex items-center gap-2">
+                                    <Shield size={12} className="text-purple-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Master Admin</span>
+                                </div>
+                            )}
+                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                                userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                    userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                        'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                                }`}>
+                                {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
+                                {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
+                                {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
+                                {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
+                                <span className="uppercase tracking-widest whitespace-nowrap">
+                                    {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
+                                </span>
+                            </div>
+                        </div>
+                    </header>
+                )}
 
                 <div className="max-w-4xl">
                     {/* Verifying Moderator Permissions UI */}
