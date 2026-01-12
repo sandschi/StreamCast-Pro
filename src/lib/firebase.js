@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -19,7 +19,9 @@ let db;
 if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
     auth = getAuth(app);
-    db = getFirestore(app);
+    db = initializeFirestore(app, {
+        experimentalForceLongPolling: true,
+    });
 } else {
     // Mock implementations for build time
     auth = {};

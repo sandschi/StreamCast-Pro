@@ -1,17 +1,24 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
+import { useSearchParams } from 'next/navigation';
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
 import History from '@/components/dashboard/History';
 import Settings from '@/components/dashboard/Settings';
-import { LayoutDashboard, MessageSquare, History as HistoryIcon, Settings as SettingsIcon, LogOut, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, History as HistoryIcon, Settings as SettingsIcon, LogOut, ExternalLink, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
     const { user, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
+    const searchParams = useSearchParams();
+    const hostParam = searchParams.get('host');
+
+    // Target UID is either the host parameter or the logged-in user themselves
+    const targetUid = hostParam || user?.uid;
+    const isModeratorMode = hostParam && hostParam !== user?.uid;
 
     if (loading) {
         return (
@@ -97,7 +104,9 @@ export default function DashboardPage() {
                         <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-zinc-700" />
                         <div className="hidden md:block overflow-hidden">
                             <p className="text-xs font-bold truncate">{user.displayName}</p>
-                            <p className="text-[10px] text-zinc-500 truncate">Broadcaster</p>
+                            <p className="text-[10px] text-zinc-500 truncate">
+                                {isModeratorMode ? 'Moderator' : 'Broadcaster'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -105,23 +114,32 @@ export default function DashboardPage() {
 
             {/* Main Content */}
             <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-                <header className="mb-8">
-                    <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
-                        {activeTab === 'chat' && 'Moderation Dashboard'}
-                        {activeTab === 'history' && 'Message History'}
-                        {activeTab === 'settings' && 'Overlay Customization'}
-                    </h2>
-                    <p className="text-zinc-500 text-sm md:text-base">
-                        {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
-                        {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
-                        {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
-                    </p>
+                <header className="mb-8 flex justify-between items-start">
+                    <div>
+                        <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
+                            {activeTab === 'chat' && 'Moderation Dashboard'}
+                            {activeTab === 'history' && 'Message History'}
+                            {activeTab === 'settings' && 'Overlay Customization'}
+                        </h2>
+                        <p className="text-zinc-500 text-sm md:text-base">
+                            {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
+                            {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
+                            {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
+                        </p>
+                    </div>
+
+                    {isModeratorMode && (
+                        <div className="bg-purple-600/20 border border-purple-500/30 rounded-full px-4 py-1.5 flex items-center gap-2 text-purple-400 text-xs font-bold animate-pulse">
+                            <ShieldAlert size={14} />
+                            MODERATOR MODE ACTIVE
+                        </div>
+                    )}
                 </header>
 
                 <div className="max-w-4xl">
-                    {activeTab === 'chat' && <Chat />}
-                    {activeTab === 'history' && <History />}
-                    {activeTab === 'settings' && <Settings />}
+                    {activeTab === 'chat' && <Chat targetUid={targetUid} />}
+                    {activeTab === 'history' && <History targetUid={targetUid} />}
+                    {activeTab === 'settings' && <Settings targetUid={targetUid} />}
                 </div>
             </main>
         </div>

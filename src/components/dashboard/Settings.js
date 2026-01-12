@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Settings as SettingsIcon, Save, User } from 'lucide-react';
+import { Settings as SettingsIcon, Save, User, Copy, Check, ExternalLink } from 'lucide-react';
 
-export default function Settings() {
+export default function Settings({ targetUid }) {
     const { user } = useAuth();
+    const effectiveUid = targetUid || user?.uid;
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
         strokeColor: '#000000',
@@ -17,18 +18,19 @@ export default function Settings() {
     });
     const [twitchUsername, setTwitchUsername] = useState('');
     const [saving, setSaving] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
-        if (!user) return;
+        if (!effectiveUid) return;
 
         // Listen to settings
-        const configRef = doc(db, 'users', user.uid, 'settings', 'config');
+        const configRef = doc(db, 'users', effectiveUid, 'settings', 'config');
         const unsubscribeConfig = onSnapshot(configRef, (doc) => {
             if (doc.exists()) setSettings(doc.data());
         });
 
         // Listen to user doc for twitchUsername
-        const userRef = doc(db, 'users', user.uid);
+        const userRef = doc(db, 'users', effectiveUid);
         const unsubscribeUser = onSnapshot(userRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
@@ -40,7 +42,7 @@ export default function Settings() {
             unsubscribeConfig();
             unsubscribeUser();
         };
-    }, [user]);
+    }, [effectiveUid]);
 
     const updateSetting = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
@@ -50,8 +52,8 @@ export default function Settings() {
         if (!user) return;
         setSaving(true);
         try {
-            const configRef = doc(db, 'users', user.uid, 'settings', 'config');
-            const userRef = doc(db, 'users', user.uid);
+            const configRef = doc(db, 'users', effectiveUid, 'settings', 'config');
+            const userRef = doc(db, 'users', effectiveUid);
 
             await updateDoc(configRef, settings);
             await updateDoc(userRef, { twitchUsername: twitchUsername.toLowerCase().trim() });
@@ -98,6 +100,41 @@ export default function Settings() {
                         <p className="text-[11px] text-zinc-500 italic">This is the chat the dashboard will connect to. If your name didn't sync automatically, type it here.</p>
                     </div>
                 </section>
+
+                {/* Moderator Access */}
+                {!targetUid && (
+                    <section className="space-y-4 pt-4 border-t border-zinc-800/50">
+                        <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                            <Copy size={14} /> Moderator Access
+                        </h4>
+                        <div className="space-y-3">
+                            <p className="text-xs text-zinc-500">
+                                Give this link to your moderators to let them manage your overlay from their own dashboard.
+                            </p>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    readOnly
+                                    value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?host=${user?.uid}` : ''}
+                                    className="flex-1 bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-[11px] text-zinc-400 outline-none"
+                                />
+                                <button
+                                    onClick={() => {
+                                        const url = `${window.location.origin}${window.location.pathname}?host=${user?.uid}`;
+                                        navigator.clipboard.writeText(url);
+                                        setCopied(true);
+                                        setTimeout(() => setCopied(false), 2000);
+                                    }}
+                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${copied ? 'bg-green-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                                        }`}
+                                >
+                                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                                    {copied ? 'Copied' : 'Copy'}
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 {/* Appearance */}
                 <section className="space-y-4 pt-4 border-t border-zinc-800/50">

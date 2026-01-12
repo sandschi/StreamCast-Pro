@@ -8,8 +8,10 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, ScreenShare, AlertCircle } from 'lucide-react';
 
-export default function Chat() {
+export default function Chat({ targetUid }) {
     const { user } = useAuth();
+    // Use targetUid if provided (Host mode), fallback to current user
+    const effectiveUid = targetUid || user?.uid;
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({});
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -24,7 +26,7 @@ export default function Chat() {
 
         const fetchUserData = async (retries = 3) => {
             try {
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                const userDoc = await getDoc(doc(db, 'users', effectiveUid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     const name = data.twitchUsername || user.displayName || user.providerData[0]?.displayName;
@@ -103,8 +105,8 @@ export default function Chat() {
 
     const sendToScreen = async (msg) => {
         if (!user) return;
-        const activeMsgRef = doc(db, 'users', user.uid, 'active_message', 'current');
-        const historyRef = collection(db, 'users', user.uid, 'history');
+        const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+        const historyRef = collection(db, 'users', effectiveUid, 'history');
         const payload = {
             username: msg.username,
             color: msg.color,
@@ -124,8 +126,8 @@ export default function Chat() {
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse ${connectionStatus === 'connected' ? 'bg-green-500' :
-                            connectionStatus === 'connecting' ? 'bg-yellow-500' :
-                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                        connectionStatus === 'connecting' ? 'bg-yellow-500' :
+                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
                         }`} />
                     Twitch Chat {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal">({channelName})</span>}
                 </h3>
