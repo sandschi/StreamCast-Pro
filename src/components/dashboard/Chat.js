@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Send, ScreenShare, AlertCircle } from 'lucide-react';
+import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ScreenShare, AlertCircle } from 'lucide-react';
 
 export default function Chat({ targetUid, isModeratorMode }) {
     const { user } = useAuth();
-    const effectiveUid = targetUid || user?.uid;
+
+    // Stabilize the UID to prevent effect thrashing
+    const effectiveUid = useMemo(() => targetUid || user?.uid, [targetUid, user?.uid]);
 
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({ sevenTV: [], bttv: [], ffz: [] });
@@ -19,16 +21,18 @@ export default function Chat({ targetUid, isModeratorMode }) {
     const [error, setError] = useState(null);
 
     const clientRef = useRef(null);
+    const connectingRef = useRef(false);
     const scrollRef = useRef(null);
     const lastFetchedIdRef = useRef(null);
     const emotesRef = useRef({ sevenTV: [], bttv: [], ffz: [] });
+    const channelRef = useRef(null);
 
-    // Sync ref with state
+    // 1. Emote Optimization: Sync ref and re-parse on arrival
     useEffect(() => {
         emotesRef.current = thirdPartyEmotes;
 
-        // When emotes load, re-parse existing messages to show emotes immediately
-        if (messages.length > 0) {
+        const hasEmotes = Object.values(thirdPartyEmotes).some(arr => arr.length > 0);
+        if (hasEmotes && messages.length > 0) {
             setMessages(prev => prev.map(msg => ({
                 ...msg,
                 fragments: parseTwitchMessage(msg.message, msg.rawEmotes, thirdPartyEmotes)
@@ -36,97 +40,121 @@ export default function Chat({ targetUid, isModeratorMode }) {
         }
     }, [thirdPartyEmotes]);
 
-    // 1. Fetch channel info and Broadcaster Twitch ID from Firestore
+    // 2. Data Fetching (Highly Defensive)
     useEffect(() => {
         if (!user || !effectiveUid) return;
 
+        let active = true;
         const fetchUserData = async (retries = 3) => {
             try {
                 const userDoc = await getDoc(doc(db, 'users', effectiveUid));
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
+                if (!active || !userDoc.exists()) return;
 
-                    // Set channel name: Priority to twitchUsername field, then stored displayName, then current login (only if not in Host Mode)
-                    const name = data.twitchUsername || data.displayName || (effectiveUid === user.uid ? user.displayName : null);
+                const data = userDoc.data();
+                const name = (data.twitchUsername || data.displayName || (effectiveUid === user.uid ? user.displayName : null))?.toLowerCase().trim();
 
-                    if (name) {
-                        setChannelName(name.toLowerCase().trim());
-                        setError(null);
-                    } else if (retries > 0) {
-                        setTimeout(() => fetchUserData(retries - 1), 2000);
-                    } else {
-                        setError('Broadcaster identity not fully synced. Please ensure they have logged in and set their channel name.');
-                    }
+                // Only update if it's a real change to avoid re-triggering connection effect
+                if (name && name !== channelRef.current) {
+                    channelRef.current = name;
+                    setChannelName(name);
+                    setError(null);
+                } else if (!name && retries > 0) {
+                    setTimeout(() => fetchUserData(retries - 1), 2000);
+                }
 
-                    // Fetch Emotes for the TARGET user (broadcaster)
-                    const broadcasterTwitchId = data.twitchId || (effectiveUid === user.uid ? user.providerData[0]?.uid : null);
-                    if (broadcasterTwitchId && lastFetchedIdRef.current !== broadcasterTwitchId) {
-                        lastFetchedIdRef.current = broadcasterTwitchId;
-                        console.log(`Chat: Fetching emotes for Twitch ID: ${broadcasterTwitchId}`);
-                        fetchThirdPartyEmotes(broadcasterTwitchId).then(fetched => {
-                            console.log(`Chat: Loaded ${fetched.sevenTV.length + fetched.bttv.length + fetched.ffz.length} third-party emotes.`);
-                            setThirdPartyEmotes(fetched);
-                        });
+                const bId = data.twitchId || (effectiveUid === user.uid ? user.providerData[0]?.uid : null);
+                if (bId && lastFetchedIdRef.current !== bId) {
+                    lastFetchedIdRef.current = bId;
+                    console.log(`Chat: Initializing emotes for: ${bId}`);
+                    const fetched = await fetchThirdPartyEmotes(bId);
+                    if (active) {
+                        console.log(`Chat: Emotes loaded (${fetched.sevenTV.length + fetched.bttv.length + fetched.ffz.length} total)`);
+                        setThirdPartyEmotes(fetched);
                     }
                 }
             } catch (e) {
-                console.error('Chat: Firestore error:', e);
+                console.error('Chat: Data error:', e);
             }
         };
 
         fetchUserData();
-    }, [user, effectiveUid]);
+        return () => { active = false; };
+    }, [user?.uid, effectiveUid]); // Depend on UID strictly
 
-    // 2. Connect to Twitch IRC (TMI)
+    // 3. TMI Connection Management
     useEffect(() => {
-        if (!user || !channelName) return;
+        if (!user || !channelName || connectingRef.current) return;
 
-        // Prevent multiple connections
-        if (clientRef.current) {
-            clientRef.current.disconnect();
-        }
+        const connectToTwitch = async () => {
+            // Clean up old instance first
+            if (clientRef.current) {
+                try {
+                    clientRef.current.removeAllListeners();
+                    await clientRef.current.disconnect();
+                } catch (e) { }
+                clientRef.current = null;
+            }
 
-        setConnectionStatus('connecting');
+            connectingRef.current = true;
+            setConnectionStatus('connecting');
 
-        const client = new tmi.Client({
-            connection: { secure: true, reconnect: true },
-            channels: [channelName]
-        });
+            const client = new tmi.Client({
+                connection: { secure: true, reconnect: true },
+                channels: [channelName]
+            });
 
-        client.connect().catch(err => {
-            console.error('Chat: Connection error:', err);
-            setConnectionStatus('error');
-        });
+            clientRef.current = client;
 
-        clientRef.current = client;
+            client.on('connected', () => {
+                setConnectionStatus('connected');
+                connectingRef.current = false;
+            });
 
-        client.on('connected', () => setConnectionStatus('connected'));
-        client.on('message', async (channel, tags, message) => {
-            // Use emotesRef.current to avoid stale closure
-            const parsedFragments = parseTwitchMessage(message, tags.emotes, emotesRef.current);
+            client.on('disconnected', (reason) => {
+                console.warn(`Chat: Disconnected (${reason})`);
+                setConnectionStatus('disconnected');
+                connectingRef.current = false;
+            });
 
-            // Get avatar URL (DecAPI is a reliable public mirror for Twitch avatars)
-            const username = tags['display-name'] || tags.username;
-            const avatarUrl = `https://decapi.me/twitch/avatar/${username.toLowerCase()}`;
+            client.on('message', (channel, tags, message) => {
+                const username = tags['display-name'] || tags.username;
+                const newMessage = {
+                    id: tags.id || Math.random().toString(36).substr(2, 9),
+                    username,
+                    avatarUrl: `https://decapi.me/twitch/avatar/${username.toLowerCase()}`,
+                    color: tags.color || '#efeff1',
+                    message,
+                    rawEmotes: tags.emotes,
+                    fragments: parseTwitchMessage(message, tags.emotes, emotesRef.current),
+                    timestamp: new Date(),
+                    isMod: tags.mod || tags.badges?.broadcaster === '1',
+                };
+                setMessages(prev => [...prev.slice(-49), newMessage]);
+            });
 
-            const newMessage = {
-                id: tags.id || Math.random().toString(36).substr(2, 9),
-                username,
-                avatarUrl,
-                color: tags.color || '#efeff1',
-                message,
-                rawEmotes: tags.emotes, // Store for re-parsing
-                fragments: parsedFragments,
-                timestamp: new Date(),
-                isMod: tags.mod || tags.badges?.broadcaster === '1',
-            };
-            setMessages(prev => [...prev.slice(-50), newMessage]);
-        });
+            try {
+                await client.connect();
+            } catch (err) {
+                console.error('Chat: TMI connection failed:', err);
+                if (connectingRef.current) {
+                    setConnectionStatus('error');
+                    connectingRef.current = false;
+                }
+            }
+        };
+
+        connectToTwitch();
 
         return () => {
-            if (clientRef.current) clientRef.current.disconnect();
+            if (clientRef.current) {
+                const c = clientRef.current;
+                c.removeAllListeners();
+                c.disconnect().catch(() => { });
+                clientRef.current = null;
+            }
+            connectingRef.current = false;
         };
-    }, [channelName]); // Only reconnect if channel changes
+    }, [user?.uid, channelName]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -149,7 +177,7 @@ export default function Chat({ targetUid, isModeratorMode }) {
             await setDoc(activeMsgRef, payload);
             await addDoc(historyRef, payload);
         } catch (e) {
-            console.error('Error sending to screen:', e);
+            console.error('Error sending message:', e);
         }
     };
 
@@ -157,16 +185,17 @@ export default function Chat({ targetUid, isModeratorMode }) {
         <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full animate-pulse ${connectionStatus === 'connected' ? 'bg-green-500' :
-                        connectionStatus === 'connecting' ? 'bg-yellow-500' :
-                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                    <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
+                            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
+                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
                         }`} />
-                    Twitch Chat {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal">({channelName})</span>}
+                    <span className="tracking-tight">Twitch Chat</span>
+                    {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
                 </h3>
             </div>
 
             {error && (
-                <div className="m-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex gap-3 text-red-400 text-sm animate-in fade-in slide-in-from-top-1">
+                <div className="m-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex gap-3 text-red-400 text-sm">
                     <AlertCircle size={18} className="shrink-0" />
                     <p>{error}</p>
                 </div>
@@ -174,44 +203,31 @@ export default function Chat({ targetUid, isModeratorMode }) {
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
                 {messages.map((msg) => (
-                    <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/30 p-3 rounded-lg border border-transparent hover:border-zinc-700 transition-all">
+                    <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
-                            <span className="font-bold text-sm" style={{ color: msg.color }}>
+                            <span className="font-bold text-sm tracking-wide" style={{ color: msg.color }}>
                                 {msg.username}
-                                {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">MOD</span>}
+                                {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
                             </span>
                             <button
                                 onClick={() => sendToScreen(msg)}
-                                className="opacity-0 group-hover:opacity-100 p-1.5 bg-purple-600 hover:bg-purple-500 rounded text-white transition-all scale-90 hover:scale-100"
-                                title="Send to Screen"
+                                className="opacity-0 group-hover:opacity-100 p-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg shadow-purple-600/20"
                             >
                                 <ScreenShare size={14} />
                             </button>
                         </div>
-                        <div className="text-zinc-200 text-sm flex flex-wrap items-center gap-1 leading-relaxed">
+                        <div className="text-zinc-200 text-sm flex flex-wrap items-center gap-1.5 leading-relaxed">
                             {msg.fragments.map((frag, i) => (
-                                frag.type === 'text' ? (
-                                    <span key={i}>{frag.content}</span>
-                                ) : (
-                                    <img
-                                        key={i}
-                                        src={frag.url}
-                                        alt={frag.name}
-                                        className="h-6 inline-block align-middle"
-                                        onError={(e) => {
-                                            console.warn(`Emote failed to load: ${frag.url}`);
-                                            // Optional: replace with text
-                                        }}
-                                    />
-                                )
+                                frag.type === 'text' ? <span key={i}>{frag.content}</span> :
+                                    <img key={i} src={frag.url} alt={frag.name} className="h-6 inline-block align-middle select-none" />
                             ))}
                         </div>
                     </div>
                 ))}
                 {messages.length === 0 && !error && (
-                    <div className="h-full flex flex-col items-center justify-center text-zinc-500 space-y-2 opacity-50">
-                        <p>Waiting for chat messages...</p>
-                        <p className="text-xs italic">Make sure you are live or someone is typing in your chat!</p>
+                    <div className="h-full flex flex-col items-center justify-center text-zinc-500 space-y-2 opacity-50 select-none">
+                        <div className="w-8 h-8 rounded-full border-2 border-zinc-800 border-t-zinc-600 animate-spin mb-2" />
+                        <p className="text-sm">Connecting to chat stream...</p>
                     </div>
                 )}
             </div>
