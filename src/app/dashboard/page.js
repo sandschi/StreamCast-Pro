@@ -47,16 +47,19 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
+            console.log('--- START PERMISSION CHECK ---');
             setVerifyingMod(true);
             setIsModAuthorized(false); // Start locked
             try {
                 // 1. Get host's twitch username
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
+                console.log('Target Host Name:', hostName);
 
                 // 2. Get MY twitch username correctly from Firestore
                 const myDoc = await getDoc(doc(db, 'users', user.uid));
                 const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
+                console.log('My Name (for Check):', myTwitchName);
 
                 if (!hostName || !myTwitchName) {
                     console.error('Missing names for mod check:', { hostName, myTwitchName });
@@ -65,23 +68,29 @@ function DashboardContent() {
                 }
 
                 // 3. Check IVR for mod status via full mod list
+                console.log(`Fetching mod list for: ${hostName}`);
                 const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
                 const data = await res.json();
+                console.log('Mod List API Response:', data);
 
                 // If the user is in the 'mods' array
                 const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
+                console.log('Is User in Mod List?', isMod);
 
                 // Final verification
                 if (isMod || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
+                    console.log('Verification: SUCCESS');
                     setIsModAuthorized(true);
                 } else {
+                    console.warn('Verification: FAILED (Not a mod)');
                     setIsModAuthorized(false);
                 }
             } catch (e) {
-                console.error('Permission check failed:', e);
+                console.error('Permission check CRITICAL error:', e);
                 setIsModAuthorized(false);
             } finally {
                 setVerifyingMod(false);
+                console.log('--- END PERMISSION CHECK ---');
             }
         };
 
