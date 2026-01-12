@@ -59,12 +59,15 @@ function DashboardContent() {
                     return;
                 }
 
-                // 3. Check IVR for mod status
-                const res = await fetch(`https://api.ivr.fi/v2/twitch/mod_check?user=${myTwitchName}&channel=${hostName}`);
+                // 3. Check IVR for mod status via full mod list
+                const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
                 const data = await res.json();
 
+                // If the user is in the 'mods' array
+                const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
+
                 // If it returns true (mod) or the user IS the broadcaster (safety check)
-                if (data === true || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
+                if (isMod || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
                     setIsModAuthorized(true);
                 } else {
                     setIsModAuthorized(false);
