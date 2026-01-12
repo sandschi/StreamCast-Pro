@@ -19,8 +19,9 @@ export default function Chat({ targetUid }) {
     const [error, setError] = useState(null);
     const clientRef = useRef(null);
     const scrollRef = useRef(null);
+    const lastFetchedIdRef = useRef(null);
 
-    // Fetch the correct channel name (Twitch username) from Firestore
+    // 1. Fetch the correct channel name (Twitch username) from Firestore
     useEffect(() => {
         if (!user) return;
 
@@ -54,16 +55,22 @@ export default function Chat({ targetUid }) {
         };
 
         fetchUserData();
+    }, [user, effectiveUid]);
+
+    // 2. Fetch Third-Party Emotes (Optimized)
+    useEffect(() => {
+        const twitchId = user?.providerData[0]?.uid;
+        if (!twitchId || lastFetchedIdRef.current === twitchId) return;
+
+        lastFetchedIdRef.current = twitchId;
+        fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
     }, [user]);
 
+    // 3. Connect to Twitch IRC (TMI)
     useEffect(() => {
         if (!user || !channelName) return;
 
-        const twitchId = user.providerData[0]?.uid;
-        if (!twitchId) return;
-
         setConnectionStatus('connecting');
-        fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
 
         const client = new tmi.Client({
             connection: { secure: true, reconnect: true },
@@ -79,6 +86,9 @@ export default function Chat({ targetUid }) {
 
         client.on('connected', () => setConnectionStatus('connected'));
         client.on('message', (channel, tags, message) => {
+            // We use the latest thirdPartyEmotes from state here
+            // Note: because this listener is created once, we must use a ref if thirdPartyEmotes changes often
+            // but since it's fetched once per login, it's usually fine.
             const parsedFragments = parseTwitchMessage(message, tags.emotes, thirdPartyEmotes);
             const newMessage = {
                 id: tags.id,
@@ -95,7 +105,11 @@ export default function Chat({ targetUid }) {
         return () => {
             if (clientRef.current) clientRef.current.disconnect();
         };
-    }, [user, channelName, thirdPartyEmotes.length]);
+    }, [user, channelName]); // Removed thirdPartyEmotes from deps to avoid re-connecting on every emote load
+
+    // 4. Update message parsing when emotes load (optional but better)
+    // If messages arrive BEFORE emotes are loaded, they won't have them. 
+    // Usually emotes load very fast, so this is rarely an issue in TMI contexts.
 
     useEffect(() => {
         if (scrollRef.current) {

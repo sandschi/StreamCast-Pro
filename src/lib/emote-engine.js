@@ -21,7 +21,7 @@ export async function fetchThirdPartyEmotes(channelId) {
                 url: e.data.host.url + '/2x.webp', // Using 2x size
             })) || [];
         }
-    } catch (e) { console.error('Error fetching 7TV emotes:', e); }
+    } catch (e) { /* Account possibly not linked/found - silence error */ }
 
     try {
         // BTTV API
@@ -35,7 +35,7 @@ export async function fetchThirdPartyEmotes(channelId) {
                 url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
             }));
         }
-    } catch (e) { console.error('Error fetching BTTV emotes:', e); }
+    } catch (e) { /* Account possibly not linked/found - silence error */ }
 
     try {
         // FFZ API
@@ -49,7 +49,7 @@ export async function fetchThirdPartyEmotes(channelId) {
                 url: e.urls['2'] || e.urls['1'],
             }));
         }
-    } catch (e) { console.error('Error fetching FFZ emotes:', e); }
+    } catch (e) { /* Account possibly not linked/found - silence error */ }
 
     return emotes;
 }
