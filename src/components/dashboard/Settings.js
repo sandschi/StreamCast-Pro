@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Settings as SettingsIcon, Save } from 'lucide-react';
+import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { Settings as SettingsIcon, Save, User } from 'lucide-react';
 
 export default function Settings() {
     const { user } = useAuth();
@@ -15,19 +15,31 @@ export default function Settings() {
         animationStyle: 'slide',
         displayDuration: 5,
     });
+    const [twitchUsername, setTwitchUsername] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (!user) return;
 
-        const docRef = doc(db, 'users', user.uid, 'settings', 'config');
-        const unsubscribe = onSnapshot(docRef, (doc) => {
+        // Listen to settings
+        const configRef = doc(db, 'users', user.uid, 'settings', 'config');
+        const unsubscribeConfig = onSnapshot(configRef, (doc) => {
+            if (doc.exists()) setSettings(doc.data());
+        });
+
+        // Listen to user doc for twitchUsername
+        const userRef = doc(db, 'users', user.uid);
+        const unsubscribeUser = onSnapshot(userRef, (doc) => {
             if (doc.exists()) {
-                setSettings(doc.data());
+                const data = doc.data();
+                setTwitchUsername(data.twitchUsername || '');
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeConfig();
+            unsubscribeUser();
+        };
     }, [user]);
 
     const updateSetting = (key, value) => {
@@ -38,10 +50,14 @@ export default function Settings() {
         if (!user) return;
         setSaving(true);
         try {
-            const docRef = doc(db, 'users', user.uid, 'settings', 'config');
-            await updateDoc(docRef, settings);
+            const configRef = doc(db, 'users', user.uid, 'settings', 'config');
+            const userRef = doc(db, 'users', user.uid);
+
+            await updateDoc(configRef, settings);
+            await updateDoc(userRef, { twitchUsername: twitchUsername.toLowerCase().trim() });
         } catch (e) {
             console.error('Error saving settings:', e);
+            alert('Error saving settings. Please check if your Ad-Blocker is blocking Firestore.');
         } finally {
             setSaving(false);
         }
@@ -65,8 +81,26 @@ export default function Settings() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
-                {/* Text Styling */}
+                {/* User Identification */}
                 <section className="space-y-4">
+                    <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <User size={14} /> Identity
+                    </h4>
+                    <div className="space-y-2">
+                        <label className="text-sm text-zinc-300">Twitch Channel Name</label>
+                        <input
+                            type="text"
+                            placeholder="e.g. shroud"
+                            value={twitchUsername}
+                            onChange={(e) => setTwitchUsername(e.target.value)}
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <p className="text-[11px] text-zinc-500 italic">This is the chat the dashboard will connect to. If your name didn't sync automatically, type it here.</p>
+                    </div>
+                </section>
+
+                {/* Appearance */}
+                <section className="space-y-4 pt-4 border-t border-zinc-800/50">
                     <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider">Appearance</h4>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -103,7 +137,7 @@ export default function Settings() {
                     </div>
                 </section>
 
-                {/* Animation & Timing */}
+                {/* Behavior */}
                 <section className="space-y-4 pt-4 border-t border-zinc-800/50">
                     <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider">Behavior</h4>
                     <div className="space-y-2">
@@ -131,7 +165,6 @@ export default function Settings() {
                             onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
                             className="w-full accent-purple-500"
                         />
-                        <p className="text-[11px] text-zinc-500 italic">How long should the message stay on screen before auto-hiding.</p>
                     </div>
                 </section>
             </div>

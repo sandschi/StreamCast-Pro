@@ -5,7 +5,8 @@ import {
     onAuthStateChanged,
     signInWithPopup,
     signOut,
-    OAuthProvider
+    OAuthProvider,
+    getAdditionalUserInfo
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -60,12 +61,13 @@ export function AuthProvider({ children }) {
 
         try {
             const result = await signInWithPopup(auth, provider);
-            // Capture Twitch username (screenName in Firebase result)
-            const profile = result._tokenResponse?.screenName || result.user.reloadUserInfo?.screenName;
+            const additionalInfo = getAdditionalUserInfo(result);
+            // Twitch username is usually in preferred_username
+            const username = additionalInfo?.profile?.preferred_username || result._tokenResponse?.screenName;
 
-            if (profile) {
+            if (username) {
                 await setDoc(doc(db, 'users', result.user.uid), {
-                    twitchUsername: profile.toLowerCase(),
+                    twitchUsername: username.toLowerCase(),
                 }, { merge: true });
             }
         } catch (error) {
