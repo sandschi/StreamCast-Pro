@@ -9,6 +9,7 @@ import History from '@/components/dashboard/History';
 import Settings from '@/components/dashboard/Settings';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import tmi from 'tmi.js';
 import {
     LayoutDashboard,
     MessageSquare,
@@ -24,7 +25,7 @@ import {
 import Link from 'next/link';
 
 function DashboardContent() {
-    const { user, loginWithTwitch, logout, loading } = useAuth();
+    const { user, twitchToken, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
@@ -47,55 +48,68 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
-            console.log('--- START PERMISSION CHECK ---');
+            console.log('--- START DEEP PERMISSION CHECK ---');
             setVerifyingMod(true);
             setIsModAuthorized(false); // Start locked
             try {
                 // 1. Get host's twitch username
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
-                console.log('Target Host Name:', hostName);
 
-                // 2. Get MY twitch username correctly from Firestore
+                // 2. Get MY twitch username
                 const myDoc = await getDoc(doc(db, 'users', user.uid));
                 const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
-                console.log('My Name (for Check):', myTwitchName);
 
                 if (!hostName || !myTwitchName) {
-                    console.error('Missing names for mod check:', { hostName, myTwitchName });
                     setIsModAuthorized(false);
                     return;
                 }
 
-                // 3. Check IVR for mod status via full mod list
-                console.log(`Fetching mod list for: ${hostName}`);
-                const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
-                const data = await res.json();
-                console.log('Mod List API Response:', data);
+                console.log(`Verifying ${myTwitchName} on ${hostName}...`);
 
-                // If the user is in the 'mods' array
-                const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
-                console.log('Is User in Mod List?', isMod);
+                // 3. LIVE TMI CHECK (The Source of Truth)
+                let isMod = false;
+                if (twitchToken) {
+                    console.log('Using Live TMI Verification...');
+                    const client = new tmi.Client({
+                        identity: { username: myTwitchName, password: `oauth:${twitchToken}` },
+                        channels: [hostName]
+                    });
 
-                // Final verification
-                if (isMod || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
-                    console.log('Verification: SUCCESS');
-                    setIsModAuthorized(true);
+                    try {
+                        await client.connect();
+                        const mods = await client.mods(hostName);
+                        isMod = mods.some(m => m.toLowerCase() === myTwitchName.toLowerCase());
+                        console.log('TMI Live Mod List:', mods);
+                        await client.disconnect();
+                    } catch (tmiErr) {
+                        console.warn('TMI Check failed, falling back to API:', tmiErr);
+                        // Fallback to API if TMI fails (e.g. token expired)
+                        const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
+                        const data = await res.json();
+                        isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
+                    }
                 } else {
-                    console.warn('Verification: FAILED (Not a mod)');
-                    setIsModAuthorized(false);
+                    // No token (old session), use API
+                    console.log('No token found, using API verification...');
+                    const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
+                    const data = await res.json();
+                    isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
                 }
+
+                console.log('Is Authorized?', isMod);
+                setIsModAuthorized(isMod);
             } catch (e) {
-                console.error('Permission check CRITICAL error:', e);
+                console.error('Permission check failed:', e);
                 setIsModAuthorized(false);
             } finally {
                 setVerifyingMod(false);
-                console.log('--- END PERMISSION CHECK ---');
+                console.log('--- END DEEP PERMISSION CHECK ---');
             }
         };
 
         checkPermissions();
-    }, [user, hostParam, isModeratorMode]);
+    }, [user, hostParam, isModeratorMode, twitchToken]);
 
     useEffect(() => {
         if (copyState) {

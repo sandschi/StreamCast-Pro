@@ -15,6 +15,7 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
+    const [twitchToken, setTwitchToken] = useState(null); // Used for live verification
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -70,6 +71,12 @@ export function AuthProvider({ children }) {
                     twitchUsername: username.toLowerCase(),
                 }, { merge: true });
             }
+
+            // Capture Token
+            const credential = OAuthProvider.credentialFromResult(result);
+            if (credential) {
+                setTwitchToken(credential.accessToken);
+            }
         } catch (error) {
             console.error('Login error:', error);
         }
@@ -78,7 +85,7 @@ export function AuthProvider({ children }) {
     const logout = () => signOut(auth);
 
     return (
-        <AuthContext.Provider value={{ user, loading, loginWithTwitch, logout }}>
+        <AuthContext.Provider value={{ user, twitchToken, loading, loginWithTwitch, logout }}>
             {children}
         </AuthContext.Provider>
     );
