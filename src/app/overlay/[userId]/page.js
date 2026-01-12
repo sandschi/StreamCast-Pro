@@ -128,11 +128,11 @@ export default function OverlayPage() {
                         >
                             {(settings.showAvatar !== false) && (activeMessage.avatarUrl || activeMessage.username) && (
                                 <img
-                                    src={`https://unavatar.io/twitch/${activeMessage.username.toLowerCase()}`}
+                                    src={activeMessage.avatarUrl || `https://decapi.me/twitch/avatar/${activeMessage.username.toLowerCase()}`}
                                     alt=""
                                     className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover"
                                     onError={(e) => {
-                                        e.target.src = `https://decapi.me/twitch/avatar/${activeMessage.username.toLowerCase()}`;
+                                        e.target.src = `https://unavatar.io/twitch/${activeMessage.username.toLowerCase()}`;
                                     }}
                                 />
                             )}

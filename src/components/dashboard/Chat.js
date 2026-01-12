@@ -117,11 +117,13 @@ export default function Chat({ targetUid, isModeratorMode }) {
             });
 
             client.on('message', (channel, tags, message) => {
-                const username = tags['display-name'] || tags.username;
+                const displayName = tags['display-name'] || tags.username;
+                const loginName = tags.username; // Unique identifier for avatars
+
                 const newMessage = {
                     id: tags.id || Math.random().toString(36).substr(2, 9),
-                    username,
-                    avatarUrl: `https://unavatar.io/twitch/${username.toLowerCase()}`,
+                    username: displayName,
+                    avatarUrl: `https://decapi.me/twitch/avatar/${loginName}`,
                     color: tags.color || '#efeff1',
                     message,
                     rawEmotes: tags.emotes,
