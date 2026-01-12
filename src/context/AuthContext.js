@@ -26,14 +26,21 @@ export function AuthProvider({ children }) {
 
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                // 1. Fetch user data (public)
-                const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                console.log('Auth State: Logged In', currentUser.uid);
+
+                // 1. Ensure user entry exists
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userDoc = await getDoc(userRef);
+
                 if (!userDoc.exists()) {
-                    await setDoc(doc(db, 'users', currentUser.uid), {
+                    await setDoc(userRef, {
+                        displayName: currentUser.displayName,
                         photoURL: currentUser.photoURL,
                         twitchId: currentUser.providerData[0].uid,
+                        createdAt: new Date().toISOString()
                     }, { merge: true });
 
+                    // Initialize default settings
                     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
                         textColor: '#ffffff',
                         strokeColor: '#000000',
@@ -43,10 +50,14 @@ export function AuthProvider({ children }) {
                     });
                 }
 
-                // 2. Fetch Twitch Token (private cloud-storage)
+                // 2. Resolve Twitch Token (private)
                 const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
                 if (tokenDoc.exists()) {
-                    setTwitchToken(tokenDoc.data().accessToken);
+                    const token = tokenDoc.data().accessToken;
+                    console.log('Twitch Token resolved from Cloud Store');
+                    setTwitchToken(token);
+                } else {
+                    console.warn('No Twitch Token found in Cloud Store. Live verification will be limited.');
                 }
 
                 setUser(currentUser);

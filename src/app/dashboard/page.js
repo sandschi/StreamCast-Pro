@@ -50,52 +50,97 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
-            console.log('--- START MODERATOR SECURITY CHECK ---');
+            console.log('--- MODERATOR SECURITY HANDSHAKE (V2) ---');
             setVerifyingMod(true);
             setIsModAuthorized(false);
 
             try {
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
+
+                // Wait up to 2 seconds for token to resolve from cloud if it's missing
+                let currentToken = twitchToken;
+                if (!currentToken) {
+                    console.log('Token missing from state, checking Firestore directly...');
+                    const tokenDoc = await getDoc(doc(db, 'users', user.uid, 'private', 'twitch'));
+                    if (tokenDoc.exists()) {
+                        currentToken = tokenDoc.data().accessToken;
+                        console.log('Token recovered from Firestore directly.');
+                    }
+                }
+
                 const myDoc = await getDoc(doc(db, 'users', user.uid));
                 const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
 
                 if (!hostName || !myTwitchName) {
+                    console.error('Handshake Aborted: Missing user/host mapping.');
                     if (!ignore) setIsModAuthorized(false);
                     return;
                 }
 
-                console.log(`Verifying: ${myTwitchName} on #${hostName}`);
-                console.log(`Token Status: ${twitchToken ? 'CLOUD_RESOLVED' : 'PENDING/MISSING'}`);
+                console.log(`Identity: ${myTwitchName} | Target: #${hostName}`);
+                console.log(`Security Context: ${currentToken ? 'IDENTIFIED (Cloud Key)' : 'ANONYMOUS (No Key)'}`);
 
-                // SOURCE 1: Real-time TMI Handshake (The ultimate Truth)
+                // SOURCE 1: TMI Diagnostic Join
                 const checkTmi = async () => {
-                    if (!twitchToken) {
-                        console.warn('TMI Check Skipped: No Token Found');
-                        return false;
-                    }
+                    if (!currentToken) return false;
                     return new Promise((resolve) => {
                         const tempClient = new tmi.Client({
-                            options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true, timeout: 3000 },
-                            identity: { username: myTwitchName.toLowerCase(), password: `oauth:${twitchToken}` },
+                            options: { debug: false },
+                            connection: { reconnect: false, secure: true, timeout: 5000 },
+                            identity: { username: myTwitchName.toLowerCase(), password: `oauth:${currentToken}` },
                             channels: [hostName]
                         });
-                        const t = setTimeout(() => { tempClient.disconnect(); resolve(false); }, 3000);
+
+                        const t = setTimeout(() => {
+                            console.warn('TMI Handshake: TIMEOUT ❌');
+                            tempClient.disconnect();
+                            resolve(false);
+                        }, 5000);
+
+                        tempClient.on('connected', () => console.log('TMI Handshake: Connected to Twitch IRC...'));
+
+                        tempClient.on('notice', (channel, msgid, msg) => {
+                            console.warn(`TMI Handshake Notice [${msgid}]: ${msg}`);
+                            if (msgid === 'authentication_failed') {
+                                clearTimeout(t);
+                                tempClient.disconnect();
+                                resolve(false);
+                            }
+                        });
+
                         tempClient.on('userstate', (channel, state) => {
                             if (channel.replace('#', '').toLowerCase() === hostName.toLowerCase()) {
                                 clearTimeout(t);
                                 const isMod = state.mod || state.badges?.broadcaster === '1';
-                                console.log('TMI Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
+                                console.log('TMI Handshake Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
                                 tempClient.disconnect();
                                 resolve(isMod);
                             }
                         });
-                        tempClient.connect().catch(() => { clearTimeout(t); resolve(false); });
+
+                        tempClient.connect().catch(err => {
+                            console.error('TMI Connect Error:', err);
+                            clearTimeout(t);
+                            resolve(false);
+                        });
                     });
                 };
 
-                // SOURCE 2: IVR API (Fallback + Cache Busted)
+                // SOURCE 2: DecAPI mods list lookup (Corrected Endpoint)
+                const checkDecApi = async () => {
+                    try {
+                        const res = await fetch(`https://decapi.me/twitch/mods/${hostName}?cb=${Date.now()}`);
+                        if (!res.ok) return false;
+                        const text = await res.text();
+                        const modsList = text.toLowerCase().split(' ');
+                        const isMod = modsList.includes(myTwitchName.toLowerCase());
+                        console.log('DecAPI Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
+                        return isMod;
+                    } catch { return false; }
+                };
+
+                // SOURCE 3: IVR API (Cache Busted)
                 const checkIvr = async () => {
                     try {
                         const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}?cb=${Date.now()}`);
@@ -107,22 +152,21 @@ function DashboardContent() {
                     } catch { return false; }
                 };
 
-                // Preference: If TMI is available and verified, it wins.
-                // We run them in a race to see who verifies FIRST.
-                const results = await Promise.all([checkTmi(), checkIvr()]);
-                const finalizedResult = results.some(r => r === true);
+                // Concurrent verification
+                const [tmiRes, decRes, ivrRes] = await Promise.all([checkTmi(), checkDecApi(), checkIvr()]);
+                const isVerified = tmiRes || decRes || ivrRes;
 
                 if (!ignore) {
-                    console.log('Final Security Status:', finalizedResult ? 'AUTHORIZED' : 'ACCESS_DENIED');
-                    setIsModAuthorized(finalizedResult);
+                    console.log('Handshake Final Result:', isVerified ? 'AUTHORIZED ✅' : 'ACCESS DENIED ❌');
+                    setIsModAuthorized(isVerified);
                 }
             } catch (e) {
-                console.error('Security Gate Error:', e);
+                console.error('Security Handshake Failed:', e);
                 if (!ignore) setIsModAuthorized(false);
             } finally {
                 if (!ignore) {
                     setVerifyingMod(false);
-                    console.log('--- END MODERATOR SECURITY CHECK ---');
+                    console.log('--- END MODERATOR SECURITY HANDSHAKE ---');
                 }
             }
         };
