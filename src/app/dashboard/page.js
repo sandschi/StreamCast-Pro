@@ -7,6 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
 import History from '@/components/dashboard/History';
 import Settings from '@/components/dashboard/Settings';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import {
     LayoutDashboard,
     MessageSquare,
