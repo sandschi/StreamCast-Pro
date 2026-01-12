@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { History as HistoryIcon, RefreshCw } from 'lucide-react';
+// NEW: Icons for Suggestion
+import { History as HistoryIcon, RefreshCw, Send, ScreenShare } from 'lucide-react';
+import { addDoc, serverTimestamp } from 'firebase/firestore';
 
-export default function History({ targetUid, isModeratorMode, isModAuthorized }) {
+export default function History({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
     const { user } = useAuth();
     const effectiveUid = targetUid || user?.uid;
     const [history, setHistory] = useState([]);
@@ -29,12 +31,31 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized })
     }, [user, effectiveUid]);
 
     const resendToScreen = async (msg) => {
-        if (!user || (isModeratorMode && !isModAuthorized)) return;
-        const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        await setDoc(activeMsgRef, {
+        if (!user || userRole === 'denied') return;
+
+        const isViewer = userRole === 'viewer';
+        const payload = {
             ...msg,
-            timestamp: new Date(), // Local update for instant feel
-        });
+            timestamp: serverTimestamp(),
+            suggestedBy: user.uid,
+            suggestedByName: user.displayName,
+            fromHistory: true
+        };
+        delete payload.id;
+
+        try {
+            if (isViewer) {
+                // VIEWERS: Suggest from history
+                const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
+                await addDoc(suggestionsRef, payload);
+                console.log('History Suggestion Sent ✅');
+            } else {
+                // MODS/BROADCASTER: Show directly
+                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+                await setDoc(activeMsgRef, payload);
+                console.log('History Sent to Screen ✅');
+            }
+        } catch (e) { console.error(e); }
     };
 
     return (
@@ -60,10 +81,16 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized })
                             </div>
                             <button
                                 onClick={() => resendToScreen(msg)}
-                                className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition-colors"
-                                title="Quick Re-send"
+                                className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 px-3 border ${userRole === 'viewer'
+                                    ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-600/20'
+                                    : 'bg-purple-600/10 text-purple-400 border-purple-500/20 hover:bg-purple-600/20 text-white'
+                                    }`}
+                                title={userRole === 'viewer' ? "Suggest Message" : "Show on Overlay"}
                             >
-                                <RefreshCw size={14} />
+                                {userRole === 'viewer' ? <Send size={12} /> : <ScreenShare size={12} />}
+                                <span className="text-[10px] font-bold uppercase tracking-wider">
+                                    {userRole === 'viewer' ? 'Suggest' : 'Show'}
+                                </span>
                             </button>
                         </div>
                         <div className="text-zinc-300 text-sm flex flex-wrap items-center gap-1">

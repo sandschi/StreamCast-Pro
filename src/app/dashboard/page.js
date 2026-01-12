@@ -21,8 +21,11 @@ import {
     RefreshCw,
     Copy,
     Check,
-    Link as LinkIcon
+    Link as LinkIcon,
+    Users
 } from 'lucide-react';
+import UsersTab from '@/components/dashboard/Users';
+import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
 function DashboardContent() {
@@ -30,7 +33,8 @@ function DashboardContent() {
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
-    const [verifyingMod, setVerifyingMod] = useState(false);
+    const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
+    const [verifyingMod, setVerifyingMod] = useState(true);
     const searchParams = useSearchParams();
     const hostParam = searchParams.get('host');
 
@@ -46,149 +50,54 @@ function DashboardContent() {
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
             console.log('Permission Check: Broadcaster/Local detected. Access Granted.');
             setIsModAuthorized(true);
+            setUserRole('broadcaster');
             setVerifyingMod(false);
             return;
         }
 
-        const checkPermissions = async () => {
-            console.log('--- MODERATOR SECURITY HANDSHAKE (V6) ---');
+        // NEW: Presence Heartbeat (Track logged-in users)
+        let heartbeatInterval;
+        if (user && hostParam) {
+            const presenceRef = doc(db, 'users', hostParam, 'online', user.uid);
+            const updatePresence = async () => {
+                await setDoc(presenceRef, {
+                    lastSeen: serverTimestamp(),
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                    twitchUsername: user.displayName // Fallback
+                }, { merge: true });
+            };
+            updatePresence();
+            heartbeatInterval = setInterval(updatePresence, 30000); // 30s heartbeat
+        }
+
+        // NEW: Permission Listener (Manual Roles)
+        let unsubscribeRole = () => { };
+        if (user && hostParam) {
             setVerifyingMod(true);
-            setIsModAuthorized(false);
-
-            try {
-                // 1. Broadcaster Auto-Pass (Owner always verified)
-                if (user.uid === hostParam) {
-                    console.log('Security Level: BROADCASTER (Auto-Pass ✅)');
-                    if (!ignore) setIsModAuthorized(true);
+            if (user.uid === hostParam) {
+                setUserRole('broadcaster');
+                setIsModAuthorized(true);
+                setVerifyingMod(false);
+            } else {
+                const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
+                unsubscribeRole = onSnapshot(roleRef, (doc) => {
+                    const data = doc.data();
+                    const role = data?.role || 'viewer'; // Default to viewer if invited
+                    setUserRole(role);
+                    setIsModAuthorized(role === 'mod' || role === 'broadcaster');
                     setVerifyingMod(false);
-                    return;
-                }
-
-                const hostDoc = await getDoc(doc(db, 'users', hostParam));
-                const rawHost = hostDoc.data()?.twitchUsername;
-                const hostName = rawHost ? rawHost.toLowerCase() : null;
-
-                let currentToken = twitchToken;
-                if (!currentToken) {
-                    const tokenDoc = await getDoc(doc(db, 'users', user.uid, 'private', 'twitch'));
-                    if (tokenDoc.exists()) {
-                        currentToken = tokenDoc.data().accessToken;
-                    }
-                }
-
-                const myDoc = await getDoc(doc(db, 'users', user.uid));
-                const myTwitchName = (myDoc.data()?.twitchUsername || (user.displayName ? user.displayName : '')).toLowerCase();
-
-                if (!hostName || !myTwitchName) {
-                    console.error('Handshake Aborted: Missing profile mappings.', { hostName, myTwitchName });
-                    if (!ignore) setIsModAuthorized(false);
-                    return;
-                }
-
-                console.log(`Resolving Identity: ${myTwitchName} on #${hostName}...`);
-
-                // SOURCE 1: TMI Real-time IRC Check (Primary Truth)
-                const checkTmi = async () => {
-                    if (!currentToken) return { status: 'NO_TOKEN' };
-                    return new Promise((resolve) => {
-                        const tempClient = new tmi.Client({
-                            options: { debug: false, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true, timeout: 6000 },
-                            identity: { username: myTwitchName, password: `oauth:${currentToken}` },
-                            channels: [hostName]
-                        });
-
-                        const t = setTimeout(() => {
-                            console.warn('TMI Gate: TIMEOUT ❌');
-                            tempClient.disconnect();
-                            resolve({ status: 'TIMEOUT' });
-                        }, 6000);
-
-                        tempClient.on('userstate', (channel, state) => {
-                            const chan = channel.replace('#', '').toLowerCase();
-                            if (chan === hostName) {
-                                clearTimeout(t);
-                                const isMod = state.mod || state.badges?.broadcaster === '1';
-                                console.log('TMI Gate Status:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
-                                tempClient.disconnect();
-                                resolve({ status: 'SUCCESS', isMod });
-                            }
-                        });
-
-                        tempClient.on('notice', (channel, msgid, msg) => {
-                            if (msgid === 'authentication_failed') {
-                                clearTimeout(t);
-                                tempClient.disconnect();
-                                resolve({ status: 'ERROR', detail: 'Auth Failed' });
-                            }
-                        });
-
-                        tempClient.connect().catch(() => {
-                            clearTimeout(t);
-                            resolve({ status: 'ERROR' });
-                        });
-                    });
-                };
-
-                // SOURCE 2: DecAPI ModCheck (Fast, Independent)
-                const checkDecApi = async () => {
-                    try {
-                        const res = await fetch(`https://decapi.me/twitch/modcheck/${hostName}/${myTwitchName}?cb=${Date.now()}`);
-                        if (!res.ok) return false;
-                        const text = (await res.text()).toLowerCase();
-                        const isMod = text.includes('true');
-                        console.log('DecAPI Gate Result:', isMod ? 'MATCHED ✅' : 'MISMATCH ❌');
-                        return isMod;
-                    } catch { return false; }
-                };
-
-                // SOURCE 3: IVR API (Secondary Witness)
-                const checkIvr = async () => {
-                    try {
-                        const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}?cb=${Date.now()}`);
-                        if (!res.ok) return false;
-                        const data = await res.json();
-                        const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName);
-                        const isVip = data?.vips?.some(v => v.login.toLowerCase() === myTwitchName);
-                        console.log('IVR Gate Result:', (isMod || isVip) ? 'MATCHED ✅' : 'MISMATCH ❌');
-                        return isMod || isVip;
-                    } catch { return false; }
-                };
-
-                // V6 SECURITY LOGIC: Majority-Vote with Strict Rejection
-                const [tmiRes, decRes, ivrRes] = await Promise.all([checkTmi(), checkDecApi(), checkIvr()]);
-
-                let isAuthorized = false;
-
-                if (tmiRes.status === 'SUCCESS') {
-                    // TMI is real-time IRC. If it says NO, it's a solid NO.
-                    console.log('Security Decision: Prioritizing Real-time IRC.');
-                    isAuthorized = tmiRes.isMod;
-                } else {
-                    // TMI Stalled. We require BOTH APIs to agree on a 'YES' to bypass.
-                    // If DecAPI (Real-time) says NO, we block regardless of IVR.
-                    console.warn('Security Decision: IRC Stalled. Using API Double-Verification.');
-                    isAuthorized = decRes && ivrRes;
-                }
-
-                if (!ignore) {
-                    console.log('Handshake Result:', isAuthorized ? 'AUTHORIZED ✅' : 'ACCESS DENIED ❌');
-                    setIsModAuthorized(isAuthorized);
-                }
-            } catch (e) {
-                console.error('Handshake Gate Crashed:', e);
-                if (!ignore) setIsModAuthorized(false);
-            } finally {
-                if (!ignore) {
-                    setVerifyingMod(false);
-                    console.log('--- END SECURITY HANDSHAKE ---');
-                }
+                    console.log('Current User Role:', role);
+                });
             }
-        };
+        }
 
-        checkPermissions();
-        return () => { ignore = true; };
-    }, [user, hostParam, isModeratorMode, twitchToken]);
+        return () => {
+            ignore = true;
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            unsubscribeRole();
+        };
+    }, [user, hostParam]);
 
     useEffect(() => {
         if (copyState) {
@@ -255,24 +164,36 @@ function DashboardContent() {
                 </div>
 
                 <nav className="flex-1 space-y-2">
-                    <TabButton
-                        active={activeTab === 'chat'}
+                    <button
                         onClick={() => setActiveTab('chat')}
-                        icon={<MessageSquare size={20} />}
-                        label="Live Chat"
-                    />
-                    <TabButton
-                        active={activeTab === 'history'}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                    >
+                        <MessageSquare size={20} />
+                        <span className="font-medium">Live Chat</span>
+                    </button>
+                    <button
                         onClick={() => setActiveTab('history')}
-                        icon={<HistoryIcon size={20} />}
-                        label="History"
-                    />
-                    <TabButton
-                        active={activeTab === 'settings'}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                    >
+                        <HistoryIcon size={20} />
+                        <span className="font-medium">History</span>
+                    </button>
+                    {isModAuthorized && (
+                        <button
+                            onClick={() => setActiveTab('users')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                        >
+                            <Users size={20} />
+                            <span className="font-medium">Users</span>
+                        </button>
+                    )}
+                    <button
                         onClick={() => setActiveTab('settings')}
-                        icon={<SettingsIcon size={20} />}
-                        label="Settings"
-                    />
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                    >
+                        <SettingsIcon size={20} />
+                        <span className="font-medium">Settings</span>
+                    </button>
 
                     {/* Quick Tools Section */}
                     <div className="pt-6 pb-2 px-3 hidden md:block">
@@ -335,11 +256,13 @@ function DashboardContent() {
                         <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
                             {activeTab === 'chat' && 'Moderation Dashboard'}
                             {activeTab === 'history' && 'Message History'}
+                            {activeTab === 'users' && 'Manage Users'}
                             {activeTab === 'settings' && 'Overlay Customization'}
                         </h2>
                         <p className="text-zinc-500 text-sm md:text-base">
                             {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
                             {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
+                            {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
                             {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
                         </p>
                     </div>
@@ -362,25 +285,24 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {isModeratorMode && !isModAuthorized && !verifyingMod && (
-                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
-                                <ShieldAlert size={40} className="text-red-500" />
+                    {isModeratorMode && !isModAuthorized && !verifyingMod && userRole !== 'denied' && (
+                        <div className="bg-zinc-900 border border-indigo-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                            <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto border border-indigo-500/20">
+                                <Users size={40} className="text-indigo-500" />
                             </div>
                             <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Restricted</h3>
+                                <h3 className="text-2xl font-bold">Viewer Access</h3>
                                 <p className="text-zinc-500 max-w-sm mx-auto">
-                                    You are not currently recognized as a moderator for this channel.
-                                    If you were recently promoted, try clicking below.
+                                    You are currently connected as a viewer.
+                                    You can suggest messages for the overlay, but only moderators can send them.
                                 </p>
                             </div>
                             <div className="flex flex-col gap-3 items-center">
                                 <button
-                                    onClick={() => window.location.reload()}
+                                    onClick={() => setActiveTab('chat')}
                                     className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
                                 >
-                                    <RefreshCw size={18} />
-                                    Verify Again
+                                    Open Suggestion Dashboard
                                 </button>
                                 <button
                                     onClick={() => setIsModeratorMode(false)}
@@ -392,13 +314,34 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {/* Dashboard Content - only shown if Broadcaster OR Authorized Mod */}
-                    {(!isModeratorMode || isModAuthorized) && !verifyingMod && (
+                    {userRole === 'denied' && (
+                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+                                <ShieldAlert size={40} className="text-red-500" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold">Access Denied</h3>
+                                <p className="text-zinc-500 max-w-sm mx-auto">
+                                    Your access to this dashboard has been restricted by the broadcaster.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setIsModeratorMode(false)}
+                                className="text-zinc-500 hover:text-zinc-300 text-sm underline transition-colors"
+                            >
+                                Return to Broadcast Mode
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Dashboard Content - only shown if Broadcaster OR Authorized Mod OR Viewer (Suggestion Mode) */}
+                    {(!isModeratorMode || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
-                                <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} />
+                                <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
                             </div>
-                            {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} />}
+                            {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
+                            {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
                             {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
                         </>
                     )}
