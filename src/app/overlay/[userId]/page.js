@@ -132,7 +132,8 @@ export default function OverlayPage() {
                                     alt=""
                                     className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover"
                                     onError={(e) => {
-                                        e.target.src = `https://unavatar.io/twitch/${activeMessage.username.toLowerCase()}`;
+                                        // Final fallback to a generic placeholder if DecAPI also fails
+                                        e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png";
                                     }}
                                 />
                             )}
