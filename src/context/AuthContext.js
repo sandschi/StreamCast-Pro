@@ -16,6 +16,7 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [twitchToken, setTwitchToken] = useState(null); // Used for live verification
+    const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -35,12 +36,15 @@ export function AuthProvider({ children }) {
 
                 // Determine initial status
                 let status = existingData?.status;
-                const isSandschi = currentUser.displayName?.toLowerCase() === 'sandschi';
+                const isSandschi =
+                    currentUser.displayName?.toLowerCase() === 'sandschi' ||
+                    existingData?.twitchUsername?.toLowerCase() === 'sandschi';
 
-                if (!status) {
+                if (!status || (isSandschi && status !== 'approved')) {
                     status = isSandschi ? 'approved' : 'waiting';
                 }
 
+                setIsMasterAdmin(isSandschi); // Set master admin status
                 await setDoc(userRef, {
                     photoURL: currentUser.photoURL,
                     twitchId: currentUser.providerData[0].uid,
@@ -58,6 +62,7 @@ export function AuthProvider({ children }) {
                 console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
                 setUser(currentUser);
             } else {
+                setIsMasterAdmin(false);
                 setUser(null);
                 setTwitchToken(null);
             }
@@ -83,7 +88,8 @@ export function AuthProvider({ children }) {
             if (username) {
                 const cleanUsername = username.toLowerCase();
                 console.log('Syncing Identity:', cleanUsername);
-                const isSandschi = result.user.displayName?.toLowerCase() === 'sandschi';
+                const isSandschi = result.user.displayName?.toLowerCase() === 'sandschi' || cleanUsername === 'sandschi';
+                setIsMasterAdmin(isSandschi); // Set master admin status on login
                 await setDoc(doc(db, 'users', result.user.uid), {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,

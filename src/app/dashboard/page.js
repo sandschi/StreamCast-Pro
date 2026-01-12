@@ -32,7 +32,7 @@ import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
 function DashboardContent() {
-    const { user, twitchToken, loginWithTwitch, logout, loading } = useAuth();
+    const { user, twitchToken, loginWithTwitch, logout, isMasterAdmin, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
@@ -51,6 +51,16 @@ function DashboardContent() {
         let ignore = false;
         let unsubscribeRole = () => { };
         let unsubscribeBroadcasterStatus = () => { };
+
+        // Master Admin bypass
+        if (isMasterAdmin) {
+            console.log('Permission Check: Master Admin detected. Full Access Granted.');
+            setIsModAuthorized(true);
+            setUserRole('broadcaster'); // Master admin effectively has broadcaster rights
+            setVerifyingMod(false);
+            setBroadcasterStatus('approved'); // Master admin is always approved
+            return; // Skip further permission checks
+        }
 
         // Broadcaster check: If no host param or I am the owner of this UID
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
@@ -108,7 +118,7 @@ function DashboardContent() {
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
-    }, [user, hostParam, isModeratorMode]);
+    }, [user, hostParam, isModeratorMode, isMasterAdmin]);
 
     useEffect(() => {
         if (copyState) {
@@ -213,7 +223,7 @@ function DashboardContent() {
                         </button>
                     )}
 
-                    {user?.displayName?.toLowerCase() === 'sandschi' && (
+                    {isMasterAdmin && (
                         <button
                             onClick={() => setActiveTab('broadcasters')}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
@@ -272,24 +282,32 @@ function DashboardContent() {
                         </p>
                     </div>
 
-                    <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                        userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                            userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
-                        }`}>
-                        {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
-                        {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
-                        {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
-                        {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
-                        <span className="uppercase tracking-widest whitespace-nowrap">
-                            {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
-                        </span>
+                    <div className="flex items-center gap-2">
+                        {isMasterAdmin && (
+                            <div className="px-3 py-1 bg-purple-600/10 border border-purple-500/20 rounded-full flex items-center gap-2">
+                                <Shield size={12} className="text-purple-400" />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Master Admin</span>
+                            </div>
+                        )}
+                        <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                            userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                    'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                            }`}>
+                            {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
+                            {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
+                            {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
+                            {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
+                            <span className="uppercase tracking-widest whitespace-nowrap">
+                                {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
+                            </span>
+                        </div>
                     </div>
                 </header>
 
                 <div className="max-w-4xl">
                     {/* Verifying Moderator Permissions UI */}
-                    {isModeratorMode && verifyingMod && (
+                    {isModeratorMode && verifyingMod && !isMasterAdmin && (
                         <div className="flex flex-col items-center justify-center p-20 space-y-4">
                             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
                             <h2 className="text-xl font-bold">Verifying Security...</h2>
@@ -298,7 +316,7 @@ function DashboardContent() {
                     )}
 
                     {/* Suggestion Mode Header Strip (Viewers only) */}
-                    {userRole === 'viewer' && !verifyingMod && (
+                    {userRole === 'viewer' && !verifyingMod && !isMasterAdmin && (
                         <div className="mb-4 bg-indigo-600/10 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-700">
                             <div className="flex items-center gap-3">
                                 <div className="p-1.5 bg-indigo-500/20 rounded-lg">
@@ -311,7 +329,7 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'waiting' && (
+                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'waiting' && !isMasterAdmin && (
                         <div className="bg-zinc-900 border border-yellow-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
                             <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto border border-yellow-500/20">
                                 <Clock size={40} className="text-yellow-500" />
@@ -325,13 +343,13 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'denied' && (
+                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'denied' && !isMasterAdmin && (
                         <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
                             <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
                                 <ShieldAlert size={40} className="text-red-500" />
                             </div>
                             <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Denied</h3>
+                                <h3 className="2xl font-bold">Access Denied</h3>
                                 <p className="text-zinc-500 max-w-sm mx-auto">
                                     Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others.
                                 </p>
@@ -339,7 +357,7 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {userRole === 'denied' && (
+                    {userRole === 'denied' && !isMasterAdmin && (
                         <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
                             <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
                                 <ShieldAlert size={40} className="text-red-500" />
@@ -354,7 +372,7 @@ function DashboardContent() {
                     )}
 
                     {/* Dashboard Content - only shown if Broadcaster (Approved) OR Authorized Mod OR Viewer (Suggestion Mode) */}
-                    {((userRole === 'broadcaster' && (broadcasterStatus === 'approved' || user?.displayName?.toLowerCase() === 'sandschi')) || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && broadcasterStatus !== 'denied' && (
+                    {((userRole === 'broadcaster' && (broadcasterStatus === 'approved' || isMasterAdmin)) || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat') || isMasterAdmin) && !verifyingMod && userRole !== 'denied' && (broadcasterStatus !== 'denied' || isMasterAdmin) && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
                                 <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
@@ -362,7 +380,7 @@ function DashboardContent() {
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
                             {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
-                            {activeTab === 'broadcasters' && user?.displayName?.toLowerCase() === 'sandschi' && <Broadcasters />}
+                            {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
                         </>
                     )}
                 </div>
