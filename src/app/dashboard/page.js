@@ -51,15 +51,22 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
-            console.log('--- MODERATOR SECURITY HANDSHAKE (V2) ---');
+            console.log('--- MODERATOR SECURITY HANDSHAKE (V3) ---');
             setVerifyingMod(true);
             setIsModAuthorized(false);
 
             try {
+                // 1. Broadcaster Auto-Pass (Owner always verified)
+                if (user.uid === hostParam) {
+                    console.log('Security Level: BROADCASTER (Auto-Pass ✅)');
+                    if (!ignore) setIsModAuthorized(true);
+                    setVerifyingMod(false);
+                    return;
+                }
+
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
 
-                // Wait up to 2 seconds for token to resolve from cloud if it's missing
                 let currentToken = twitchToken;
                 if (!currentToken) {
                     console.log('Token missing from state, checking Firestore directly...');
@@ -71,35 +78,39 @@ function DashboardContent() {
                 }
 
                 const myDoc = await getDoc(doc(db, 'users', user.uid));
-                const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
+                const myTwitchName = myDoc.data()?.twitchUsername || (user.displayName ? user.displayName.toLowerCase() : null);
 
                 if (!hostName || !myTwitchName) {
-                    console.error('Handshake Aborted: Missing user/host mapping.');
+                    console.error('Handshake Aborted: Missing profile mappings.', { hostName, myTwitchName });
                     if (!ignore) setIsModAuthorized(false);
                     return;
                 }
 
-                console.log(`Identity: ${myTwitchName} | Target: #${hostName}`);
+                console.log(`Verifying: ${myTwitchName} | Target: #${hostName.toLowerCase()}`);
                 console.log(`Security Context: ${currentToken ? 'IDENTIFIED (Cloud Key)' : 'ANONYMOUS (No Key)'}`);
 
-                // SOURCE 1: TMI Diagnostic Join
+                // SOURCE 1: TMI Handshake with timing fix
                 const checkTmi = async () => {
                     if (!currentToken) return false;
                     return new Promise((resolve) => {
                         const tempClient = new tmi.Client({
-                            options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true, timeout: 5000 },
-                            identity: { username: myTwitchName.toLowerCase(), password: `oauth:${currentToken}` },
-                            channels: [hostName]
+                            options: { debug: false, skipMembership: false, skipUpdatingEmotesets: true },
+                            connection: { reconnect: false, secure: true, timeout: 6000 },
+                            identity: { username: myTwitchName.toLowerCase(), password: `oauth:${currentToken}` }
                         });
 
                         const t = setTimeout(() => {
                             console.warn('TMI Handshake: TIMEOUT ❌');
                             tempClient.disconnect();
                             resolve(false);
-                        }, 5000);
+                        }, 6000);
 
-                        tempClient.on('connected', () => console.log('TMI Handshake: Connected to Twitch IRC...'));
+                        tempClient.on('connected', async () => {
+                            console.log('TMI Handshake: Connected. Waiting for stability...');
+                            await new Promise(r => setTimeout(r, 1000)); // 1s IRC stabilization
+                            console.log('TMI Handshake: Joining channel...');
+                            tempClient.join(hostName).catch(() => { });
+                        });
 
                         tempClient.on('notice', (channel, msgid, msg) => {
                             console.warn(`TMI Handshake Notice [${msgid}]: ${msg}`);
@@ -111,7 +122,9 @@ function DashboardContent() {
                         });
 
                         tempClient.on('userstate', (channel, state) => {
-                            if (channel.replace('#', '').toLowerCase() === hostName.toLowerCase()) {
+                            const chan = channel.replace('#', '').toLowerCase();
+                            const target = hostName.toLowerCase();
+                            if (chan === target) {
                                 clearTimeout(t);
                                 const isMod = state.mod || state.badges?.broadcaster === '1';
                                 console.log('TMI Handshake Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
@@ -128,28 +141,16 @@ function DashboardContent() {
                     });
                 };
 
-                // SOURCE 2: DecAPI mods list lookup (Corrected Endpoint)
-                const checkDecApi = async () => {
-                    try {
-                        const res = await fetch(`https://decapi.me/twitch/mods/${hostName}?cb=${Date.now()}`);
-                        if (!res.ok) return false;
-                        const text = await res.text();
-                        const modsList = text.toLowerCase().split(' ');
-                        const isMod = modsList.includes(myTwitchName.toLowerCase());
-                        console.log('DecAPI Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
-                        return isMod;
-                    } catch { return false; }
-                };
-
-                // SOURCE 3: IVR API (Cache Busted)
+                // SOURCE 2: IVR API (Robust Fallback)
                 const checkIvr = async () => {
                     try {
                         const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}?cb=${Date.now()}`);
                         if (!res.ok) return false;
                         const data = await res.json();
                         const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
+                        const isVip = data?.vips?.some(v => v.login.toLowerCase() === myTwitchName.toLowerCase());
                         console.log('IVR Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
-                        return isMod;
+                        return isMod || isVip;
                     } catch { return false; }
                 };
 

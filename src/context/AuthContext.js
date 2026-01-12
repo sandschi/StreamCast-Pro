@@ -40,9 +40,9 @@ export function AuthProvider({ children }) {
                 const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
                 if (tokenDoc.exists()) {
                     setTwitchToken(tokenDoc.data().accessToken);
-                    console.log('Twitch Token: Ready');
                 }
 
+                console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
                 setUser(currentUser);
             } else {
                 setUser(null);
@@ -64,12 +64,14 @@ export function AuthProvider({ children }) {
         try {
             const result = await signInWithPopup(auth, provider);
             const additionalInfo = getAdditionalUserInfo(result);
-            // Twitch username is usually in preferred_username
-            const username = additionalInfo?.profile?.preferred_username || result._tokenResponse?.screenName;
+            const username = additionalInfo?.profile?.login || additionalInfo?.profile?.preferred_username;
 
             if (username) {
+                console.log('Capturing Twitch Username:', username);
                 await setDoc(doc(db, 'users', result.user.uid), {
                     twitchUsername: username.toLowerCase(),
+                    displayName: result.user.displayName,
+                    photoURL: result.user.photoURL
                 }, { merge: true });
             }
 
