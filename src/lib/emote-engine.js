@@ -4,26 +4,96 @@
  */
 
 const failedIds = new Set();
+let globalEmotesCache = null;
 
-export async function fetchThirdPartyEmotes(channelId) {
-    if (failedIds.has(channelId)) return { sevenTV: [], bttv: [], ffz: [] };
+/**
+ * Fetches global emotes from 7TV, BTTV, and FFZ.
+ * Returns a combined object of global emotes.
+ */
+async function fetchGlobalEmotes() {
+    if (globalEmotesCache) return globalEmotesCache;
 
-    const emotes = {
+    const globals = {
         sevenTV: [],
         bttv: [],
         ffz: [],
     };
 
     try {
-        // 7TV API (V3)
-        const sevenTVRes = await fetch(`https://7tv.io/v3/users/twitch/${channelId}`);
-        if (sevenTVRes.ok) {
-            const data = await sevenTVRes.json();
-            emotes.sevenTV = data.emote_set?.emotes?.map(e => ({
+        // 7TV Global (V3)
+        const res = await fetch('https://7tv.io/v3/emote-sets/global');
+        if (res.ok) {
+            const data = await res.json();
+            globals.sevenTV = data.emotes?.map(e => ({
                 id: e.id,
                 name: e.name,
                 url: e.data.host.url + '/2x.webp',
             })) || [];
+        }
+    } catch (e) { /* silent */ }
+
+    try {
+        // BTTV Global
+        const res = await fetch('https://api.betterttv.net/3/cached/emotes/global');
+        if (res.ok) {
+            const data = await res.json();
+            globals.bttv = data.map(e => ({
+                id: e.id,
+                name: e.code,
+                url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
+            }));
+        }
+    } catch (e) { /* silent */ }
+
+    try {
+        // FFZ Global
+        const res = await fetch('https://api.frankerfacez.com/v1/set/global');
+        if (res.ok) {
+            const data = await res.json();
+            // FFZ global usually comes in sets like "3" or "1"
+            const sets = data.sets || {};
+            const allFfz = [];
+            Object.keys(sets).forEach(setKey => {
+                sets[setKey].emoticons.forEach(e => {
+                    allFfz.push({
+                        id: e.id,
+                        name: e.name,
+                        url: e.urls['2'] || e.urls['1'],
+                    });
+                });
+            });
+            globals.ffz = allFfz;
+        }
+    } catch (e) { /* silent */ }
+
+    globalEmotesCache = globals;
+    return globals;
+}
+
+export async function fetchThirdPartyEmotes(channelId) {
+    // 1. Fetch Global Emotes first (or from cache)
+    const globals = await fetchGlobalEmotes();
+
+    // 2. Prepare result structure
+    const emotes = {
+        sevenTV: [...globals.sevenTV],
+        bttv: [...globals.bttv],
+        ffz: [...globals.ffz],
+    };
+
+    if (failedIds.has(channelId)) return emotes;
+
+    try {
+        // 7TV API (V3)
+        const sevenTVRes = await fetch(`https://7tv.io/v3/users/twitch/${channelId}`);
+        if (sevenTVRes.ok) {
+            const data = await sevenTVRes.json();
+            const channelSevenTV = data.emote_set?.emotes?.map(e => ({
+                id: e.id,
+                name: e.name,
+                url: e.data.host.url + '/2x.webp',
+            })) || [];
+            emotes.sevenTV.push(...channelSevenTV);
         } else if (sevenTVRes.status === 404) {
             failedIds.add(channelId);
         }
@@ -35,11 +105,12 @@ export async function fetchThirdPartyEmotes(channelId) {
         if (bttvRes.ok) {
             const data = await bttvRes.json();
             const allBttv = [...(data.channelEmotes || []), ...(data.sharedEmotes || [])];
-            emotes.bttv = allBttv.map(e => ({
+            const channelBttv = allBttv.map(e => ({
                 id: e.id,
                 name: e.code,
                 url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
             }));
+            emotes.bttv.push(...channelBttv);
         } else if (bttvRes.status === 404) {
             failedIds.add(channelId);
         }
@@ -50,12 +121,18 @@ export async function fetchThirdPartyEmotes(channelId) {
         const ffzRes = await fetch(`https://api.frankerfacez.com/v1/room/id/${channelId}`);
         if (ffzRes.ok) {
             const data = await ffzRes.json();
-            const setKey = Object.keys(data.sets)[0];
-            emotes.ffz = data.sets[setKey].emoticons.map(e => ({
-                id: e.id,
-                name: e.name,
-                url: e.urls['2'] || e.urls['1'],
-            }));
+            const sets = data.sets || {};
+            const channelFfz = [];
+            Object.keys(sets).forEach(setKey => {
+                sets[setKey].emoticons.forEach(e => {
+                    channelFfz.push({
+                        id: e.id,
+                        name: e.name,
+                        url: e.urls['2'] || e.urls['1'],
+                    });
+                });
+            });
+            emotes.ffz.push(...channelFfz);
         } else if (ffzRes.status === 404) {
             failedIds.add(channelId);
         }
