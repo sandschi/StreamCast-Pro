@@ -100,6 +100,85 @@ export default function OverlayPage() {
         const headerShadowColor = activeMessage?.color || 'rgba(145, 70, 255, 0.7)';
 
         switch (settings.bubbleStyle) {
+            case 'cyberpunk':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: '#ff003c',
+                        clipPath: 'polygon(0% 15%, 15% 0%, 100% 0%, 100% 85%, 85% 100%, 0% 100%)',
+                        boxShadow: `0 0 20px #ff003c`,
+                        border: 'none',
+                        padding: '10px 20px',
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.9)',
+                        border: '2px solid #00f0ff',
+                        clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 95% 100%, 0% 100%)',
+                        boxShadow: `inset 0 0 10px #00f0ff80`,
+                    }
+                };
+            case 'comic':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        border: '4px solid #000',
+                        transform: 'rotate(-2deg)',
+                        zIndex: 2,
+                        marginBottom: '-8px'
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: '#fff',
+                        color: '#000',
+                        border: '4px solid #000',
+                        boxShadow: '8px 8px 0 #000',
+                        backgroundImage: 'radial-gradient(#000 10%, transparent 11%)',
+                        backgroundSize: '10px 10px',
+                        backgroundPosition: '0 0',
+                        backgroundRepeat: 'repeat',
+                        zIndex: 1,
+                        // Comic tail logic
+                        position: 'relative',
+                    }
+                };
+            case 'retro':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        border: '4px solid #fff',
+                        boxShadow: '4px 4px 0 #000',
+                        marginBottom: '4px'
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: '#000',
+                        border: '4px solid #fff',
+                        boxShadow: '4px 4px 0 #000',
+                    }
+                };
+            case 'future':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: 'rgba(20, 30, 48, 0.9)',
+                        border: `1px solid ${headerBgColor}`,
+                        borderBottom: 'none',
+                        clipPath: 'polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%)',
+                        paddingRight: '30px'
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(11, 22, 34, 0.85)',
+                        backdropFilter: 'blur(10px)',
+                        border: `1px solid ${headerBgColor}44`,
+                        boxShadow: `0 0 30px ${headerBgColor}22`,
+                        backgroundImage: `linear-gradient(rgba(18, 113, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 113, 255, 0.05) 1px, transparent 1px)`,
+                        backgroundSize: '20px 20px',
+                    }
+                };
             case 'glass':
                 return {
                     header: {
@@ -200,21 +279,28 @@ export default function OverlayPage() {
                             className="flex items-center gap-3 px-4 py-2 z-10 shadow-xl transition-all duration-500"
                             style={{
                                 ...bubbleStyles.header,
-                                alignSelf: settings.posX > 50 ? 'flex-end' : settings.posX > 40 ? 'center' : 'flex-start'
+                                alignSelf: settings.posX > 50 ? 'flex-end' : settings.posX > 40 ? 'center' : 'flex-start',
+                                transform: settings.bubbleStyle === 'comic' ? 'rotate(-2deg)' : 'none'
                             }}
                         >
                             {settings.showAvatar && (
                                 <img
                                     src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
                                     alt=""
-                                    className={`rounded-full shadow-md object-cover flex-shrink-0 transition-all ${settings.bubbleStyle === 'bold' ? 'border-4 border-black' : 'border-2 border-white/40'}`}
+                                    className={`rounded-full shadow-md object-cover flex-shrink-0 transition-all ${settings.bubbleStyle === 'bold' || settings.bubbleStyle === 'comic' ? 'border-4 border-black' :
+                                            settings.bubbleStyle === 'retro' ? 'border-4 border-white' :
+                                                'border-2 border-white/40'
+                                        }`}
                                     style={{ width: `${settings.avatarSize}px`, height: `${settings.avatarSize}px` }}
                                     onError={(e) => { e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png"; }}
                                 />
                             )}
                             <span
-                                className="font-black tracking-tight drop-shadow-lg"
-                                style={{ fontSize: `${settings.nameSize}px` }}
+                                className={`font-black tracking-tight drop-shadow-lg ${settings.bubbleStyle === 'retro' ? 'uppercase font-mono' : ''}`}
+                                style={{
+                                    fontSize: `${settings.nameSize}px`,
+                                    fontFamily: settings.bubbleStyle === 'retro' ? 'monospace' : 'inherit'
+                                }}
                             >
                                 {activeMessage.username}
                             </span>
@@ -222,18 +308,23 @@ export default function OverlayPage() {
 
                         {/* Message Body */}
                         <div
-                            className="font-bold leading-tight drop-shadow-2xl px-6 py-5 transition-all duration-500"
+                            className="font-bold leading-tight drop-shadow-2xl px-6 py-5 transition-all duration-500 relative"
                             style={{
                                 ...bubbleStyles.body,
-                                color: settings.bubbleStyle === 'bold' ? '#000' : settings.textColor,
+                                color: (settings.bubbleStyle === 'bold' || settings.bubbleStyle === 'comic') ? '#000' : settings.textColor,
                                 fontSize: `${settings.fontSize}px`,
-                                WebkitTextStroke: settings.bubbleStyle === 'minimal' ? 'none' : `1px ${settings.strokeColor}`,
-                                textStroke: settings.bubbleStyle === 'minimal' ? 'none' : `1px ${settings.strokeColor}`,
+                                WebkitTextStroke: (settings.bubbleStyle === 'minimal' || settings.bubbleStyle === 'retro') ? 'none' : `1px ${settings.strokeColor}`,
+                                textStroke: (settings.bubbleStyle === 'minimal' || settings.bubbleStyle === 'retro') ? 'none' : `1px ${settings.strokeColor}`,
                             }}
                         >
-                            <div className="flex flex-wrap items-center gap-2">
+                            {/* Comic Style Tail */}
+                            {settings.bubbleStyle === 'comic' && (
+                                <div className="absolute top-[-15px] left-[20px] w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-b-[15px] border-b-black lg:block hidden" />
+                            )}
+
+                            <div className={`flex flex-wrap items-center gap-2 ${settings.bubbleStyle === 'minimal' ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : ''}`}>
                                 {activeMessage.fragments?.map((frag, i) => (
-                                    frag.type === 'text' ? <span key={i}>{frag.content}</span> :
+                                    frag.type === 'text' ? <span key={i} className={settings.bubbleStyle === 'retro' ? 'font-mono uppercase tracking-tighter' : ''}>{frag.content}</span> :
                                         <img key={i} src={frag.url} alt={frag.name} className="h-[1.2em] inline-block align-middle select-none" />
                                 ))}
                             </div>

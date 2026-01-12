@@ -147,13 +147,17 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                         <Sparkles size={14} /> Overlay Visual Style
                     </h4>
-                    <div className="grid grid-cols-5 gap-3">
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                         {[
                             { id: 'classic', label: 'Classic' },
                             { id: 'glass', label: 'Glass' },
                             { id: 'neon', label: 'Neon' },
                             { id: 'minimal', label: 'Minimal' },
-                            { id: 'bold', label: 'Bold' }
+                            { id: 'bold', label: 'Bold' },
+                            { id: 'cyberpunk', label: 'Cyber' },
+                            { id: 'comic', label: 'Comic' },
+                            { id: 'retro', label: 'Retro' },
+                            { id: 'future', label: 'Future' }
                         ].map((style) => (
                             <button
                                 key={style.id}
@@ -163,11 +167,15 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                         : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
                                     }`}
                             >
-                                <div className={`w-8 h-4 rounded-sm ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
+                                <div className={`w-8 h-4 rounded-sm relative overflow-hidden ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
                                         style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
                                             style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
                                                 style.id === 'minimal' ? 'border-none bg-transparent' :
-                                                    'bg-white border-2 border-black'
+                                                    style.id === 'cyberpunk' ? 'bg-zinc-900 border-l-2 border-l-[#ff003c] border-r-2 border-r-[#00f0ff]' :
+                                                        style.id === 'comic' ? 'bg-white border-2 border-black after:content-[""] after:absolute after:inset-0 after:bg-[radial-gradient(#000_15%,transparent_16%)] after:bg-[length:3px_3px]' :
+                                                            style.id === 'retro' ? 'bg-zinc-900 border-2 border-white' :
+                                                                style.id === 'future' ? 'bg-zinc-900 border border-blue-500/30 after:content-[""] after:absolute after:inset-0 after:bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,128,255,0.1)_50%)] after:bg-[length:100%_2px]' :
+                                                                    'bg-white border-2 border-black'
                                     }`} />
                                 <span className="text-[10px] font-bold uppercase tracking-tighter">{style.label}</span>
                             </button>
