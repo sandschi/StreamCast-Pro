@@ -18,6 +18,7 @@ import {
     LogOut,
     ExternalLink,
     ShieldAlert,
+    RefreshCw,
     Copy,
     Check,
     Link as LinkIcon
