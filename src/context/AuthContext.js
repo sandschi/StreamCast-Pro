@@ -24,12 +24,9 @@ export function AuthProvider({ children }) {
             return;
         }
 
-        const savedToken = sessionStorage.getItem('twitch_access_token');
-        if (savedToken) setTwitchToken(savedToken);
-
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                // Fetch or create user settings
+                // 1. Fetch user data (public)
                 const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
                 if (!userDoc.exists()) {
                     await setDoc(doc(db, 'users', currentUser.uid), {
@@ -37,7 +34,6 @@ export function AuthProvider({ children }) {
                         twitchId: currentUser.providerData[0].uid,
                     }, { merge: true });
 
-                    // Initialize default settings
                     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
                         textColor: '#ffffff',
                         strokeColor: '#000000',
@@ -46,9 +42,17 @@ export function AuthProvider({ children }) {
                         displayDuration: 5,
                     });
                 }
+
+                // 2. Fetch Twitch Token (private cloud-storage)
+                const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
+                if (tokenDoc.exists()) {
+                    setTwitchToken(tokenDoc.data().accessToken);
+                }
+
                 setUser(currentUser);
             } else {
                 setUser(null);
+                setTwitchToken(null);
             }
             setLoading(false);
         });
@@ -75,11 +79,14 @@ export function AuthProvider({ children }) {
                 }, { merge: true });
             }
 
-            // Capture Token
+            // Capture & Persist Token to Cloud
             const credential = OAuthProvider.credentialFromResult(result);
             if (credential?.accessToken) {
                 setTwitchToken(credential.accessToken);
-                sessionStorage.setItem('twitch_access_token', credential.accessToken);
+                await setDoc(doc(db, 'users', result.user.uid, 'private', 'twitch'), {
+                    accessToken: credential.accessToken,
+                    updatedAt: new Date().toISOString()
+                });
             }
         } catch (error) {
             console.error('Login error:', error);

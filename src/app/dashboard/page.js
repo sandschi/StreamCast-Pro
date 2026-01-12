@@ -50,7 +50,7 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
-            console.log('--- START TRIPLE-SOURCE PERMISSION CHECK ---');
+            console.log('--- START MODERATOR SECURITY CHECK ---');
             setVerifyingMod(true);
             setIsModAuthorized(false);
 
@@ -65,25 +65,28 @@ function DashboardContent() {
                     return;
                 }
 
-                console.log(`Verifying Identity: ${myTwitchName} on ${hostName}`);
-                console.log(`Token Presence: ${twitchToken ? 'PRESENT' : 'MISSING (Refresh Required)'}`);
+                console.log(`Verifying: ${myTwitchName} on #${hostName}`);
+                console.log(`Token Status: ${twitchToken ? 'CLOUD_RESOLVED' : 'PENDING/MISSING'}`);
 
-                // Define the Source Checks
+                // SOURCE 1: Real-time TMI Handshake (The ultimate Truth)
                 const checkTmi = async () => {
-                    if (!twitchToken) return false;
+                    if (!twitchToken) {
+                        console.warn('TMI Check Skipped: No Token Found');
+                        return false;
+                    }
                     return new Promise((resolve) => {
                         const tempClient = new tmi.Client({
                             options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true, timeout: 4000 },
+                            connection: { reconnect: false, secure: true, timeout: 3000 },
                             identity: { username: myTwitchName.toLowerCase(), password: `oauth:${twitchToken}` },
                             channels: [hostName]
                         });
-                        const t = setTimeout(() => { tempClient.disconnect(); resolve(false); }, 4000);
+                        const t = setTimeout(() => { tempClient.disconnect(); resolve(false); }, 3000);
                         tempClient.on('userstate', (channel, state) => {
                             if (channel.replace('#', '').toLowerCase() === hostName.toLowerCase()) {
                                 clearTimeout(t);
                                 const isMod = state.mod || state.badges?.broadcaster === '1';
-                                console.log('TMI Verification:', isMod ? 'AUTHORIZED' : 'DENIED');
+                                console.log('TMI Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
                                 tempClient.disconnect();
                                 resolve(isMod);
                             }
@@ -92,41 +95,34 @@ function DashboardContent() {
                     });
                 };
 
-                const checkDecApi = async () => {
-                    try {
-                        const res = await fetch(`https://decapi.me/twitch/modcheck/${hostName}/${myTwitchName}?cb=${Date.now()}`);
-                        const text = await res.text();
-                        const isMod = text.toLowerCase().includes('is a moderator') || text.toLowerCase().includes('is the broadcaster');
-                        console.log('DecAPI Verification:', isMod ? 'AUTHORIZED' : 'DENIED');
-                        return isMod;
-                    } catch { return false; }
-                };
-
+                // SOURCE 2: IVR API (Fallback + Cache Busted)
                 const checkIvr = async () => {
                     try {
                         const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}?cb=${Date.now()}`);
+                        if (!res.ok) return false;
                         const data = await res.json();
                         const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
-                        console.log('IVR Verification:', isMod ? 'AUTHORIZED' : 'DENIED');
+                        console.log('IVR Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
                         return isMod;
                     } catch { return false; }
                 };
 
-                // Run all three. If ANY return true, we are good.
-                const results = await Promise.all([checkTmi(), checkDecApi(), checkIvr()]);
+                // Preference: If TMI is available and verified, it wins.
+                // We run them in a race to see who verifies FIRST.
+                const results = await Promise.all([checkTmi(), checkIvr()]);
                 const finalizedResult = results.some(r => r === true);
 
                 if (!ignore) {
-                    console.log('Triple-Source Result:', finalizedResult ? 'AUTHORIZED ✅' : 'DENIED ❌');
+                    console.log('Final Security Status:', finalizedResult ? 'AUTHORIZED' : 'ACCESS_DENIED');
                     setIsModAuthorized(finalizedResult);
                 }
             } catch (e) {
-                console.error('Permission check failed:', e);
+                console.error('Security Gate Error:', e);
                 if (!ignore) setIsModAuthorized(false);
             } finally {
                 if (!ignore) {
                     setVerifyingMod(false);
-                    console.log('--- END TRIPLE-SOURCE PERMISSION CHECK ---');
+                    console.log('--- END MODERATOR SECURITY CHECK ---');
                 }
             }
         };
