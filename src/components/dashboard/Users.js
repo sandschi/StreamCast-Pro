@@ -49,11 +49,18 @@ export default function Users({ targetUid, user }) {
 
     const setRole = async (userId, role) => {
         try {
+            // Find existing data from presence to persist
+            const pData = presence.find(p => p.id === userId);
             const roleRef = doc(db, 'users', effectiveUid, 'permissions', userId);
+
             await setDoc(roleRef, {
                 role,
                 updatedAt: serverTimestamp(),
-                updatedBy: user.uid
+                updatedBy: user.uid,
+                // Persist readable names so they show up while offline
+                displayName: pData?.displayName || permissions[userId]?.displayName || userId,
+                photoURL: pData?.photoURL || permissions[userId]?.photoURL || null,
+                twitchUsername: pData?.twitchUsername || permissions[userId]?.twitchUsername || null
             }, { merge: true });
         } catch (e) {
             console.error('Failed to set role:', e);
@@ -73,12 +80,13 @@ export default function Users({ targetUid, user }) {
     const allUserIds = Array.from(new Set([...presence.map(p => p.id), ...Object.keys(permissions)]));
     const userList = allUserIds.map(id => {
         const pData = presence.find(p => p.id === id);
+        const permData = permissions[id]; // This now contains role and metadata
         return {
             id,
-            displayName: pData?.displayName || id,
-            twitchUsername: pData?.twitchUsername || null,
-            photoURL: pData?.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${id}`,
-            role: permissions[id] || 'viewer',
+            displayName: pData?.displayName || permData?.displayName || id,
+            twitchUsername: pData?.twitchUsername || permData?.twitchUsername || null,
+            photoURL: pData?.photoURL || permData?.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${id}`,
+            role: permData?.role || 'viewer',
             isOnline: !!pData,
             lastSeen: pData?.lastSeen
         };

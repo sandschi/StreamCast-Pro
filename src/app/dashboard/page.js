@@ -243,11 +243,18 @@ function DashboardContent() {
                     </button>
 
                     <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 px-2">
-                        <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-zinc-700" />
+                        <div className="relative">
+                            <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full border border-zinc-700 object-cover bg-zinc-800" />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full" />
+                        </div>
                         <div className="hidden md:block overflow-hidden">
-                            <p className="text-xs font-bold truncate">{user.displayName}</p>
-                            <p className="text-[10px] text-zinc-500 truncate uppercase tracking-tighter">
-                                {isModeratorMode ? 'Moderator' : 'Broadcaster'}
+                            <p className="text-[11px] font-bold truncate text-zinc-100">{user.displayName}</p>
+                            <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-indigo-400' :
+                                    userRole === 'mod' ? 'text-emerald-400' :
+                                        userRole === 'denied' ? 'text-red-400' :
+                                            'text-zinc-500'
+                                }`}>
+                                {verifyingMod ? 'Verifying...' : userRole}
                             </p>
                         </div>
                     </div>
@@ -273,9 +280,9 @@ function DashboardContent() {
                     </div>
 
                     <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                            userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                    'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                        userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
                         }`}>
                         {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
                         {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
