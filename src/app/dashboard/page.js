@@ -2,23 +2,56 @@
 export const dynamic = 'force-dynamic';
 
 import { useSearchParams } from 'next/navigation';
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
 import History from '@/components/dashboard/History';
 import Settings from '@/components/dashboard/Settings';
-import { LayoutDashboard, MessageSquare, History as HistoryIcon, Settings as SettingsIcon, LogOut, ExternalLink, ShieldAlert } from 'lucide-react';
+import {
+    LayoutDashboard,
+    MessageSquare,
+    History as HistoryIcon,
+    Settings as SettingsIcon,
+    LogOut,
+    ExternalLink,
+    ShieldAlert,
+    Copy,
+    Check,
+    Link as LinkIcon
+} from 'lucide-react';
 import Link from 'next/link';
 
 function DashboardContent() {
     const { user, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
+    const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const searchParams = useSearchParams();
     const hostParam = searchParams.get('host');
 
-    // Target UID is either the host parameter or the logged-in user themselves
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
+
+    useEffect(() => {
+        if (copyState) {
+            const timer = setTimeout(() => setCopyState(null), 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [copyState]);
+
+    const copyToClipboard = async (type) => {
+        if (!user) return;
+        const baseUrl = window.location.origin;
+        const url = type === 'overlay'
+            ? `${baseUrl}/overlay/${user.uid}`
+            : `${baseUrl}/dashboard?host=${user.uid}`;
+
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopyState(type);
+        } catch (err) {
+            console.error('Failed to copy!', err);
+        }
+    };
 
     if (loading) {
         return (
@@ -81,17 +114,41 @@ function DashboardContent() {
                         icon={<SettingsIcon size={20} />}
                         label="Settings"
                     />
+
+                    {/* Quick Tools Section */}
+                    <div className="pt-6 pb-2 px-3 hidden md:block">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
+                    </div>
+
+                    {!isModeratorMode && (
+                        <>
+                            <button
+                                onClick={() => copyToClipboard('overlay')}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                            >
+                                <div className="shrink-0">
+                                    {copyState === 'overlay' ? <Check size={20} className="text-green-500" /> : <ExternalLink size={20} />}
+                                </div>
+                                <span className="hidden md:block text-sm font-medium">
+                                    {copyState === 'overlay' ? 'Copied!' : 'Copy Overlay URL'}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => copyToClipboard('mod')}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                            >
+                                <div className="shrink-0">
+                                    {copyState === 'mod' ? <Check size={20} className="text-green-500" /> : <LinkIcon size={20} />}
+                                </div>
+                                <span className="hidden md:block text-sm font-medium">
+                                    {copyState === 'mod' ? 'Copied!' : 'Copy Mod Link'}
+                                </span>
+                            </button>
+                        </>
+                    )}
                 </nav>
 
                 <div className="mt-auto space-y-4">
-                    <Link
-                        href={`/overlay/${user.uid}`}
-                        target="_blank"
-                        className="flex items-center gap-3 p-3 text-zinc-400 hover:text-purple-400 hover:bg-zinc-800 rounded-xl transition-all"
-                    >
-                        <ExternalLink size={20} />
-                        <span className="hidden md:block text-sm font-medium">Open Overlay</span>
-                    </Link>
                     <button
                         onClick={logout}
                         className="w-full flex items-center gap-3 p-3 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-xl transition-all"
@@ -104,7 +161,7 @@ function DashboardContent() {
                         <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-zinc-700" />
                         <div className="hidden md:block overflow-hidden">
                             <p className="text-xs font-bold truncate">{user.displayName}</p>
-                            <p className="text-[10px] text-zinc-500 truncate">
+                            <p className="text-[10px] text-zinc-500 truncate uppercase tracking-tighter">
                                 {isModeratorMode ? 'Moderator' : 'Broadcaster'}
                             </p>
                         </div>
@@ -129,7 +186,7 @@ function DashboardContent() {
                     </div>
 
                     {isModeratorMode && (
-                        <div className="bg-purple-600/20 border border-purple-500/30 rounded-full px-4 py-1.5 flex items-center gap-2 text-purple-400 text-xs font-bold animate-pulse">
+                        <div className="bg-purple-600/20 border border-purple-500/30 rounded-full px-4 py-1.5 flex items-center gap-2 text-purple-400 text-xs font-bold animate-transition">
                             <ShieldAlert size={14} />
                             MODERATOR MODE ACTIVE
                         </div>
