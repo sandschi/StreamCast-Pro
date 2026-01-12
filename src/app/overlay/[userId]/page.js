@@ -23,6 +23,7 @@ export default function OverlayPage() {
         posX: 5,
         posY: 90,
         showAvatar: true,
+        bubbleStyle: 'classic', // classic, glass, neon, minimal, bold
     });
 
     // 1. Dynamic Font Loading
@@ -77,6 +78,105 @@ export default function OverlayPage() {
         }
     };
 
+    const bubbleStyles = useMemo(() => {
+        const baseHeaderRadiusLeft = (settings.posX <= 40) ? '0' : `${settings.borderRadius}px`;
+        const baseHeaderRadiusRight = (settings.posX > 60) ? '0' : `${settings.borderRadius}px`;
+        const baseBodyRadiusLeft = (settings.posX <= 40) ? '0' : `${settings.borderRadius}px`;
+        const baseBodyRadiusRight = (settings.posX > 60) ? '0' : `${settings.borderRadius}px`;
+
+        const commonBodyStyles = {
+            borderRadius: `${settings.borderRadius}px`,
+            borderTopLeftRadius: baseBodyRadiusLeft,
+            borderTopRightRadius: baseBodyRadiusRight,
+        };
+
+        const commonHeaderStyles = {
+            borderTopLeftRadius: baseHeaderRadiusLeft,
+            borderTopRightRadius: baseHeaderRadiusRight,
+            color: '#fff',
+        };
+
+        const headerBgColor = activeMessage?.color || '#9146FF';
+        const headerShadowColor = activeMessage?.color || 'rgba(145, 70, 255, 0.7)';
+
+        switch (settings.bubbleStyle) {
+            case 'glass':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: `${headerBgColor}B3`, // 70% opacity
+                        backdropFilter: 'blur(10px)',
+                        border: `1px solid ${headerBgColor}80`,
+                        borderBottom: 'none',
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.4)',
+                        backdropFilter: 'blur(10px)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                    }
+                };
+            case 'neon':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        boxShadow: `0 0 15px 5px ${headerShadowColor}`,
+                        borderBottom: 'none',
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: `0 0 10px 3px ${headerShadowColor}80`,
+                    }
+                };
+            case 'minimal':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        borderBottom: 'none',
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.9)',
+                        border: 'none',
+                    }
+                };
+            case 'bold':
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        borderBottom: `3px solid ${settings.strokeColor}`,
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.95)',
+                        border: `3px solid ${settings.strokeColor}`,
+                        borderTop: 'none',
+                    }
+                };
+            case 'classic':
+            default:
+                return {
+                    header: {
+                        ...commonHeaderStyles,
+                        backgroundColor: headerBgColor,
+                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                    },
+                    body: {
+                        ...commonBodyStyles,
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                    }
+                };
+        }
+    }, [settings, activeMessage?.color]);
+
+
     return (
         <div
             className="w-screen h-screen bg-transparent overflow-hidden relative"
@@ -97,12 +197,9 @@ export default function OverlayPage() {
                     >
                         {/* Heading: Avatar in front + Username */}
                         <div
-                            className="flex items-center gap-3 px-4 py-2 z-10 shadow-xl border-b border-white/10"
+                            className="flex items-center gap-3 px-4 py-2 z-10 shadow-xl transition-all duration-500"
                             style={{
-                                backgroundColor: activeMessage.color || '#9146FF',
-                                color: '#fff',
-                                borderTopLeftRadius: `${settings.borderRadius}px`,
-                                borderTopRightRadius: `${settings.borderRadius}px`,
+                                ...bubbleStyles.header,
                                 alignSelf: settings.posX > 50 ? 'flex-end' : settings.posX > 40 ? 'center' : 'flex-start'
                             }}
                         >
@@ -110,7 +207,7 @@ export default function OverlayPage() {
                                 <img
                                     src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
                                     alt=""
-                                    className="rounded-full border-2 border-white/40 shadow-md object-cover flex-shrink-0"
+                                    className={`rounded-full shadow-md object-cover flex-shrink-0 transition-all ${settings.bubbleStyle === 'bold' ? 'border-4 border-black' : 'border-2 border-white/40'}`}
                                     style={{ width: `${settings.avatarSize}px`, height: `${settings.avatarSize}px` }}
                                     onError={(e) => { e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png"; }}
                                 />
@@ -125,15 +222,13 @@ export default function OverlayPage() {
 
                         {/* Message Body */}
                         <div
-                            className="font-bold leading-tight drop-shadow-2xl px-6 py-5 bg-black/60 backdrop-blur-xl border border-white/5"
+                            className="font-bold leading-tight drop-shadow-2xl px-6 py-5 transition-all duration-500"
                             style={{
-                                color: settings.textColor,
+                                ...bubbleStyles.body,
+                                color: settings.bubbleStyle === 'bold' ? '#000' : settings.textColor,
                                 fontSize: `${settings.fontSize}px`,
-                                WebkitTextStroke: `1px ${settings.strokeColor}`,
-                                textStroke: `1px ${settings.strokeColor}`,
-                                borderRadius: `${settings.borderRadius}px`,
-                                borderTopLeftRadius: (settings.posX <= 40) ? '0' : `${settings.borderRadius}px`,
-                                borderTopRightRadius: (settings.posX > 60) ? '0' : `${settings.borderRadius}px`,
+                                WebkitTextStroke: settings.bubbleStyle === 'minimal' ? 'none' : `1px ${settings.strokeColor}`,
+                                textStroke: settings.bubbleStyle === 'minimal' ? 'none' : `1px ${settings.strokeColor}`,
                             }}
                         >
                             <div className="flex flex-wrap items-center gap-2">

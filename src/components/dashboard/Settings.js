@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import {
     Settings as SettingsIcon,
     Save,
@@ -11,7 +11,9 @@ import {
     Type,
     Layout,
     Image as ImageIcon,
-    Move
+    Move,
+    Sparkles,
+    Send
 } from 'lucide-react';
 
 const FONTS = [
@@ -36,6 +38,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
         posX: 5, // Percentage from left
         posY: 90, // Percentage from top
         showAvatar: true,
+        bubbleStyle: 'classic', // Added bubbleStyle
     });
 
     const [twitchUsername, setTwitchUsername] = useState('');
@@ -76,14 +79,44 @@ export default function Settings({ targetUid, isModeratorMode }) {
         } finally { setSaving(false); }
     };
 
+    const sendTestOverlay = async () => {
+        if (!effectiveUid) return;
+        try {
+            const testMessage = {
+                id: 'test-message-' + Date.now(),
+                username: 'TestUser',
+                fragments: [{ type: 'text', content: 'This is a test message from your settings!' }],
+                timestamp: Date.now(),
+                color: '#FF0000', // Example color
+                badges: [],
+                avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png' // Example avatar
+            };
+            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), testMessage);
+            console.log('Test overlay sent!');
+        } catch (e) {
+            console.error('Error sending test overlay:', e);
+            alert('Error sending test overlay.');
+        }
+    };
+
     return (
         <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
-                <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
-                    <SettingsIcon size={18} className="text-zinc-400" />
-                    Overlay Customization
-                </h3>
+                <div className="flex items-center gap-4">
+                    <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
+                        <SettingsIcon size={18} className="text-zinc-400" />
+                        Overlay Customization
+                    </h3>
+                    <div className="h-4 w-px bg-zinc-800" />
+                    <button
+                        onClick={sendTestOverlay}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[11px] font-bold transition-all border border-zinc-700"
+                    >
+                        <Send size={12} />
+                        Send Test Overlay
+                    </button>
+                </div>
                 <button
                     onClick={handleSave}
                     disabled={saving}
@@ -109,7 +142,40 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     />
                 </section>
 
-                {/* 2. Visual Style */}
+                {/* 2. Overlay Visual Style */}
+                <section className="space-y-4">
+                    <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Sparkles size={14} /> Overlay Visual Style
+                    </h4>
+                    <div className="grid grid-cols-5 gap-3">
+                        {[
+                            { id: 'classic', label: 'Classic' },
+                            { id: 'glass', label: 'Glass' },
+                            { id: 'neon', label: 'Neon' },
+                            { id: 'minimal', label: 'Minimal' },
+                            { id: 'bold', label: 'Bold' }
+                        ].map((style) => (
+                            <button
+                                key={style.id}
+                                onClick={() => updateSetting('bubbleStyle', style.id)}
+                                className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${settings.bubbleStyle === style.id
+                                        ? 'bg-purple-600/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                                        : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
+                                    }`}
+                            >
+                                <div className={`w-8 h-4 rounded-sm ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
+                                        style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
+                                            style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
+                                                style.id === 'minimal' ? 'border-none bg-transparent' :
+                                                    'bg-white border-2 border-black'
+                                    }`} />
+                                <span className="text-[10px] font-bold uppercase tracking-tighter">{style.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </section>
+
+                {/* 3. Typography & Colors */}
                 <section className="space-y-6">
                     <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                         <Type size={14} /> Typography & Colors
