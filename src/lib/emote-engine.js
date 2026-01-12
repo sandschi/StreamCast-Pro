@@ -3,7 +3,11 @@
  * Handles parsing Twitch messages and fetching 3rd party emotes.
  */
 
+const failedIds = new Set();
+
 export async function fetchThirdPartyEmotes(channelId) {
+    if (failedIds.has(channelId)) return { sevenTV: [], bttv: [], ffz: [] };
+
     const emotes = {
         sevenTV: [],
         bttv: [],
@@ -18,10 +22,12 @@ export async function fetchThirdPartyEmotes(channelId) {
             emotes.sevenTV = data.emote_set?.emotes?.map(e => ({
                 id: e.id,
                 name: e.name,
-                url: e.data.host.url + '/2x.webp', // Using 2x size
+                url: e.data.host.url + '/2x.webp',
             })) || [];
+        } else if (sevenTVRes.status === 404) {
+            failedIds.add(channelId);
         }
-    } catch (e) { /* Account possibly not linked/found - silence error */ }
+    } catch (e) { /* silent */ }
 
     try {
         // BTTV API
@@ -34,8 +40,10 @@ export async function fetchThirdPartyEmotes(channelId) {
                 name: e.code,
                 url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
             }));
+        } else if (bttvRes.status === 404) {
+            failedIds.add(channelId);
         }
-    } catch (e) { /* Account possibly not linked/found - silence error */ }
+    } catch (e) { /* silent */ }
 
     try {
         // FFZ API
@@ -48,16 +56,16 @@ export async function fetchThirdPartyEmotes(channelId) {
                 name: e.name,
                 url: e.urls['2'] || e.urls['1'],
             }));
+        } else if (ffzRes.status === 404) {
+            failedIds.add(channelId);
         }
-    } catch (e) { /* Account possibly not linked/found - silence error */ }
+    } catch (e) { /* silent */ }
 
     return emotes;
 }
 
 export function parseTwitchMessage(message, emotes, thirdPartyEmotes = {}) {
     // 1. Handle Twitch Native Emotes
-    // emotes is an object from tmi.js: { 'emoteId': ['0-4', '6-10'] }
-    let fragments = [];
     let emotePositions = [];
 
     if (emotes) {
@@ -78,42 +86,26 @@ export function parseTwitchMessage(message, emotes, thirdPartyEmotes = {}) {
     // Sort positions by start index
     emotePositions.sort((a, b) => a.start - b.start);
 
-    // 2. Handle Third Party Emotes (7TV, BTTV, FFZ)
+    // 2. Combine 3rd party emotes
     const allThirdParty = [
         ...(thirdPartyEmotes.sevenTV || []),
         ...(thirdPartyEmotes.bttv || []),
         ...(thirdPartyEmotes.ffz || [])
     ];
 
-    const words = message.split(' ');
-    let currentPos = 0;
-
-    // We need to be careful with overlaps between Twitch native and 3rd party.
-    // Twitch native handles index ranges. 3rd party handles string codes.
-
-    // A simpler way: split message by spaces, and for each word:
-    // - Check if it's within a Twitch emote range.
-    // - if not, check if it matches a 3rd party emote.
-
     const resultFragments = [];
     let lastIndex = 0;
-
-    // Combine all markers (Twitch native)
-    // We'll use the indices to slice the message
 
     let i = 0;
     while (i < message.length) {
         const twitchEmote = emotePositions.find(p => p.start === i);
 
         if (twitchEmote) {
-            // Add text before if any
             if (i > lastIndex) {
-                // Parse the text segment for 3rd party emotes
                 const textSegment = message.substring(lastIndex, i);
                 resultFragments.push(...parseTextForThirdParty(textSegment, allThirdParty));
             }
 
-            // Add Twitch emote
             resultFragments.push({
                 type: 'emote',
                 url: twitchEmote.url,
@@ -128,7 +120,6 @@ export function parseTwitchMessage(message, emotes, thirdPartyEmotes = {}) {
         }
     }
 
-    // Add remaining text
     if (lastIndex < message.length) {
         const textSegment = message.substring(lastIndex);
         resultFragments.push(...parseTextForThirdParty(textSegment, allThirdParty));
@@ -138,7 +129,7 @@ export function parseTwitchMessage(message, emotes, thirdPartyEmotes = {}) {
 }
 
 function parseTextForThirdParty(text, emotes) {
-    const words = text.split(/(\s+)/); // Keep spaces
+    const words = text.split(/(\s+)/);
     const fragments = [];
 
     words.forEach(word => {
