@@ -430,8 +430,8 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {/* Dashboard Content - only shown if Broadcaster (Approved) OR Authorized Mod OR Viewer (Suggestion Mode) */}
-                    {((userRole === 'broadcaster' && (broadcasterStatus === 'approved' || isMasterAdmin)) || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat') || isMasterAdmin) && !verifyingMod && userRole !== 'denied' && (broadcasterStatus !== 'denied' || isMasterAdmin) && (
+                    {/* Dashboard Content - only shown if Verified Access (Approved Broadcaster, Authorized Mod, or Viewer in Suggestion Mode) */}
+                    {hasVerifiedAccess && !verifyingMod && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
                                 <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
