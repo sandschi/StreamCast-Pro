@@ -126,13 +126,13 @@ export default function OverlayPage() {
                                 marginRight: settings.positionHorizontal === 'right' ? '8px' : '0',
                             }}
                         >
-                            {(settings.showAvatar !== false) && (activeMessage.avatarUrl || activeMessage.username) && (
+                            {activeMessage && (
                                 <img
-                                    src={activeMessage.avatarUrl || `https://decapi.me/twitch/avatar/${activeMessage.username.toLowerCase()}`}
+                                    src={activeMessage.avatarUrl || `https://decapi.me/twitch/avatar/${activeMessage.login || activeMessage.username.toLowerCase()}`}
                                     alt=""
-                                    className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover"
+                                    className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover bg-zinc-800"
                                     onError={(e) => {
-                                        // Final fallback to a generic placeholder if DecAPI also fails
+                                        // Final fallback to a generic placeholder
                                         e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png";
                                     }}
                                 />

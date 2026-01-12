@@ -123,6 +123,7 @@ export default function Chat({ targetUid, isModeratorMode }) {
                 const newMessage = {
                     id: tags.id || Math.random().toString(36).substr(2, 9),
                     username: displayName,
+                    login: loginName, // For reliable lookups
                     avatarUrl: `https://decapi.me/twitch/avatar/${loginName}`,
                     color: tags.color || '#efeff1',
                     message,
@@ -170,6 +171,7 @@ export default function Chat({ targetUid, isModeratorMode }) {
         const historyRef = collection(db, 'users', effectiveUid, 'history');
         const payload = {
             username: msg.username,
+            login: msg.login,
             avatarUrl: msg.avatarUrl,
             color: msg.color,
             fragments: msg.fragments,
