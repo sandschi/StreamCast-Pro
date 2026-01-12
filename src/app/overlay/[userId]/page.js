@@ -128,11 +128,11 @@ export default function OverlayPage() {
                         >
                             {activeMessage && (
                                 <img
-                                    src={activeMessage.avatarUrl || `https://decapi.me/twitch/avatar/${activeMessage.login || activeMessage.username.toLowerCase()}`}
+                                    src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
                                     alt=""
                                     className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover bg-zinc-800"
                                     onError={(e) => {
-                                        // Final fallback to a generic placeholder
+                                        // Final fallback to the official twitch default
                                         e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png";
                                     }}
                                 />
