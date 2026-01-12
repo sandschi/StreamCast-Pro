@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { History as HistoryIcon, RefreshCw } from 'lucide-react';
 
-export default function History({ targetUid }) {
+export default function History({ targetUid, isModeratorMode, isModAuthorized }) {
     const { user } = useAuth();
     const effectiveUid = targetUid || user?.uid;
     const [history, setHistory] = useState([]);
@@ -26,10 +26,10 @@ export default function History({ targetUid }) {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, effectiveUid]);
 
     const resendToScreen = async (msg) => {
-        if (!user) return;
+        if (!user || (isModeratorMode && !isModAuthorized)) return;
         const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
         await setDoc(activeMsgRef, {
             ...msg,

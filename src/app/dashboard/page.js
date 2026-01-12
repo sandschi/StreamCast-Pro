@@ -25,11 +25,56 @@ function DashboardContent() {
     const { user, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
+    const [isModAuthorized, setIsModAuthorized] = useState(true); // Default to true while checking
+    const [verifyingMod, setVerifyingMod] = useState(false);
     const searchParams = useSearchParams();
     const hostParam = searchParams.get('host');
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
+
+    // Verifying Moderator Permissions
+    useEffect(() => {
+        if (!user || !isModeratorMode || !hostParam) {
+            setIsModAuthorized(true);
+            return;
+        }
+
+        const checkPermissions = async () => {
+            setVerifyingMod(true);
+            try {
+                // 1. Get host's twitch username
+                const hostDoc = await getDoc(doc(db, 'users', hostParam));
+                const hostName = hostDoc.data()?.twitchUsername;
+                const myName = user.displayName; // Fallback to display name if twitchUsername not set
+
+                if (!hostName) {
+                    console.error('Host has no twitch username set.');
+                    setIsModAuthorized(false);
+                    return;
+                }
+
+                // 2. Check IVR for mod status
+                const res = await fetch(`https://api.ivr.fi/v2/twitch/mod_check?user=${myName}&channel=${hostName}`);
+                const data = await res.json();
+
+                // If it returns true (mod) or the user IS the broadcaster (safety check)
+                if (data === true || myName?.toLowerCase() === hostName.toLowerCase()) {
+                    setIsModAuthorized(true);
+                } else {
+                    setIsModAuthorized(false);
+                }
+            } catch (e) {
+                console.error('Permission check failed:', e);
+                // In case of error, we default to block for security
+                setIsModAuthorized(false);
+            } finally {
+                setVerifyingMod(false);
+            }
+        };
+
+        checkPermissions();
+    }, [user, hostParam, isModeratorMode]);
 
     useEffect(() => {
         if (copyState) {
@@ -194,11 +239,39 @@ function DashboardContent() {
                 </header>
 
                 <div className="max-w-4xl">
-                    <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
-                        <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} />
-                    </div>
-                    {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} />}
-                    {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                    {verifyingMod ? (
+                        <div className="flex flex-col items-center justify-center p-20 space-y-4">
+                            <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                            <p className="text-zinc-500 font-medium">Verifying moderator credentials...</p>
+                        </div>
+                    ) : !isModAuthorized ? (
+                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+                                <ShieldAlert size={40} className="text-red-500" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold">Access Restricted</h3>
+                                <p className="text-zinc-500 max-w-sm mx-auto">
+                                    You are not currently a moderator for this channel. If you were recently modded, try refreshing.
+                                </p>
+                            </div>
+                            <button
+                                onClick={logout}
+                                className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2 mx-auto"
+                            >
+                                <LogOut size={18} />
+                                Logout of StreamCast
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
+                                <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} />
+                            </div>
+                            {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} />}
+                            {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                        </>
+                    )}
                 </div>
             </main>
         </div>

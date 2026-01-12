@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ScreenShare, AlertCircle } from 'lucide-react';
 
-export default function Chat({ targetUid, isModeratorMode }) {
+export default function Chat({ targetUid, isModeratorMode, isModAuthorized }) {
     const { user } = useAuth();
     const effectiveUid = useMemo(() => targetUid || user?.uid, [targetUid, user?.uid]);
 
@@ -123,6 +123,7 @@ export default function Chat({ targetUid, isModeratorMode }) {
 
     const sendToScreen = async (msg) => {
         if (!user) return;
+        if (!user || !isModeratorMode || !isModAuthorized) return;
         const payload = {
             username: msg.username,
             login: msg.login,
@@ -132,8 +133,10 @@ export default function Chat({ targetUid, isModeratorMode }) {
             timestamp: serverTimestamp(),
         };
         try {
-            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), payload);
-            await addDoc(collection(db, 'users', effectiveUid, 'history'), payload);
+            const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+            const historyRef = collection(db, 'users', effectiveUid, 'history');
+            await setDoc(activeMsgRef, payload);
+            await addDoc(historyRef, payload);
         } catch (e) { console.error(e); }
     };
 
@@ -142,8 +145,8 @@ export default function Chat({ targetUid, isModeratorMode }) {
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
-                            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
-                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                        connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
+                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
                         }`} />
                     <span className="tracking-tight">Twitch Chat</span>
                     {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
