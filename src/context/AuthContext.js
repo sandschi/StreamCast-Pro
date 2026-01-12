@@ -42,6 +42,7 @@ export function AuthProvider({ children }) {
                     setTwitchToken(tokenDoc.data().accessToken);
                 }
 
+                const userDoc = await getDoc(userRef);
                 console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
                 setUser(currentUser);
             } else {
