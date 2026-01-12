@@ -122,8 +122,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized }) {
     }, [messages]);
 
     const sendToScreen = async (msg) => {
-        if (!user) return;
-        if (!user || !isModeratorMode || !isModAuthorized) return;
+        if (!user || (isModeratorMode && !isModAuthorized)) return;
         const payload = {
             username: msg.username,
             login: msg.login,

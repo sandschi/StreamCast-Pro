@@ -27,7 +27,7 @@ function DashboardContent() {
     const { user, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
-    const [isModAuthorized, setIsModAuthorized] = useState(true); // Default to true while checking
+    const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
     const [verifyingMod, setVerifyingMod] = useState(false);
     const searchParams = useSearchParams();
     const hostParam = searchParams.get('host');
@@ -37,13 +37,18 @@ function DashboardContent() {
 
     // Verifying Moderator Permissions
     useEffect(() => {
-        if (!user || !isModeratorMode || !hostParam) {
+        if (!user) return;
+
+        // Broadcaster check: If no host param or I am the owner of this UID
+        if (!isModeratorMode || !hostParam || hostParam === user.uid) {
             setIsModAuthorized(true);
+            setVerifyingMod(false);
             return;
         }
 
         const checkPermissions = async () => {
             setVerifyingMod(true);
+            setIsModAuthorized(false); // Start locked
             try {
                 // 1. Get host's twitch username
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
@@ -66,7 +71,7 @@ function DashboardContent() {
                 // If the user is in the 'mods' array
                 const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
 
-                // If it returns true (mod) or the user IS the broadcaster (safety check)
+                // Final verification
                 if (isMod || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
                     setIsModAuthorized(true);
                 } else {
@@ -74,7 +79,6 @@ function DashboardContent() {
                 }
             } catch (e) {
                 console.error('Permission check failed:', e);
-                // In case of error, we default to block for security
                 setIsModAuthorized(false);
             } finally {
                 setVerifyingMod(false);
