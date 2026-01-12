@@ -12,6 +12,7 @@ export default function Chat() {
     const { user } = useAuth();
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({});
+    const [connectionStatus, setConnectionStatus] = useState('disconnected');
     const clientRef = useRef(null);
     const scrollRef = useRef(null);
 
@@ -22,18 +23,38 @@ export default function Chat() {
         const twitchId = user.providerData[0]?.uid;
         const displayName = user.displayName || user.providerData[0]?.displayName;
 
-        if (!displayName || !twitchId) return;
+        if (!displayName || !twitchId) {
+            console.log('Chat: Missing user data', { displayName, twitchId });
+            return;
+        }
+
+        console.log('Chat: Connecting to channel:', displayName.toLowerCase());
+        setConnectionStatus('connecting');
 
         fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
 
         const client = new tmi.Client({
+            connection: {
+                secure: true,
+                reconnect: true
+            },
             channels: [displayName.toLowerCase()]
         });
 
-        client.connect();
+        client.connect().catch(err => {
+            console.error('Chat: Connection error:', err);
+            setConnectionStatus('error');
+        });
+
         clientRef.current = client;
 
+        client.on('connected', (address, port) => {
+            console.log(`Chat: Connected to ${address}:${port}`);
+            setConnectionStatus('connected');
+        });
+
         client.on('message', (channel, tags, message, self) => {
+            console.log('Chat: Received message', message);
             const parsedFragments = parseTwitchMessage(message, tags.emotes, thirdPartyEmotes);
 
             const newMessage = {
@@ -85,8 +106,11 @@ export default function Chat() {
         <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                    Live Twitch Chat
+                    <div className={`w-2 h-2 rounded-full animate-pulse ${connectionStatus === 'connected' ? 'bg-green-500' :
+                            connectionStatus === 'connecting' ? 'bg-yellow-500' :
+                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                        }`} />
+                    Twitch Chat {connectionStatus === 'error' && <span className="text-[10px] text-red-500 font-normal">(Error)</span>}
                 </h3>
             </div>
 
