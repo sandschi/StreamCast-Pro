@@ -5,7 +5,7 @@ import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, ScreenShare } from 'lucide-react';
 
 export default function Chat() {
@@ -13,22 +13,45 @@ export default function Chat() {
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({});
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
+    const [channelName, setChannelName] = useState(null);
     const clientRef = useRef(null);
     const scrollRef = useRef(null);
 
+    // Fetch the correct channel name (Twitch username) from Firestore
     useEffect(() => {
         if (!user) return;
 
+        const fetchUserData = async () => {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                const data = userDoc.data();
+                const name = data.twitchUsername || user.displayName || user.providerData[0]?.displayName;
+                if (name) {
+                    console.log('Chat: Found channel name:', name);
+                    setChannelName(name.toLowerCase());
+                } else {
+                    console.log('Chat: No channel name found in user document or profile');
+                }
+            } else {
+                console.log('Chat: User document not found in Firestore');
+            }
+        };
+
+        fetchUserData();
+    }, [user]);
+
+    useEffect(() => {
+        if (!user || !channelName) return;
+
         // Fetch emotes for the user's Twitch ID
         const twitchId = user.providerData[0]?.uid;
-        const displayName = user.displayName || user.providerData[0]?.displayName;
 
-        if (!displayName || !twitchId) {
-            console.log('Chat: Missing user data', { displayName, twitchId });
+        if (!twitchId) {
+            console.log('Chat: Missing twitchId', { twitchId });
             return;
         }
 
-        console.log('Chat: Connecting to channel:', displayName.toLowerCase());
+        console.log('Chat: Connecting to channel:', channelName);
         setConnectionStatus('connecting');
 
         fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
@@ -38,7 +61,7 @@ export default function Chat() {
                 secure: true,
                 reconnect: true
             },
-            channels: [displayName.toLowerCase()]
+            channels: [channelName]
         });
 
         client.connect().catch(err => {
@@ -73,7 +96,7 @@ export default function Chat() {
         return () => {
             if (clientRef.current) clientRef.current.disconnect();
         };
-    }, [user, thirdPartyEmotes.length]); // Re-run if emotes list changes length (initial load)
+    }, [user, channelName, thirdPartyEmotes.length]); // Re-run if emotes or channelName changes
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -107,8 +130,8 @@ export default function Chat() {
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse ${connectionStatus === 'connected' ? 'bg-green-500' :
-                            connectionStatus === 'connecting' ? 'bg-yellow-500' :
-                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                        connectionStatus === 'connecting' ? 'bg-yellow-500' :
+                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
                         }`} />
                     Twitch Chat {connectionStatus === 'error' && <span className="text-[10px] text-red-500 font-normal">(Error)</span>}
                 </h3>

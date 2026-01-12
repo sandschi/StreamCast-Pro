@@ -59,7 +59,15 @@ export function AuthProvider({ children }) {
         provider.addScope('channel:read:redemptions');
 
         try {
-            await signInWithPopup(auth, provider);
+            const result = await signInWithPopup(auth, provider);
+            // Capture Twitch username (screenName in Firebase result)
+            const profile = result._tokenResponse?.screenName || result.user.reloadUserInfo?.screenName;
+
+            if (profile) {
+                await setDoc(doc(db, 'users', result.user.uid), {
+                    twitchUsername: profile.toLowerCase(),
+                }, { merge: true });
+            }
         } catch (error) {
             console.error('Login error:', error);
         }
