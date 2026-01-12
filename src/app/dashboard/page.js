@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useSearchParams } from 'next/navigation';
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
 import History from '@/components/dashboard/History';
@@ -10,7 +10,7 @@ import Settings from '@/components/dashboard/Settings';
 import { LayoutDashboard, MessageSquare, History as HistoryIcon, Settings as SettingsIcon, LogOut, ExternalLink, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
-export default function DashboardPage() {
+function DashboardContent() {
     const { user, loginWithTwitch, logout, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const searchParams = useSearchParams();
@@ -143,6 +143,18 @@ export default function DashboardPage() {
                 </div>
             </main>
         </div>
+    );
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <DashboardContent />
+        </Suspense>
     );
 }
 
