@@ -48,20 +48,23 @@ function DashboardContent() {
                 // 1. Get host's twitch username
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
-                const myName = user.displayName; // Fallback to display name if twitchUsername not set
 
-                if (!hostName) {
-                    console.error('Host has no twitch username set.');
+                // 2. Get MY twitch username correctly from Firestore
+                const myDoc = await getDoc(doc(db, 'users', user.uid));
+                const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
+
+                if (!hostName || !myTwitchName) {
+                    console.error('Missing names for mod check:', { hostName, myTwitchName });
                     setIsModAuthorized(false);
                     return;
                 }
 
-                // 2. Check IVR for mod status
-                const res = await fetch(`https://api.ivr.fi/v2/twitch/mod_check?user=${myName}&channel=${hostName}`);
+                // 3. Check IVR for mod status
+                const res = await fetch(`https://api.ivr.fi/v2/twitch/mod_check?user=${myTwitchName}&channel=${hostName}`);
                 const data = await res.json();
 
                 // If it returns true (mod) or the user IS the broadcaster (safety check)
-                if (data === true || myName?.toLowerCase() === hostName.toLowerCase()) {
+                if (data === true || myTwitchName.toLowerCase() === hostName.toLowerCase()) {
                     setIsModAuthorized(true);
                 } else {
                     setIsModAuthorized(false);
