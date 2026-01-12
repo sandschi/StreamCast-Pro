@@ -137,9 +137,9 @@ function DashboardContent() {
                 </header>
 
                 <div className="max-w-4xl">
-                    {activeTab === 'chat' && <Chat targetUid={targetUid} />}
-                    {activeTab === 'history' && <History targetUid={targetUid} />}
-                    {activeTab === 'settings' && <Settings targetUid={targetUid} />}
+                    {activeTab === 'chat' && <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                    {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                    {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
                 </div>
             </main>
         </div>

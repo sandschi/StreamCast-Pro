@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Settings as SettingsIcon, Save, User, Copy, Check, ExternalLink } from 'lucide-react';
 
-export default function Settings({ targetUid }) {
+export default function Settings({ targetUid, isModeratorMode }) {
     const { user } = useAuth();
     const effectiveUid = targetUid || user?.uid;
     const [settings, setSettings] = useState({
@@ -102,7 +102,7 @@ export default function Settings({ targetUid }) {
                 </section>
 
                 {/* Moderator Access */}
-                {!targetUid && (
+                {!isModeratorMode && (
                     <section className="space-y-4 pt-4 border-t border-zinc-800/50">
                         <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                             <Copy size={14} /> Moderator Access
