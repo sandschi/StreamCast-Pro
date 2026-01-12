@@ -75,7 +75,8 @@ export default function Users({ targetUid, user }) {
         const pData = presence.find(p => p.id === id);
         return {
             id,
-            displayName: pData?.displayName || 'Unknown User',
+            displayName: pData?.displayName || id,
+            twitchUsername: pData?.twitchUsername || null,
             photoURL: pData?.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${id}`,
             role: permissions[id] || 'viewer',
             isOnline: !!pData,
@@ -97,12 +98,21 @@ export default function Users({ targetUid, user }) {
                                     )}
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-zinc-100 truncate max-w-[120px]">{u.displayName}</h4>
-                                    <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-medium uppercase tracking-wider">
+                                    <h4 className="font-bold text-zinc-100 truncate max-w-[120px]" title={u.displayName}>
+                                        {u.displayName}
+                                    </h4>
+                                    {u.twitchUsername && (
+                                        <div className="text-[10px] text-zinc-500 -mt-0.5 lowercase">
+                                            @{u.twitchUsername}
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-1 mt-1 text-[10px] font-medium uppercase tracking-wider">
                                         {u.role === 'mod' && <Shield size={10} className="text-indigo-400" />}
                                         {u.role === 'viewer' && <User size={10} className="text-zinc-500" />}
                                         {u.role === 'denied' && <ShieldAlert size={10} className="text-red-400" />}
-                                        {u.role}
+                                        <span className={u.role === 'mod' ? 'text-indigo-400' : u.role === 'viewer' ? 'text-zinc-500' : u.role === 'denied' ? 'text-red-400' : ''}>
+                                            {u.role}
+                                        </span>
                                     </div>
                                 </div>
                             </div>

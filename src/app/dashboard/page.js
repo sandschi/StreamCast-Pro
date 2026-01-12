@@ -18,6 +18,7 @@ import {
     LogOut,
     ExternalLink,
     ShieldAlert,
+    Shield,
     RefreshCw,
     Copy,
     Check,
@@ -60,11 +61,15 @@ function DashboardContent() {
         if (user && hostParam) {
             const presenceRef = doc(db, 'users', hostParam, 'online', user.uid);
             const updatePresence = async () => {
+                // Fetch own profile for best name data
+                const myProfile = await getDoc(doc(db, 'users', user.uid));
+                const myData = myProfile.data();
+
                 await setDoc(presenceRef, {
                     lastSeen: serverTimestamp(),
-                    displayName: user.displayName,
-                    photoURL: user.photoURL,
-                    twitchUsername: user.displayName // Fallback
+                    displayName: myData?.displayName || user.displayName,
+                    photoURL: myData?.photoURL || user.photoURL,
+                    twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
                 }, { merge: true });
             };
             updatePresence();
@@ -267,12 +272,19 @@ function DashboardContent() {
                         </p>
                     </div>
 
-                    {isModeratorMode && (
-                        <div className="bg-purple-600/20 border border-purple-500/30 rounded-full px-4 py-1.5 flex items-center gap-2 text-purple-400 text-xs font-bold animate-transition">
-                            <ShieldAlert size={14} />
-                            MODERATOR MODE ACTIVE
-                        </div>
-                    )}
+                    <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                            userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                    'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                        }`}>
+                        {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
+                        {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
+                        {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
+                        {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
+                        <span className="uppercase tracking-widest whitespace-nowrap">
+                            {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
+                        </span>
+                    </div>
                 </header>
 
                 <div className="max-w-4xl">
@@ -304,12 +316,6 @@ function DashboardContent() {
                                 >
                                     Open Suggestion Dashboard
                                 </button>
-                                <button
-                                    onClick={() => setIsModeratorMode(false)}
-                                    className="text-zinc-500 hover:text-zinc-300 text-sm underline transition-colors"
-                                >
-                                    Return to Broadcast Mode
-                                </button>
                             </div>
                         </div>
                     )}
@@ -325,12 +331,6 @@ function DashboardContent() {
                                     Your access to this dashboard has been restricted by the broadcaster.
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setIsModeratorMode(false)}
-                                className="text-zinc-500 hover:text-zinc-300 text-sm underline transition-colors"
-                            >
-                                Return to Broadcast Mode
-                            </button>
                         </div>
                     )}
 
