@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Send, ScreenShare, AlertCircle } from 'lucide-react';
 
-export default function Chat({ targetUid }) {
+export default function Chat({ targetUid, isModeratorMode }) {
     const { user } = useAuth();
     const effectiveUid = targetUid || user?.uid;
 
@@ -101,12 +101,18 @@ export default function Chat({ targetUid }) {
         clientRef.current = client;
 
         client.on('connected', () => setConnectionStatus('connected'));
-        client.on('message', (channel, tags, message) => {
+        client.on('message', async (channel, tags, message) => {
             // Use emotesRef.current to avoid stale closure
             const parsedFragments = parseTwitchMessage(message, tags.emotes, emotesRef.current);
+
+            // Get avatar URL (DecAPI is a reliable public mirror for Twitch avatars)
+            const username = tags['display-name'] || tags.username;
+            const avatarUrl = `https://decapi.me/twitch/avatar/${username.toLowerCase()}`;
+
             const newMessage = {
                 id: tags.id || Math.random().toString(36).substr(2, 9),
-                username: tags['display-name'] || tags.username,
+                username,
+                avatarUrl,
                 color: tags.color || '#efeff1',
                 message,
                 rawEmotes: tags.emotes, // Store for re-parsing
@@ -134,6 +140,7 @@ export default function Chat({ targetUid }) {
         const historyRef = collection(db, 'users', effectiveUid, 'history');
         const payload = {
             username: msg.username,
+            avatarUrl: msg.avatarUrl,
             color: msg.color,
             fragments: msg.fragments,
             timestamp: serverTimestamp(),

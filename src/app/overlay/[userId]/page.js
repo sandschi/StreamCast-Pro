@@ -16,6 +16,10 @@ export default function OverlayPage() {
         fontSize: 24,
         animationStyle: 'slide',
         displayDuration: 5,
+        borderRadius: 12,
+        positionVertical: 'bottom',
+        positionHorizontal: 'left',
+        showAvatar: true,
     });
 
     useEffect(() => {
@@ -24,7 +28,7 @@ export default function OverlayPage() {
         // Listen to settings
         const settingsRef = doc(db, 'users', userId, 'settings', 'config');
         const unsubscribeSettings = onSnapshot(settingsRef, (doc) => {
-            if (doc.exists()) setSettings(doc.data());
+            if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() }));
         });
 
         // Listen to active message
@@ -50,6 +54,9 @@ export default function OverlayPage() {
     }, [userId, settings.displayDuration]);
 
     const getAnimationVariants = () => {
+        const isRight = settings.positionHorizontal === 'right';
+        const isCenter = settings.positionHorizontal === 'center';
+
         switch (settings.animationStyle) {
             case 'fade':
                 return {
@@ -71,18 +78,28 @@ export default function OverlayPage() {
                 };
             case 'slide':
             default:
+                const xOffset = isRight ? 100 : isCenter ? 0 : -100;
+                const yOffset = isCenter ? 50 : 0;
                 return {
-                    initial: { x: -100, opacity: 0 },
-                    animate: { x: 0, opacity: 1 },
-                    exit: { x: 100, opacity: 0 }
+                    initial: { x: xOffset, y: yOffset, opacity: 0 },
+                    animate: { x: 0, y: 0, opacity: 1 },
+                    exit: { x: -xOffset, opacity: 0 }
                 };
         }
+    };
+
+    const getPositionClasses = () => {
+        const v = settings.positionVertical || 'bottom';
+        const h = settings.positionHorizontal || 'left';
+        const vClass = v === 'top' ? 'justify-start' : v === 'center' ? 'justify-center' : 'justify-end';
+        const hClass = h === 'left' ? 'items-start' : h === 'center' ? 'items-center' : 'items-end';
+        return `${vClass} ${hClass}`;
     };
 
     const variants = getAnimationVariants();
 
     return (
-        <div className="w-screen h-screen bg-transparent overflow-hidden flex items-end p-20">
+        <div className={`w-screen h-screen bg-transparent overflow-hidden flex flex-col p-10 md:p-20 ${getPositionClasses()}`}>
             <AnimatePresence mode="wait">
                 {activeMessage && (
                     <motion.div
@@ -91,27 +108,48 @@ export default function OverlayPage() {
                         initial="initial"
                         animate="animate"
                         exit="exit"
-                        className="flex flex-col gap-2 max-w-2xl"
+                        className="flex flex-col gap-0 max-w-2xl relative"
+                        style={{ alignItems: settings.positionHorizontal === 'right' ? 'flex-end' : settings.positionHorizontal === 'center' ? 'center' : 'flex-start' }}
                     >
-                        {/* Username Badge */}
+                        {/* Heading: Avatar + Username */}
                         <motion.div
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.2 }}
-                            className="px-3 py-1 rounded-t-lg font-bold text-sm w-fit"
-                            style={{ backgroundColor: activeMessage.color, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+                            transition={{ delay: 0.1 }}
+                            className="flex items-center gap-2 px-4 py-1.5 z-10 shadow-lg border-b border-white/10"
+                            style={{
+                                backgroundColor: activeMessage.color,
+                                color: '#fff',
+                                borderTopLeftRadius: `${settings.borderRadius}px`,
+                                borderTopRightRadius: `${settings.borderRadius}px`,
+                                marginLeft: settings.positionHorizontal === 'right' ? '0' : '8px',
+                                marginRight: settings.positionHorizontal === 'right' ? '8px' : '0',
+                            }}
                         >
-                            {activeMessage.username}
+                            {settings.showAvatar && activeMessage.avatarUrl && (
+                                <img
+                                    src={activeMessage.avatarUrl}
+                                    alt=""
+                                    className="w-6 h-6 rounded-full border border-white/20 shadow-sm"
+                                    onError={(e) => e.target.style.display = 'none'}
+                                />
+                            )}
+                            <span className="font-bold text-sm tracking-wide drop-shadow-md">
+                                {activeMessage.username}
+                            </span>
                         </motion.div>
 
                         {/* Message Body */}
                         <div
-                            className="font-bold leading-tight drop-shadow-lg"
+                            className="font-bold leading-tight drop-shadow-2xl px-6 py-4 bg-black/40 backdrop-blur-md border border-white/10"
                             style={{
                                 color: settings.textColor,
                                 fontSize: `${settings.fontSize}px`,
-                                WebkitTextStroke: `2px ${settings.strokeColor}`,
-                                textStroke: `2px ${settings.strokeColor}`,
+                                WebkitTextStroke: `1px ${settings.strokeColor}`,
+                                textStroke: `1px ${settings.strokeColor}`,
+                                borderRadius: `${settings.borderRadius}px`,
+                                borderTopLeftRadius: settings.positionHorizontal === 'left' ? '0' : `${settings.borderRadius}px`,
+                                borderTopRightRadius: settings.positionHorizontal === 'right' ? '0' : `${settings.borderRadius}px`,
                             }}
                         >
                             <div className="flex flex-wrap items-center gap-2">

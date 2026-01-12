@@ -50,9 +50,14 @@ export default function History({ targetUid }) {
                 {history.map((msg) => (
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-lg border border-zinc-800/50 hover:bg-zinc-800/40 transition-all">
                         <div className="flex justify-between items-center">
-                            <span className="font-bold text-xs" style={{ color: msg.color }}>
-                                {msg.username}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                {msg.avatarUrl && (
+                                    <img src={msg.avatarUrl} alt="" className="w-4 h-4 rounded-full border border-white/10" />
+                                )}
+                                <span className="font-bold text-xs" style={{ color: msg.color }}>
+                                    {msg.username}
+                                </span>
+                            </div>
                             <button
                                 onClick={() => resendToScreen(msg)}
                                 className="p-1 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition-colors"

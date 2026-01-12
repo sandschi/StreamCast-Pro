@@ -15,6 +15,10 @@ export default function Settings({ targetUid, isModeratorMode }) {
         fontSize: 24,
         animationStyle: 'slide',
         displayDuration: 5,
+        borderRadius: 12,
+        positionVertical: 'bottom',
+        positionHorizontal: 'left',
+        showAvatar: true,
     });
     const [twitchUsername, setTwitchUsername] = useState('');
     const [saving, setSaving] = useState(false);
@@ -174,34 +178,62 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     </div>
                 </section>
 
-                {/* Behavior */}
+                {/* Layout & Style */}
                 <section className="space-y-4 pt-4 border-t border-zinc-800/50">
-                    <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider">Behavior</h4>
-                    <div className="space-y-2">
-                        <label className="text-sm text-zinc-300">Animation Style</label>
-                        <select
-                            value={settings.animationStyle}
-                            onChange={(e) => updateSetting('animationStyle', e.target.value)}
-                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-500"
-                        >
-                            <option value="slide">Slide In</option>
-                            <option value="fade">Fade In</option>
-                            <option value="zoom">Zoom Pop</option>
-                            <option value="bounce">Bounce</option>
-                        </select>
+                    <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider">Layout & Style</h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-sm text-zinc-300">Vertical Position</label>
+                            <select
+                                value={settings.positionVertical}
+                                onChange={(e) => updateSetting('positionVertical', e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="top">Top</option>
+                                <option value="center">Center</option>
+                                <option value="bottom">Bottom</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm text-zinc-300">Horizontal Position</label>
+                            <select
+                                value={settings.positionHorizontal}
+                                onChange={(e) => updateSetting('positionHorizontal', e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                                <option value="right">Right</option>
+                            </select>
+                        </div>
                     </div>
+
                     <div className="space-y-2">
                         <label className="text-sm text-zinc-300 flex justify-between">
-                            Display Duration <span>{settings.displayDuration}s</span>
+                            Roundness <span>{settings.borderRadius}px</span>
                         </label>
                         <input
                             type="range"
-                            min="1"
-                            max="30"
-                            value={settings.displayDuration}
-                            onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
+                            min="0"
+                            max="50"
+                            value={settings.borderRadius}
+                            onChange={(e) => updateSetting('borderRadius', parseInt(e.target.value))}
                             className="w-full accent-purple-500"
                         />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/50">
+                        <div className="space-y-0.5">
+                            <label className="text-sm font-medium text-zinc-200">Show Chatter Avatars</label>
+                            <p className="text-[11px] text-zinc-500 italic">Pull Twitch profile pics into the overlay.</p>
+                        </div>
+                        <button
+                            onClick={() => updateSetting('showAvatar', !settings.showAvatar)}
+                            className={`w-12 h-6 rounded-full transition-all relative ${settings.showAvatar ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.showAvatar ? 'left-7' : 'left-1'}`} />
+                        </button>
                     </div>
                 </section>
             </div>
