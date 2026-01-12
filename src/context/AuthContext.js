@@ -26,38 +26,21 @@ export function AuthProvider({ children }) {
 
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                console.log('Auth State: Logged In', currentUser.uid);
+                console.log('Auth State: Active', currentUser.uid);
 
-                // 1. Ensure user entry exists
+                // 1. Sync User Metadata (always update on session start)
                 const userRef = doc(db, 'users', currentUser.uid);
-                const userDoc = await getDoc(userRef);
-
-                if (!userDoc.exists()) {
-                    await setDoc(userRef, {
-                        displayName: currentUser.displayName,
-                        photoURL: currentUser.photoURL,
-                        twitchId: currentUser.providerData[0].uid,
-                        createdAt: new Date().toISOString()
-                    }, { merge: true });
-
-                    // Initialize default settings
-                    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
-                        textColor: '#ffffff',
-                        strokeColor: '#000000',
-                        fontSize: 24,
-                        animationStyle: 'slide',
-                        displayDuration: 5,
-                    });
-                }
+                await setDoc(userRef, {
+                    photoURL: currentUser.photoURL,
+                    twitchId: currentUser.providerData[0].uid,
+                    lastLogin: new Date().toISOString()
+                }, { merge: true });
 
                 // 2. Resolve Twitch Token (private)
                 const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
                 if (tokenDoc.exists()) {
-                    const token = tokenDoc.data().accessToken;
-                    console.log('Twitch Token resolved from Cloud Store');
-                    setTwitchToken(token);
-                } else {
-                    console.warn('No Twitch Token found in Cloud Store. Live verification will be limited.');
+                    setTwitchToken(tokenDoc.data().accessToken);
+                    console.log('Twitch Token: Ready');
                 }
 
                 setUser(currentUser);

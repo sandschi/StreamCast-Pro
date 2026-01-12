@@ -86,7 +86,7 @@ function DashboardContent() {
                     if (!currentToken) return false;
                     return new Promise((resolve) => {
                         const tempClient = new tmi.Client({
-                            options: { debug: false },
+                            options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
                             connection: { reconnect: false, secure: true, timeout: 5000 },
                             identity: { username: myTwitchName.toLowerCase(), password: `oauth:${currentToken}` },
                             channels: [hostName]
@@ -153,8 +153,8 @@ function DashboardContent() {
                 };
 
                 // Concurrent verification
-                const [tmiRes, decRes, ivrRes] = await Promise.all([checkTmi(), checkDecApi(), checkIvr()]);
-                const isVerified = tmiRes || decRes || ivrRes;
+                const [tmiRes, ivrRes] = await Promise.all([checkTmi(), checkIvr()]);
+                const isVerified = tmiRes || ivrRes;
 
                 if (!ignore) {
                     console.log('Handshake Final Result:', isVerified ? 'AUTHORIZED ✅' : 'ACCESS DENIED ❌');
@@ -338,12 +338,16 @@ function DashboardContent() {
                 </header>
 
                 <div className="max-w-4xl">
-                    {verifyingMod ? (
+                    {/* Verifying Moderator Permissions UI */}
+                    {isModeratorMode && verifyingMod && (
                         <div className="flex flex-col items-center justify-center p-20 space-y-4">
-                            <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                            <p className="text-zinc-500 font-medium">Verifying moderator credentials...</p>
+                            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+                            <h2 className="text-xl font-bold">Verifying Security...</h2>
+                            <p className="text-zinc-500">Performing deep identity handshake with Twitch.</p>
                         </div>
-                    ) : !isModAuthorized ? (
+                    )}
+
+                    {isModeratorMode && !isModAuthorized && !verifyingMod && (
                         <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
                             <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
                                 <ShieldAlert size={40} className="text-red-500" />
@@ -351,18 +355,30 @@ function DashboardContent() {
                             <div className="space-y-2">
                                 <h3 className="text-2xl font-bold">Access Restricted</h3>
                                 <p className="text-zinc-500 max-w-sm mx-auto">
-                                    You are not currently a moderator for this channel. If you were recently modded, try refreshing.
+                                    You are not currently recognized as a moderator for this channel.
+                                    If you were recently promoted, try clicking below.
                                 </p>
                             </div>
-                            <button
-                                onClick={logout}
-                                className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2 mx-auto"
-                            >
-                                <LogOut size={18} />
-                                Logout of StreamCast
-                            </button>
+                            <div className="flex flex-col gap-3 items-center">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                                >
+                                    <RefreshCw size={18} />
+                                    Verify Again
+                                </button>
+                                <button
+                                    onClick={() => setIsModeratorMode(false)}
+                                    className="text-zinc-500 hover:text-zinc-300 text-sm underline transition-colors"
+                                >
+                                    Return to Broadcast Mode
+                                </button>
+                            </div>
                         </div>
-                    ) : (
+                    )}
+
+                    {/* Dashboard Content - only shown if Broadcaster OR Authorized Mod */}
+                    {(!isModeratorMode || isModAuthorized) && !verifyingMod && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
                                 <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} />
