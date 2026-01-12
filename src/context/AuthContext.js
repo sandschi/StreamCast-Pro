@@ -30,10 +30,22 @@ export function AuthProvider({ children }) {
 
                 // 1. Sync User Metadata (always update on session start)
                 const userRef = doc(db, 'users', currentUser.uid);
+                const userSnapshot = await getDoc(userRef);
+                const existingData = userSnapshot.data();
+
+                // Determine initial status
+                let status = existingData?.status;
+                const isSandschi = currentUser.displayName?.toLowerCase() === 'sandschi';
+
+                if (!status) {
+                    status = isSandschi ? 'approved' : 'waiting';
+                }
+
                 await setDoc(userRef, {
                     photoURL: currentUser.photoURL,
                     twitchId: currentUser.providerData[0].uid,
-                    lastLogin: new Date().toISOString()
+                    lastLogin: new Date().toISOString(),
+                    status: status // Persist approval status
                 }, { merge: true });
 
                 // 2. Resolve Twitch Token (private)
@@ -71,10 +83,12 @@ export function AuthProvider({ children }) {
             if (username) {
                 const cleanUsername = username.toLowerCase();
                 console.log('Syncing Identity:', cleanUsername);
+                const isSandschi = result.user.displayName?.toLowerCase() === 'sandschi';
                 await setDoc(doc(db, 'users', result.user.uid), {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
-                    photoURL: result.user.photoURL
+                    photoURL: result.user.photoURL,
+                    status: isSandschi ? 'approved' : 'waiting'
                 }, { merge: true });
             }
 

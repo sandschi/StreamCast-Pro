@@ -23,9 +23,11 @@ import {
     Copy,
     Check,
     Link as LinkIcon,
-    Users
+    Users,
+    Clock
 } from 'lucide-react';
 import UsersTab from '@/components/dashboard/Users';
+import Broadcasters from '@/components/dashboard/Broadcasters';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -35,6 +37,7 @@ function DashboardContent() {
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
     const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
+    const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
     const searchParams = useSearchParams();
     const hostParam = searchParams.get('host');
@@ -46,6 +49,8 @@ function DashboardContent() {
     useEffect(() => {
         if (!user) return;
         let ignore = false;
+        let unsubscribeRole = () => { };
+        let unsubscribeBroadcasterStatus = () => { };
 
         // Broadcaster check: If no host param or I am the owner of this UID
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
@@ -53,7 +58,28 @@ function DashboardContent() {
             setIsModAuthorized(true);
             setUserRole('broadcaster');
             setVerifyingMod(false);
-            return;
+
+            // Listen for broadcaster status if it's the user's own dashboard
+            unsubscribeBroadcasterStatus = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    setBroadcasterStatus(data.status || 'waiting'); // Default to 'waiting'
+                } else {
+                    setBroadcasterStatus('waiting'); // User doc doesn't exist, default to waiting
+                }
+            });
+        } else {
+            // NEW: Permission Listener (Manual Roles) for moderator mode
+            setVerifyingMod(true);
+            const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
+            unsubscribeRole = onSnapshot(roleRef, (doc) => {
+                const data = doc.data();
+                const role = data?.role || 'viewer'; // Default to viewer if invited
+                setUserRole(role);
+                setIsModAuthorized(role === 'mod' || role === 'broadcaster');
+                setVerifyingMod(false);
+                console.log('Current User Role:', role);
+            });
         }
 
         // NEW: Presence Heartbeat (Track logged-in users)
@@ -76,31 +102,11 @@ function DashboardContent() {
             heartbeatInterval = setInterval(updatePresence, 30000); // 30s heartbeat
         }
 
-        // NEW: Permission Listener (Manual Roles)
-        let unsubscribeRole = () => { };
-        if (user && hostParam) {
-            setVerifyingMod(true);
-            if (user.uid === hostParam) {
-                setUserRole('broadcaster');
-                setIsModAuthorized(true);
-                setVerifyingMod(false);
-            } else {
-                const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
-                unsubscribeRole = onSnapshot(roleRef, (doc) => {
-                    const data = doc.data();
-                    const role = data?.role || 'viewer'; // Default to viewer if invited
-                    setUserRole(role);
-                    setIsModAuthorized(role === 'mod' || role === 'broadcaster');
-                    setVerifyingMod(false);
-                    console.log('Current User Role:', role);
-                });
-            }
-        }
-
         return () => {
             ignore = true;
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
+            unsubscribeBroadcasterStatus();
         };
     }, [user, hostParam, isModeratorMode]);
 
@@ -162,10 +168,10 @@ function DashboardContent() {
             {/* Sidebar */}
             <aside className="w-20 md:w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col p-4">
                 <div className="flex items-center gap-3 px-2 mb-10">
-                    <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0">
-                        <LayoutDashboard className="text-white" />
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 overflow-hidden">
+                        <img src="/logo.png" alt="StreamCast Logo" className="w-full h-full object-cover" />
                     </div>
-                    <span className="hidden md:block font-bold text-xl tracking-tight">StreamCast</span>
+                    <span className="hidden md:block font-bold text-xl tracking-tight">STREAMCAST</span>
                 </div>
 
                 <nav className="flex-1 space-y-2">
@@ -207,36 +213,14 @@ function DashboardContent() {
                         </button>
                     )}
 
-                    {/* Quick Tools Section */}
-                    {userRole === 'broadcaster' && (
-                        <>
-                            <div className="pt-6 pb-2 px-3 hidden md:block">
-                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
-                            </div>
-
-                            <button
-                                onClick={() => copyToClipboard('overlay')}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                            >
-                                <div className="shrink-0">
-                                    {copyState === 'overlay' ? <Check size={20} className="text-green-500" /> : <ExternalLink size={20} />}
-                                </div>
-                                <span className="hidden md:block text-sm font-medium">
-                                    {copyState === 'overlay' ? 'Copied!' : 'Copy Overlay URL'}
-                                </span>
-                            </button>
-                            <button
-                                onClick={() => copyToClipboard('mod')}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                            >
-                                <div className="shrink-0">
-                                    {copyState === 'mod' ? <Check size={20} className="text-green-500" /> : <LinkIcon size={20} />}
-                                </div>
-                                <span className="hidden md:block text-sm font-medium">
-                                    {copyState === 'mod' ? 'Copied!' : 'Copy Mod Link'}
-                                </span>
-                            </button>
-                        </>
+                    {user?.displayName?.toLowerCase() === 'sandschi' && (
+                        <button
+                            onClick={() => setActiveTab('broadcasters')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                        >
+                            <Shield size={20} />
+                            <span className="font-medium">Broadcasters</span>
+                        </button>
                     )}
                 </nav>
 
@@ -277,12 +261,14 @@ function DashboardContent() {
                             {activeTab === 'history' && 'Message History'}
                             {activeTab === 'users' && 'Manage Users'}
                             {activeTab === 'settings' && 'Overlay Customization'}
+                            {activeTab === 'broadcasters' && 'Manage Broadcasters'}
                         </h2>
                         <p className="text-zinc-500 text-sm md:text-base">
                             {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
                             {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
                             {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
                             {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
+                            {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
                         </p>
                     </div>
 
@@ -325,6 +311,34 @@ function DashboardContent() {
                         </div>
                     )}
 
+                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'waiting' && (
+                        <div className="bg-zinc-900 border border-yellow-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                            <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto border border-yellow-500/20">
+                                <Clock size={40} className="text-yellow-500" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold">Access Pending</h3>
+                                <p className="text-zinc-500 max-w-sm mx-auto">
+                                    Your application as a broadcaster is currently under review by Sandschi. You will have access once approved.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'denied' && (
+                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
+                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+                                <ShieldAlert size={40} className="text-red-500" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold">Access Denied</h3>
+                                <p className="text-zinc-500 max-w-sm mx-auto">
+                                    Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {userRole === 'denied' && (
                         <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
                             <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
@@ -339,8 +353,8 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {/* Dashboard Content - only shown if Broadcaster OR Authorized Mod OR Viewer (Suggestion Mode) */}
-                    {(userRole === 'broadcaster' || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && (
+                    {/* Dashboard Content - only shown if Broadcaster (Approved) OR Authorized Mod OR Viewer (Suggestion Mode) */}
+                    {((userRole === 'broadcaster' && (broadcasterStatus === 'approved' || user?.displayName?.toLowerCase() === 'sandschi')) || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && broadcasterStatus !== 'denied' && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
                                 <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
@@ -348,6 +362,7 @@ function DashboardContent() {
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
                             {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                            {activeTab === 'broadcasters' && user?.displayName?.toLowerCase() === 'sandschi' && <Broadcasters />}
                         </>
                     )}
                 </div>
