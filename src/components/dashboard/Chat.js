@@ -10,65 +10,81 @@ import { Send, ScreenShare, AlertCircle } from 'lucide-react';
 
 export default function Chat({ targetUid }) {
     const { user } = useAuth();
-    // Use targetUid if provided (Host mode), fallback to current user
     const effectiveUid = targetUid || user?.uid;
+
     const [messages, setMessages] = useState([]);
-    const [thirdPartyEmotes, setThirdPartyEmotes] = useState({});
+    const [thirdPartyEmotes, setThirdPartyEmotes] = useState({ sevenTV: [], bttv: [], ffz: [] });
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
     const [channelName, setChannelName] = useState(null);
     const [error, setError] = useState(null);
+
     const clientRef = useRef(null);
     const scrollRef = useRef(null);
     const lastFetchedIdRef = useRef(null);
+    const emotesRef = useRef({ sevenTV: [], bttv: [], ffz: [] });
 
-    // 1. Fetch the correct channel name (Twitch username) from Firestore
+    // Sync ref with state
     useEffect(() => {
-        if (!user) return;
+        emotesRef.current = thirdPartyEmotes;
+
+        // When emotes load, re-parse existing messages to show emotes immediately
+        if (messages.length > 0) {
+            setMessages(prev => prev.map(msg => ({
+                ...msg,
+                fragments: parseTwitchMessage(msg.message, msg.rawEmotes, thirdPartyEmotes)
+            })));
+        }
+    }, [thirdPartyEmotes]);
+
+    // 1. Fetch channel info and Broadcaster Twitch ID from Firestore
+    useEffect(() => {
+        if (!user || !effectiveUid) return;
 
         const fetchUserData = async (retries = 3) => {
             try {
                 const userDoc = await getDoc(doc(db, 'users', effectiveUid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
-                    const name = data.twitchUsername || user.displayName || user.providerData[0]?.displayName;
+
+                    // Set channel name: Priority to twitchUsername field, then stored displayName, then current login (only if not in Host Mode)
+                    const name = data.twitchUsername || data.displayName || (effectiveUid === user.uid ? user.displayName : null);
+
                     if (name) {
-                        setChannelName(name.toLowerCase());
+                        setChannelName(name.toLowerCase().trim());
                         setError(null);
                     } else if (retries > 0) {
                         setTimeout(() => fetchUserData(retries - 1), 2000);
                     } else {
-                        setError('Could not find your Twitch username. Please set it manually in Settings.');
+                        setError('Broadcaster identity not fully synced. Please ensure they have logged in and set their channel name.');
                     }
-                } else {
-                    if (retries > 0) {
-                        setTimeout(() => fetchUserData(retries - 1), 2000);
-                    } else {
-                        setError('User profile not found. Please try logging out and back in.');
+
+                    // Fetch Emotes for the TARGET user (broadcaster)
+                    const broadcasterTwitchId = data.twitchId || (effectiveUid === user.uid ? user.providerData[0]?.uid : null);
+                    if (broadcasterTwitchId && lastFetchedIdRef.current !== broadcasterTwitchId) {
+                        lastFetchedIdRef.current = broadcasterTwitchId;
+                        console.log(`Chat: Fetching emotes for Twitch ID: ${broadcasterTwitchId}`);
+                        fetchThirdPartyEmotes(broadcasterTwitchId).then(fetched => {
+                            console.log(`Chat: Loaded ${fetched.sevenTV.length + fetched.bttv.length + fetched.ffz.length} third-party emotes.`);
+                            setThirdPartyEmotes(fetched);
+                        });
                     }
                 }
             } catch (e) {
                 console.error('Chat: Firestore error:', e);
-                if (e.message?.includes('blocked') || e.code === 'unavailable') {
-                    setError('Firestore is blocked. Please disable your Ad-Blocker or Privacy extensions.');
-                }
             }
         };
 
         fetchUserData();
     }, [user, effectiveUid]);
 
-    // 2. Fetch Third-Party Emotes (Optimized)
-    useEffect(() => {
-        const twitchId = user?.providerData[0]?.uid;
-        if (!twitchId || lastFetchedIdRef.current === twitchId) return;
-
-        lastFetchedIdRef.current = twitchId;
-        fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
-    }, [user]);
-
-    // 3. Connect to Twitch IRC (TMI)
+    // 2. Connect to Twitch IRC (TMI)
     useEffect(() => {
         if (!user || !channelName) return;
+
+        // Prevent multiple connections
+        if (clientRef.current) {
+            clientRef.current.disconnect();
+        }
 
         setConnectionStatus('connecting');
 
@@ -86,15 +102,14 @@ export default function Chat({ targetUid }) {
 
         client.on('connected', () => setConnectionStatus('connected'));
         client.on('message', (channel, tags, message) => {
-            // We use the latest thirdPartyEmotes from state here
-            // Note: because this listener is created once, we must use a ref if thirdPartyEmotes changes often
-            // but since it's fetched once per login, it's usually fine.
-            const parsedFragments = parseTwitchMessage(message, tags.emotes, thirdPartyEmotes);
+            // Use emotesRef.current to avoid stale closure
+            const parsedFragments = parseTwitchMessage(message, tags.emotes, emotesRef.current);
             const newMessage = {
-                id: tags.id,
-                username: tags['display-name'],
+                id: tags.id || Math.random().toString(36).substr(2, 9),
+                username: tags['display-name'] || tags.username,
                 color: tags.color || '#efeff1',
                 message,
+                rawEmotes: tags.emotes, // Store for re-parsing
                 fragments: parsedFragments,
                 timestamp: new Date(),
                 isMod: tags.mod || tags.badges?.broadcaster === '1',
@@ -105,11 +120,7 @@ export default function Chat({ targetUid }) {
         return () => {
             if (clientRef.current) clientRef.current.disconnect();
         };
-    }, [user, channelName]); // Removed thirdPartyEmotes from deps to avoid re-connecting on every emote load
-
-    // 4. Update message parsing when emotes load (optional but better)
-    // If messages arrive BEFORE emotes are loaded, they won't have them. 
-    // Usually emotes load very fast, so this is rarely an issue in TMI contexts.
+    }, [channelName]); // Only reconnect if channel changes
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -172,7 +183,20 @@ export default function Chat({ targetUid }) {
                         </div>
                         <div className="text-zinc-200 text-sm flex flex-wrap items-center gap-1 leading-relaxed">
                             {msg.fragments.map((frag, i) => (
-                                frag.type === 'text' ? <span key={i}>{frag.content}</span> : <img key={i} src={frag.url} alt={frag.name} className="h-6 inline-block" />
+                                frag.type === 'text' ? (
+                                    <span key={i}>{frag.content}</span>
+                                ) : (
+                                    <img
+                                        key={i}
+                                        src={frag.url}
+                                        alt={frag.name}
+                                        className="h-6 inline-block align-middle"
+                                        onError={(e) => {
+                                            console.warn(`Emote failed to load: ${frag.url}`);
+                                            // Optional: replace with text
+                                        }}
+                                    />
+                                )
                             ))}
                         </div>
                     </div>
