@@ -116,7 +116,7 @@ export default function OverlayPage() {
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             transition={{ delay: 0.1 }}
-                            className="flex items-center gap-2 px-4 py-1.5 z-10 shadow-lg border-b border-white/10"
+                            className="flex items-center gap-3 px-4 py-2 z-10 shadow-lg border-b border-white/10"
                             style={{
                                 backgroundColor: activeMessage.color,
                                 color: '#fff',
@@ -126,12 +126,14 @@ export default function OverlayPage() {
                                 marginRight: settings.positionHorizontal === 'right' ? '8px' : '0',
                             }}
                         >
-                            {settings.showAvatar && activeMessage.avatarUrl && (
+                            {(settings.showAvatar !== false) && (activeMessage.avatarUrl || activeMessage.username) && (
                                 <img
-                                    src={activeMessage.avatarUrl}
+                                    src={`https://unavatar.io/twitch/${activeMessage.username.toLowerCase()}`}
                                     alt=""
-                                    className="w-6 h-6 rounded-full border border-white/20 shadow-sm"
-                                    onError={(e) => e.target.style.display = 'none'}
+                                    className="w-10 h-10 rounded-full border-2 border-white/40 shadow-xl object-cover"
+                                    onError={(e) => {
+                                        e.target.src = `https://decapi.me/twitch/avatar/${activeMessage.username.toLowerCase()}`;
+                                    }}
                                 />
                             )}
                             <span className="font-bold text-sm tracking-wide drop-shadow-md">

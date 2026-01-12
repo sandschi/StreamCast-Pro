@@ -121,7 +121,7 @@ export default function Chat({ targetUid, isModeratorMode }) {
                 const newMessage = {
                     id: tags.id || Math.random().toString(36).substr(2, 9),
                     username,
-                    avatarUrl: `https://decapi.me/twitch/avatar/${username.toLowerCase()}`,
+                    avatarUrl: `https://unavatar.io/twitch/${username.toLowerCase()}`,
                     color: tags.color || '#efeff1',
                     message,
                     rawEmotes: tags.emotes,
@@ -186,8 +186,8 @@ export default function Chat({ targetUid, isModeratorMode }) {
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
-                            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
-                                connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
+                        connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
+                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
                         }`} />
                     <span className="tracking-tight">Twitch Chat</span>
                     {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
