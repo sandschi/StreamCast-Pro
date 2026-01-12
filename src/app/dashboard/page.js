@@ -176,14 +176,18 @@ function DashboardContent() {
                         <MessageSquare size={20} />
                         <span className="font-medium">Live Chat</span>
                     </button>
-                    <button
-                        onClick={() => setActiveTab('history')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                    >
-                        <HistoryIcon size={20} />
-                        <span className="font-medium">History</span>
-                    </button>
+
                     {isModAuthorized && (
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                        >
+                            <HistoryIcon size={20} />
+                            <span className="font-medium">History</span>
+                        </button>
+                    )}
+
+                    {userRole === 'broadcaster' && (
                         <button
                             onClick={() => setActiveTab('users')}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
@@ -192,21 +196,24 @@ function DashboardContent() {
                             <span className="font-medium">Users</span>
                         </button>
                     )}
-                    <button
-                        onClick={() => setActiveTab('settings')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                    >
-                        <SettingsIcon size={20} />
-                        <span className="font-medium">Settings</span>
-                    </button>
+
+                    {userRole === 'broadcaster' && (
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                        >
+                            <SettingsIcon size={20} />
+                            <span className="font-medium">Settings</span>
+                        </button>
+                    )}
 
                     {/* Quick Tools Section */}
-                    <div className="pt-6 pb-2 px-3 hidden md:block">
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
-                    </div>
-
-                    {!isModeratorMode && (
+                    {userRole === 'broadcaster' && (
                         <>
+                            <div className="pt-6 pb-2 px-3 hidden md:block">
+                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
+                            </div>
+
                             <button
                                 onClick={() => copyToClipboard('overlay')}
                                 className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
@@ -250,9 +257,9 @@ function DashboardContent() {
                         <div className="hidden md:block overflow-hidden">
                             <p className="text-[11px] font-bold truncate text-zinc-100">{user.displayName}</p>
                             <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-indigo-400' :
-                                    userRole === 'mod' ? 'text-emerald-400' :
-                                        userRole === 'denied' ? 'text-red-400' :
-                                            'text-zinc-500'
+                                userRole === 'mod' ? 'text-emerald-400' :
+                                    userRole === 'denied' ? 'text-red-400' :
+                                        'text-zinc-500'
                                 }`}>
                                 {verifyingMod ? 'Verifying...' : userRole}
                             </p>
@@ -304,25 +311,16 @@ function DashboardContent() {
                         </div>
                     )}
 
-                    {isModeratorMode && !isModAuthorized && !verifyingMod && userRole !== 'denied' && (
-                        <div className="bg-zinc-900 border border-indigo-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto border border-indigo-500/20">
-                                <Users size={40} className="text-indigo-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Viewer Access</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    You are currently connected as a viewer.
-                                    You can suggest messages for the overlay, but only moderators can send them.
+                    {/* Suggestion Mode Header Strip (Viewers only) */}
+                    {userRole === 'viewer' && !verifyingMod && (
+                        <div className="mb-4 bg-indigo-600/10 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-700">
+                            <div className="flex items-center gap-3">
+                                <div className="p-1.5 bg-indigo-500/20 rounded-lg">
+                                    <Users size={16} className="text-indigo-400" />
+                                </div>
+                                <p className="text-xs text-indigo-100/80">
+                                    <span className="font-bold text-indigo-400">Suggestion Mode</span> – Your messages will be sent to the moderation pool for review.
                                 </p>
-                            </div>
-                            <div className="flex flex-col gap-3 items-center">
-                                <button
-                                    onClick={() => setActiveTab('chat')}
-                                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
-                                >
-                                    Open Suggestion Dashboard
-                                </button>
                             </div>
                         </div>
                     )}
@@ -342,7 +340,7 @@ function DashboardContent() {
                     )}
 
                     {/* Dashboard Content - only shown if Broadcaster OR Authorized Mod OR Viewer (Suggestion Mode) */}
-                    {(!isModeratorMode || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && (
+                    {(userRole === 'broadcaster' || isModAuthorized || (userRole === 'viewer' && activeTab === 'chat')) && !verifyingMod && userRole !== 'denied' && (
                         <>
                             <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
                                 <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
