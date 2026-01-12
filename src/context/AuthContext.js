@@ -68,9 +68,10 @@ export function AuthProvider({ children }) {
             const username = additionalInfo?.profile?.login || additionalInfo?.profile?.preferred_username;
 
             if (username) {
-                console.log('Capturing Twitch Username:', username);
+                const cleanUsername = username.toLowerCase();
+                console.log('Syncing Identity:', cleanUsername);
                 await setDoc(doc(db, 'users', result.user.uid), {
-                    twitchUsername: username.toLowerCase(),
+                    twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
                     photoURL: result.user.photoURL
                 }, { merge: true });
