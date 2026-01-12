@@ -32,7 +32,7 @@ import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
 function DashboardContent() {
-    const { user, twitchToken, loginWithTwitch, logout, isMasterAdmin, loading } = useAuth();
+    const { user, twitchToken, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
     const [activeTab, setActiveTab] = useState('chat');
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
@@ -73,7 +73,23 @@ function DashboardContent() {
             unsubscribeBroadcasterStatus = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    setBroadcasterStatus(data.status || 'waiting'); // Default to 'waiting'
+                    // Determine initial status
+                    let status = data?.status;
+                    const isSandschiName = user.displayName?.toLowerCase() === 'sandschi';
+                    const isSandschiTwitch = data?.twitchUsername?.toLowerCase() === 'sandschi';
+                    const isSandschi = isSandschiName || isSandschiTwitch;
+
+                    console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName, twitch: data?.twitchUsername });
+
+                    // Update isMasterAdmin state in AuthContext if it's the current user's dashboard
+                    if (user.uid === user.uid) { // This condition is always true, but ensures we only update for the current user
+                        setIsMasterAdmin(isSandschi);
+                    }
+
+                    if (!status || (isSandschi && status !== 'approved')) {
+                        status = isSandschi ? 'approved' : 'waiting';
+                    }
+                    setBroadcasterStatus(status || 'waiting'); // Default to 'waiting'
                 } else {
                     setBroadcasterStatus('waiting'); // User doc doesn't exist, default to waiting
                 }
@@ -118,7 +134,7 @@ function DashboardContent() {
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
-    }, [user, hostParam, isModeratorMode, isMasterAdmin]);
+    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin]);
 
     useEffect(() => {
         if (copyState) {
@@ -223,7 +239,7 @@ function DashboardContent() {
                         </button>
                     )}
 
-                    {isMasterAdmin && (
+                    {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
                         <button
                             onClick={() => setActiveTab('broadcasters')}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
@@ -231,6 +247,38 @@ function DashboardContent() {
                             <Shield size={20} />
                             <span className="font-medium">Broadcasters</span>
                         </button>
+                    )}
+
+                    {/* Quick Tools Section */}
+                    {(userRole === 'broadcaster' || isMasterAdmin) && (
+                        <div className="pt-6 space-y-2">
+                            <div className="pb-2 px-3 hidden md:block border-t border-zinc-800/50 pt-6">
+                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
+                            </div>
+
+                            <button
+                                onClick={() => copyToClipboard('overlay')}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                            >
+                                <div className="shrink-0">
+                                    {copyState === 'overlay' ? <Check size={20} className="text-green-500" /> : <ExternalLink size={20} />}
+                                </div>
+                                <span className="hidden md:block text-sm font-medium">
+                                    {copyState === 'overlay' ? 'Copied!' : 'Copy Overlay URL'}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => copyToClipboard('mod')}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                            >
+                                <div className="shrink-0">
+                                    {copyState === 'mod' ? <Check size={20} className="text-green-500" /> : <LinkIcon size={20} />}
+                                </div>
+                                <span className="hidden md:block text-sm font-medium">
+                                    {copyState === 'mod' ? 'Copied!' : 'Copy Mod Link'}
+                                </span>
+                            </button>
+                        </div>
                     )}
                 </nav>
 

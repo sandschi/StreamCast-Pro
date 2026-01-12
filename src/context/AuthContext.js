@@ -115,7 +115,7 @@ export function AuthProvider({ children }) {
     const logout = () => signOut(auth);
 
     return (
-        <AuthContext.Provider value={{ user, twitchToken, loading, loginWithTwitch, logout }}>
+        <AuthContext.Provider value={{ user, twitchToken, isMasterAdmin, setIsMasterAdmin, loading, loginWithTwitch, logout }}>
             {children}
         </AuthContext.Provider>
     );
