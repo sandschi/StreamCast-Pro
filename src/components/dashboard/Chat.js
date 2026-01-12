@@ -19,8 +19,10 @@ export default function Chat() {
         if (!user) return;
 
         // Fetch emotes for the user's Twitch ID
-        const twitchId = user.providerData[0].uid;
-        const displayName = user.displayName;
+        const twitchId = user.providerData[0]?.uid;
+        const displayName = user.displayName || user.providerData[0]?.displayName;
+
+        if (!displayName || !twitchId) return;
 
         fetchThirdPartyEmotes(twitchId).then(setThirdPartyEmotes);
 
