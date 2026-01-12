@@ -11,7 +11,7 @@ import {
     deleteDoc,
     serverTimestamp
 } from 'firebase/firestore';
-import { Shield, User, ShieldAlert, Trash2, Clock } from 'lucide-react';
+import { Shield, User, ShieldAlert, Trash2, Clock, Users as UsersIcon } from 'lucide-react';
 
 export default function Users({ targetUid, user }) {
     const [presence, setPresence] = useState([]);
@@ -26,7 +26,7 @@ export default function Users({ targetUid, user }) {
         const unsubPresence = onSnapshot(presenceRef, (snapshot) => {
             const users = [];
             snapshot.forEach((doc) => {
-                users.push({ id: doc.id, ...doc.id, ...doc.data() });
+                users.push({ id: doc.id, ...doc.data() });
             });
             setPresence(users);
         });
@@ -147,7 +147,7 @@ export default function Users({ targetUid, user }) {
 
                 {userList.length === 0 && (
                     <div className="col-span-full py-12 text-center bg-zinc-900/30 border border-dashed border-zinc-800 rounded-3xl">
-                        <Users className="mx-auto text-zinc-700 mb-3" size={32} />
+                        <UsersIcon className="mx-auto text-zinc-700 mb-3" size={32} />
                         <p className="text-zinc-500">No users currently logged in.</p>
                         <p className="text-zinc-600 text-xs mt-1">Share your moderator link to see users here.</p>
                     </div>

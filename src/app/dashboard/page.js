@@ -97,7 +97,7 @@ function DashboardContent() {
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
         };
-    }, [user, hostParam]);
+    }, [user, hostParam, isModeratorMode]);
 
     useEffect(() => {
         if (copyState) {
