@@ -73,23 +73,23 @@ function DashboardContent() {
                     isMod = await new Promise((resolve) => {
                         const tempClient = new tmi.Client({
                             options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true },
+                            connection: { reconnect: false, secure: true, timeout: 5000 },
                             identity: { username: myTwitchName.toLowerCase(), password: `oauth:${twitchToken}` },
                             channels: [hostName]
                         });
 
                         const timeout = setTimeout(() => {
-                            console.warn('TMI Security Handshake Timed Out (8s)');
+                            console.warn('TMI Deep Verification Timed Out (5s)');
                             tempClient.disconnect();
                             resolve(false);
-                        }, 8000);
+                        }, 5000);
 
                         tempClient.on('userstate', (channel, state) => {
                             const chan = channel.replace('#', '').toLowerCase();
                             if (chan === hostName.toLowerCase()) {
                                 clearTimeout(timeout);
                                 const hasModPerms = state.mod || state.badges?.broadcaster === '1';
-                                console.log(`Live Verification Result for ${myTwitchName}: ${hasModPerms ? 'AUTHORIZED' : 'DENIED'}`);
+                                console.log(`Live Security Handshake for ${myTwitchName}: ${hasModPerms ? 'AUTHORIZED' : 'DENIED'}`);
                                 tempClient.disconnect();
                                 resolve(hasModPerms);
                             }

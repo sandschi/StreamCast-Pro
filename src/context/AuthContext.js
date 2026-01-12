@@ -23,19 +23,22 @@ export function AuthProvider({ children }) {
             setLoading(false);
             return;
         }
-        const unsubscribe = onAuthStateChanged(auth, async (u) => {
-            if (u) {
+
+        const savedToken = sessionStorage.getItem('twitch_access_token');
+        if (savedToken) setTwitchToken(savedToken);
+
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (currentUser) {
                 // Fetch or create user settings
-                const userDoc = await getDoc(doc(db, 'users', u.uid));
+                const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
                 if (!userDoc.exists()) {
-                    await setDoc(doc(db, 'users', u.uid), {
-                        displayName: u.displayName,
-                        photoURL: u.photoURL,
-                        twitchId: u.providerData[0].uid,
+                    await setDoc(doc(db, 'users', currentUser.uid), {
+                        photoURL: currentUser.photoURL,
+                        twitchId: currentUser.providerData[0].uid,
                     }, { merge: true });
 
                     // Initialize default settings
-                    await setDoc(doc(db, 'users', u.uid, 'settings', 'config'), {
+                    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'config'), {
                         textColor: '#ffffff',
                         strokeColor: '#000000',
                         fontSize: 24,
@@ -43,7 +46,7 @@ export function AuthProvider({ children }) {
                         displayDuration: 5,
                     });
                 }
-                setUser(u);
+                setUser(currentUser);
             } else {
                 setUser(null);
             }
@@ -74,8 +77,9 @@ export function AuthProvider({ children }) {
 
             // Capture Token
             const credential = OAuthProvider.credentialFromResult(result);
-            if (credential) {
+            if (credential?.accessToken) {
                 setTwitchToken(credential.accessToken);
+                sessionStorage.setItem('twitch_access_token', credential.accessToken);
             }
         } catch (error) {
             console.error('Login error:', error);
