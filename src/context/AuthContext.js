@@ -61,6 +61,7 @@ export function AuthProvider({ children }) {
         provider.addScope('chat:read');
         provider.addScope('chat:edit');
         provider.addScope('channel:read:redemptions');
+        provider.addScope('moderator:read:chatters');
 
         try {
             const result = await signInWithPopup(auth, provider);

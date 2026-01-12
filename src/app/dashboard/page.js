@@ -51,7 +51,7 @@ function DashboardContent() {
         }
 
         const checkPermissions = async () => {
-            console.log('--- MODERATOR SECURITY HANDSHAKE (V4) ---');
+            console.log('--- MODERATOR SECURITY HANDSHAKE (V6) ---');
             setVerifyingMod(true);
             setIsModAuthorized(false);
 
@@ -80,36 +80,36 @@ function DashboardContent() {
                 const myTwitchName = (myDoc.data()?.twitchUsername || (user.displayName ? user.displayName : '')).toLowerCase();
 
                 if (!hostName || !myTwitchName) {
-                    console.error('Handshake Aborted: Missing mappings.', { hostName, myTwitchName });
+                    console.error('Handshake Aborted: Missing profile mappings.', { hostName, myTwitchName });
                     if (!ignore) setIsModAuthorized(false);
                     return;
                 }
 
-                console.log(`Resolving: ${myTwitchName} on #${hostName}`);
+                console.log(`Resolving Identity: ${myTwitchName} on #${hostName}...`);
 
-                // SOURCE 1: TMI Handshake (Definitive Source of Truth)
+                // SOURCE 1: TMI Real-time IRC Check (Primary Truth)
                 const checkTmi = async () => {
                     if (!currentToken) return { status: 'NO_TOKEN' };
                     return new Promise((resolve) => {
                         const tempClient = new tmi.Client({
-                            options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
-                            connection: { reconnect: false, secure: true, timeout: 5000 },
+                            options: { debug: false, skipUpdatingEmotesets: true },
+                            connection: { reconnect: false, secure: true, timeout: 6000 },
                             identity: { username: myTwitchName, password: `oauth:${currentToken}` },
                             channels: [hostName]
                         });
 
                         const t = setTimeout(() => {
-                            console.warn('TMI Handshake: TIMEOUT ❌');
+                            console.warn('TMI Gate: TIMEOUT ❌');
                             tempClient.disconnect();
                             resolve({ status: 'TIMEOUT' });
-                        }, 5000);
+                        }, 6000);
 
                         tempClient.on('userstate', (channel, state) => {
                             const chan = channel.replace('#', '').toLowerCase();
                             if (chan === hostName) {
                                 clearTimeout(t);
                                 const isMod = state.mod || state.badges?.broadcaster === '1';
-                                console.log('TMI Source:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
+                                console.log('TMI Gate Status:', isMod ? 'VERIFIED ✅' : 'REJECTED ❌');
                                 tempClient.disconnect();
                                 resolve({ status: 'SUCCESS', isMod });
                             }
@@ -117,22 +117,32 @@ function DashboardContent() {
 
                         tempClient.on('notice', (channel, msgid, msg) => {
                             if (msgid === 'authentication_failed') {
-                                console.warn(`TMI Handshake Notice [${msgid}]: ${msg}`);
                                 clearTimeout(t);
                                 tempClient.disconnect();
-                                resolve({ status: 'ERROR' });
+                                resolve({ status: 'ERROR', detail: 'Auth Failed' });
                             }
                         });
 
-                        tempClient.connect().catch(err => {
+                        tempClient.connect().catch(() => {
                             clearTimeout(t);
-                            console.error('TMI Handshake: CONNECT_ERROR', err.message);
                             resolve({ status: 'ERROR' });
                         });
                     });
                 };
 
-                // SOURCE 2: IVR API (Cached Fallback)
+                // SOURCE 2: DecAPI ModCheck (Fast, Independent)
+                const checkDecApi = async () => {
+                    try {
+                        const res = await fetch(`https://decapi.me/twitch/modcheck/${hostName}/${myTwitchName}?cb=${Date.now()}`);
+                        if (!res.ok) return false;
+                        const text = (await res.text()).toLowerCase();
+                        const isMod = text.includes('true');
+                        console.log('DecAPI Gate Result:', isMod ? 'MATCHED ✅' : 'MISMATCH ❌');
+                        return isMod;
+                    } catch { return false; }
+                };
+
+                // SOURCE 3: IVR API (Secondary Witness)
                 const checkIvr = async () => {
                     try {
                         const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}?cb=${Date.now()}`);
@@ -140,37 +150,38 @@ function DashboardContent() {
                         const data = await res.json();
                         const isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName);
                         const isVip = data?.vips?.some(v => v.login.toLowerCase() === myTwitchName);
-                        console.log('IVR Source (Cached):', (isMod || isVip) ? 'VERIFIED ✅' : 'REJECTED ❌');
+                        console.log('IVR Gate Result:', (isMod || isVip) ? 'MATCHED ✅' : 'MISMATCH ❌');
                         return isMod || isVip;
                     } catch { return false; }
                 };
 
-                // V4 LOGIC: Run both, but wait for TMI if possible.
-                const [tmiStatus, ivrRes] = await Promise.all([checkTmi(), checkIvr()]);
+                // V6 SECURITY LOGIC: Majority-Vote with Strict Rejection
+                const [tmiRes, decRes, ivrRes] = await Promise.all([checkTmi(), checkDecApi(), checkIvr()]);
 
-                let finalizedResult = false;
+                let isAuthorized = false;
 
-                if (tmiStatus.status === 'SUCCESS') {
-                    // IF TMI says NO, it's a hard NO (bypasses cached IVR)
-                    console.log('Security Decision: Prioritizing Real-time Handshake.');
-                    finalizedResult = tmiStatus.isMod;
+                if (tmiRes.status === 'SUCCESS') {
+                    // TMI is real-time IRC. If it says NO, it's a solid NO.
+                    console.log('Security Decision: Prioritizing Real-time IRC.');
+                    isAuthorized = tmiRes.isMod;
                 } else {
-                    // Fallback to cached API only if real-time source stalls
-                    console.log('Security Decision: TMI Stalled. Falling back to Cache.');
-                    finalizedResult = ivrRes;
+                    // TMI Stalled. We require BOTH APIs to agree on a 'YES' to bypass.
+                    // If DecAPI (Real-time) says NO, we block regardless of IVR.
+                    console.warn('Security Decision: IRC Stalled. Using API Double-Verification.');
+                    isAuthorized = decRes && ivrRes;
                 }
 
                 if (!ignore) {
-                    console.log('Handshake Final Result:', finalizedResult ? 'AUTHORIZED ✅' : 'ACCESS DENIED ❌');
-                    setIsModAuthorized(finalizedResult);
+                    console.log('Handshake Result:', isAuthorized ? 'AUTHORIZED ✅' : 'ACCESS DENIED ❌');
+                    setIsModAuthorized(isAuthorized);
                 }
             } catch (e) {
-                console.error('Security Handshake Failed:', e);
+                console.error('Handshake Gate Crashed:', e);
                 if (!ignore) setIsModAuthorized(false);
             } finally {
                 if (!ignore) {
                     setVerifyingMod(false);
-                    console.log('--- END MODERATOR SECURITY HANDSHAKE ---');
+                    console.log('--- END SECURITY HANDSHAKE ---');
                 }
             }
         };
