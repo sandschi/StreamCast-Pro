@@ -39,9 +39,11 @@ function DashboardContent() {
     // Verifying Moderator Permissions
     useEffect(() => {
         if (!user) return;
+        let ignore = false;
 
         // Broadcaster check: If no host param or I am the owner of this UID
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
+            console.log('Permission Check: Broadcaster/Local detected. Access Granted.');
             setIsModAuthorized(true);
             setVerifyingMod(false);
             return;
@@ -50,46 +52,44 @@ function DashboardContent() {
         const checkPermissions = async () => {
             console.log('--- START DEEP PERMISSION CHECK ---');
             setVerifyingMod(true);
-            setIsModAuthorized(false); // Start locked
+            setIsModAuthorized(false);
+
             try {
-                // 1. Get host's twitch username
                 const hostDoc = await getDoc(doc(db, 'users', hostParam));
                 const hostName = hostDoc.data()?.twitchUsername;
-
-                // 2. Get MY twitch username
                 const myDoc = await getDoc(doc(db, 'users', user.uid));
                 const myTwitchName = myDoc.data()?.twitchUsername || user.displayName;
 
                 if (!hostName || !myTwitchName) {
-                    setIsModAuthorized(false);
+                    if (!ignore) setIsModAuthorized(false);
                     return;
                 }
 
-                console.log(`Verifying ${myTwitchName} on ${hostName}...`);
+                console.log(`Verifying ${myTwitchName} on channel: ${hostName}`);
 
-                // 3. LIVE TMI CHECK (The Source of Truth)
                 let isMod = false;
                 if (twitchToken) {
-                    console.log('Using Live TMI Verification (USERSTATE)...');
+                    console.log('Starting Live TMI Security Handshake...');
                     isMod = await new Promise((resolve) => {
                         const tempClient = new tmi.Client({
-                            options: { debug: false },
+                            options: { debug: false, skipMembership: true, skipUpdatingEmotesets: true },
                             connection: { reconnect: false, secure: true },
                             identity: { username: myTwitchName.toLowerCase(), password: `oauth:${twitchToken}` },
                             channels: [hostName]
                         });
 
                         const timeout = setTimeout(() => {
-                            console.warn('TMI Verification Timed Out');
+                            console.warn('TMI Security Handshake Timed Out (8s)');
                             tempClient.disconnect();
                             resolve(false);
                         }, 8000);
 
                         tempClient.on('userstate', (channel, state) => {
-                            if (channel.replace('#', '').toLowerCase() === hostName.toLowerCase()) {
+                            const chan = channel.replace('#', '').toLowerCase();
+                            if (chan === hostName.toLowerCase()) {
                                 clearTimeout(timeout);
                                 const hasModPerms = state.mod || state.badges?.broadcaster === '1';
-                                console.log('TMI USERSTATE Received. Is Mod?', hasModPerms);
+                                console.log(`Live Verification Result for ${myTwitchName}: ${hasModPerms ? 'AUTHORIZED' : 'DENIED'}`);
                                 tempClient.disconnect();
                                 resolve(hasModPerms);
                             }
@@ -102,25 +102,29 @@ function DashboardContent() {
                         });
                     });
                 } else {
-                    // No token (old session), fallback to API (Less reliable but only option)
-                    console.log('No token found, using API verification...');
+                    console.log('Legacy Session: Using Cached API Fallback...');
                     const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
                     const data = await res.json();
                     isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
                 }
 
-                console.log('Final Permission Result:', isMod);
-                setIsModAuthorized(isMod);
+                if (!ignore) {
+                    console.log('Applying Final Permission State:', isMod);
+                    setIsModAuthorized(isMod);
+                }
             } catch (e) {
                 console.error('Permission check failed:', e);
-                setIsModAuthorized(false);
+                if (!ignore) setIsModAuthorized(false);
             } finally {
-                setVerifyingMod(false);
-                console.log('--- END DEEP PERMISSION CHECK ---');
+                if (!ignore) {
+                    setVerifyingMod(false);
+                    console.log('--- END DEEP PERMISSION CHECK ---');
+                }
             }
         };
 
         checkPermissions();
+        return () => { ignore = true; };
     }, [user, hostParam, isModeratorMode, twitchToken]);
 
     useEffect(() => {
