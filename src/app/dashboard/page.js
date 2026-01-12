@@ -70,34 +70,46 @@ function DashboardContent() {
                 // 3. LIVE TMI CHECK (The Source of Truth)
                 let isMod = false;
                 if (twitchToken) {
-                    console.log('Using Live TMI Verification...');
-                    const client = new tmi.Client({
-                        identity: { username: myTwitchName, password: `oauth:${twitchToken}` },
-                        channels: [hostName]
-                    });
+                    console.log('Using Live TMI Verification (USERSTATE)...');
+                    isMod = await new Promise((resolve) => {
+                        const tempClient = new tmi.Client({
+                            options: { debug: false },
+                            connection: { reconnect: false, secure: true },
+                            identity: { username: myTwitchName.toLowerCase(), password: `oauth:${twitchToken}` },
+                            channels: [hostName]
+                        });
 
-                    try {
-                        await client.connect();
-                        const mods = await client.mods(hostName);
-                        isMod = mods.some(m => m.toLowerCase() === myTwitchName.toLowerCase());
-                        console.log('TMI Live Mod List:', mods);
-                        await client.disconnect();
-                    } catch (tmiErr) {
-                        console.warn('TMI Check failed, falling back to API:', tmiErr);
-                        // Fallback to API if TMI fails (e.g. token expired)
-                        const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
-                        const data = await res.json();
-                        isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
-                    }
+                        const timeout = setTimeout(() => {
+                            console.warn('TMI Verification Timed Out');
+                            tempClient.disconnect();
+                            resolve(false);
+                        }, 8000);
+
+                        tempClient.on('userstate', (channel, state) => {
+                            if (channel.replace('#', '').toLowerCase() === hostName.toLowerCase()) {
+                                clearTimeout(timeout);
+                                const hasModPerms = state.mod || state.badges?.broadcaster === '1';
+                                console.log('TMI USERSTATE Received. Is Mod?', hasModPerms);
+                                tempClient.disconnect();
+                                resolve(hasModPerms);
+                            }
+                        });
+
+                        tempClient.connect().catch(err => {
+                            console.error('TMI Connect Error:', err);
+                            clearTimeout(timeout);
+                            resolve(false);
+                        });
+                    });
                 } else {
-                    // No token (old session), use API
+                    // No token (old session), fallback to API (Less reliable but only option)
                     console.log('No token found, using API verification...');
                     const res = await fetch(`https://api.ivr.fi/v2/twitch/modvip/${hostName}`);
                     const data = await res.json();
                     isMod = data?.mods?.some(m => m.login.toLowerCase() === myTwitchName.toLowerCase());
                 }
 
-                console.log('Is Authorized?', isMod);
+                console.log('Final Permission Result:', isMod);
                 setIsModAuthorized(isMod);
             } catch (e) {
                 console.error('Permission check failed:', e);
