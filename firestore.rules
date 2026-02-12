@@ -1,10 +1,53 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // TEMPORARY DEBUG RULES - DO NOT LEAVE IN PRODUCTION
+    
+    // Master Admin check
+    function isMasterAdmin() {
+      return request.auth != null && request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2';
+    }
+
+    // Master Admin Bypass
     match /{document=**} {
-      allow read: if true; 
-      allow write: if request.auth != null; 
+      allow read, write: if isMasterAdmin();
+    }
+
+    // Allow users to read/write their own data
+    match /users/{userId} {
+      allow read: if true; // Overlay needs to read active_message by userId
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      match /settings/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /private/{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /active_message/{document=**} {
+        allow read: if true; // Public for overlay
+        allow write: if request.auth != null; // Host Mode (Moderators)
+      }
+      
+      match /history/{document=**} {
+        allow read, write: if request.auth != null; // Host Mode (Moderators)
+      }
+
+      match /permissions/{permissionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (request.auth.uid == userId || request.auth.uid == permissionId);
+      }
+
+      match /online/{onlineId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == onlineId;
+      }
+
+      match /suggestions/{suggestionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
     }
   }
 }
