@@ -127,6 +127,82 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 </button>
             </div>
 
+            {/* Live Preview Section */}
+            <div className="p-6 border-b border-zinc-800 bg-zinc-950">
+                <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Sparkles size={14} />
+                    Live Preview
+                </h4>
+                <div
+                    className="relative w-full h-32 bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden"
+                    style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
+                >
+                    {/* Preview Message Bubble */}
+                    <div
+                        className="absolute flex items-start gap-3 max-w-md"
+                        style={{
+                            left: `${settings.posX}%`,
+                            top: `${settings.posY}%`,
+                            transform: 'translate(-50%, -50%)'
+                        }}
+                    >
+                        {/* Avatar */}
+                        {settings.showAvatar && (
+                            <img
+                                src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
+                                alt=""
+                                className="rounded-full border-2 border-white/10"
+                                style={{
+                                    width: `${settings.avatarSize}px`,
+                                    height: `${settings.avatarSize}px`
+                                }}
+                            />
+                        )}
+
+                        {/* Message Content */}
+                        <div
+                            className="flex flex-col gap-1"
+                            style={{ borderRadius: `${settings.borderRadius}px` }}
+                        >
+                            {/* Username */}
+                            <div
+                                className="px-3 py-1 font-bold"
+                                style={{
+                                    fontSize: `${settings.nameSize}px`,
+                                    color: settings.textColor,
+                                    backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.8)',
+                                    borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
+                                    borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                                }}
+                            >
+                                TestUser
+                            </div>
+
+                            {/* Message Text */}
+                            <div
+                                className="px-3 py-2"
+                                style={{
+                                    fontSize: `${settings.fontSize}px`,
+                                    color: settings.textColor,
+                                    backgroundColor: settings.bubbleStyle === 'glass' ? 'rgba(255,255,255,0.1)' :
+                                        settings.bubbleStyle === 'neon' ? 'rgba(0,0,0,0.9)' :
+                                            settings.bubbleStyle === 'minimal' ? 'transparent' :
+                                                'rgba(0,0,0,0.6)',
+                                    backdropFilter: settings.bubbleStyle === 'glass' ? 'blur(12px)' : 'none',
+                                    border: settings.bubbleStyle === 'neon' ? '1px solid rgb(147, 51, 234)' :
+                                        settings.bubbleStyle === 'glass' ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                                    boxShadow: settings.bubbleStyle === 'neon' ? '0 0 10px rgba(147, 51, 234, 0.5)' : 'none',
+                                    borderRadius: `0 0 ${settings.borderRadius}px ${settings.borderRadius}px`
+                                }}
+                            >
+                                This is a preview message! 🎉
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p className="text-xs text-zinc-600 mt-2 italic">Preview updates in real-time as you adjust settings below</p>
+            </div>
+
             <div className="flex-1 overflow-y-auto p-6 space-y-10 scrollbar-hide">
                 {/* 1. Identity */}
                 <section className="space-y-4">

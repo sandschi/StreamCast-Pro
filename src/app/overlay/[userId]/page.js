@@ -30,8 +30,18 @@ export default function OverlayPage() {
     useEffect(() => {
         if (!settings.fontFamily) return;
         const link = document.createElement('link');
-        link.href = `https://fonts.googleapis.com/css2?family=${settings.fontFamily.replace(/\s+/g, '+')}:wght@400;700;900&display=swap`;
+
+        // Some fonts like Monoton only have weight 400, so we use a more flexible approach
+        const fontName = settings.fontFamily.replace(/\s+/g, '+');
+        // Request multiple weights but Google Fonts will only load what's available
+        link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@400;700;900&display=swap`;
         link.rel = 'stylesheet';
+
+        // Add error handling to prevent font loading from breaking the overlay
+        link.onerror = () => {
+            console.warn(`Failed to load font: ${settings.fontFamily}, falling back to system fonts`);
+        };
+
         document.head.appendChild(link);
         return () => { try { document.head.removeChild(link); } catch (e) { } };
     }, [settings.fontFamily]);
@@ -288,8 +298,8 @@ export default function OverlayPage() {
                                     src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
                                     alt=""
                                     className={`rounded-full shadow-md object-cover flex-shrink-0 transition-all ${settings.bubbleStyle === 'bold' || settings.bubbleStyle === 'comic' ? 'border-4 border-black' :
-                                            settings.bubbleStyle === 'retro' ? 'border-4 border-white' :
-                                                'border-2 border-white/40'
+                                        settings.bubbleStyle === 'retro' ? 'border-4 border-white' :
+                                            'border-2 border-white/40'
                                         }`}
                                     style={{ width: `${settings.avatarSize}px`, height: `${settings.avatarSize}px` }}
                                     onError={(e) => { e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png"; }}
