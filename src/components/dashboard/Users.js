@@ -36,7 +36,7 @@ export default function Users({ targetUid, user }) {
         const unsubPermissions = onSnapshot(permissionsRef, (snapshot) => {
             const perms = {};
             snapshot.forEach((doc) => {
-                perms[doc.id] = doc.data().role;
+                perms[doc.id] = doc.data(); // Store full data, not just role
             });
             setPermissions(perms);
         });
@@ -51,6 +51,7 @@ export default function Users({ targetUid, user }) {
         try {
             // Find existing data from presence to persist
             const pData = presence.find(p => p.id === userId);
+            const existingPerm = permissions[userId] || {};
             const roleRef = doc(db, 'users', effectiveUid, 'permissions', userId);
 
             await setDoc(roleRef, {
@@ -58,9 +59,9 @@ export default function Users({ targetUid, user }) {
                 updatedAt: serverTimestamp(),
                 updatedBy: user.uid,
                 // Persist readable names so they show up while offline
-                displayName: pData?.displayName || permissions[userId]?.displayName || userId,
-                photoURL: pData?.photoURL || permissions[userId]?.photoURL || null,
-                twitchUsername: pData?.twitchUsername || permissions[userId]?.twitchUsername || null
+                displayName: pData?.displayName || existingPerm.displayName || userId,
+                photoURL: pData?.photoURL || existingPerm.photoURL || null,
+                twitchUsername: pData?.twitchUsername || existingPerm.twitchUsername || null
             }, { merge: true });
         } catch (e) {
             console.error('Failed to set role:', e);
@@ -80,7 +81,7 @@ export default function Users({ targetUid, user }) {
     const allUserIds = Array.from(new Set([...presence.map(p => p.id), ...Object.keys(permissions)]));
     const userList = allUserIds.map(id => {
         const pData = presence.find(p => p.id === id);
-        const permData = permissions[id]; // This now contains role and metadata
+        const permData = permissions[id]; // This now contains full data including role
         return {
             id,
             displayName: pData?.displayName || permData?.displayName || id,
