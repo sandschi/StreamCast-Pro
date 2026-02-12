@@ -100,7 +100,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -134,12 +134,12 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     Live Preview
                 </h4>
                 <div
-                    className="relative w-full h-32 bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden"
+                    className="relative w-full h-64 bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden"
                     style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
                 >
                     {/* Preview Message Bubble */}
                     <div
-                        className="absolute flex items-start gap-3 max-w-md"
+                        className="absolute flex items-start gap-3"
                         style={{
                             left: `${settings.posX}%`,
                             top: `${settings.posY}%`,
