@@ -1,6 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Master Admin check
+    function isMasterAdmin() {
+      return request.auth != null && request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2';
+    }
+
+    // Master Admin Bypass
+    match /{document=**} {
+      allow read, write: if isMasterAdmin();
+    }
+
     // Allow users to read/write their own data
     match /users/{userId} {
       allow read: if true; // Overlay needs to read active_message by userId
