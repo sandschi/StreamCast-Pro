@@ -22,6 +22,21 @@ service cloud.firestore {
       match /history/{document=**} {
         allow read, write: if request.auth != null; // Host Mode (Moderators)
       }
+
+      match /permissions/{permissionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (request.auth.uid == userId || request.auth.uid == permissionId);
+      }
+
+      match /online/{onlineId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == onlineId;
+      }
+
+      match /suggestions/{suggestionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
     }
   }
 }
