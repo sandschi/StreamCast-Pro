@@ -18,7 +18,7 @@ import {
 
 const FONTS = [
     'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
-    'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico'
+    'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'
 ];
 
 export default function Settings({ targetUid, isModeratorMode }) {
@@ -163,19 +163,19 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                 key={style.id}
                                 onClick={() => updateSetting('bubbleStyle', style.id)}
                                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${settings.bubbleStyle === style.id
-                                        ? 'bg-purple-600/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
-                                        : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
+                                    ? 'bg-purple-600/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                                    : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
                                     }`}
                             >
                                 <div className={`w-8 h-4 rounded-sm relative overflow-hidden ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
-                                        style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
-                                            style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
-                                                style.id === 'minimal' ? 'border-none bg-transparent' :
-                                                    style.id === 'cyberpunk' ? 'bg-zinc-900 border-l-2 border-l-[#ff003c] border-r-2 border-r-[#00f0ff]' :
-                                                        style.id === 'comic' ? 'bg-white border-2 border-black after:content-[""] after:absolute after:inset-0 after:bg-[radial-gradient(#000_15%,transparent_16%)] after:bg-[length:3px_3px]' :
-                                                            style.id === 'retro' ? 'bg-zinc-900 border-2 border-white' :
-                                                                style.id === 'future' ? 'bg-zinc-900 border border-blue-500/30 after:content-[""] after:absolute after:inset-0 after:bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,128,255,0.1)_50%)] after:bg-[length:100%_2px]' :
-                                                                    'bg-white border-2 border-black'
+                                    style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
+                                        style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
+                                            style.id === 'minimal' ? 'border-none bg-transparent' :
+                                                style.id === 'cyberpunk' ? 'bg-zinc-900 border-l-2 border-l-[#ff003c] border-r-2 border-r-[#00f0ff]' :
+                                                    style.id === 'comic' ? 'bg-white border-2 border-black after:content-[""] after:absolute after:inset-0 after:bg-[radial-gradient(#000_15%,transparent_16%)] after:bg-[length:3px_3px]' :
+                                                        style.id === 'retro' ? 'bg-zinc-900 border-2 border-white' :
+                                                            style.id === 'future' ? 'bg-zinc-900 border border-blue-500/30 after:content-[""] after:absolute after:inset-0 after:bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,128,255,0.1)_50%)] after:bg-[length:100%_2px]' :
+                                                                'bg-white border-2 border-black'
                                     }`} />
                                 <span className="text-[10px] font-bold uppercase tracking-tighter">{style.label}</span>
                             </button>
