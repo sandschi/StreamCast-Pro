@@ -1,13 +1,12 @@
-'use client';
-
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
-import { Users, CheckCircle, XCircle, Clock, ShieldCheck } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send } from 'lucide-react';
 
 export default function Broadcasters() {
     const [broadcasters, setBroadcasters] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [testingWebhook, setTestingWebhook] = useState(false);
 
     useEffect(() => {
         // Query all users who have a twitchUsername (indicating they are broadcasters)
@@ -30,6 +29,37 @@ export default function Broadcasters() {
         }
     };
 
+    const testWebhook = async () => {
+        setTestingWebhook(true);
+        try {
+            const response = await fetch('/api/notify-signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: 'test-webhook-' + Date.now(),
+                    userData: {
+                        twitchUsername: 'test_user',
+                        displayName: 'Test User',
+                        photoURL: 'https://static-cdn.jtvnw.net/user-default-pictures-uv/cdd517fe-def4-11e9-948e-784f43822e80-profile_image-300x300.png',
+                        status: 'waiting',
+                        lastLogin: new Date().toISOString()
+                    }
+                })
+            });
+
+            if (response.ok) {
+                alert('✅ Test notification sent to Discord!');
+            } else {
+                alert('❌ Failed to send test notification. Check console for details.');
+            }
+        } catch (error) {
+            console.error('Test webhook error:', error);
+            alert('❌ Error sending test notification: ' + error.message);
+        } finally {
+            setTestingWebhook(false);
+        }
+    };
+
     if (loading) return (
         <div className="flex items-center justify-center p-20 text-zinc-500">
             <Clock className="animate-spin mr-2" /> Loading users...
@@ -48,9 +78,19 @@ export default function Broadcasters() {
                         <p className="text-sm text-zinc-500 text-[10px] uppercase tracking-widest font-bold">Master Admin View</p>
                     </div>
                 </div>
-                <div className="text-right">
-                    <span className="text-2xl font-black text-white">{broadcasters.length}</span>
-                    <p className="text-[10px] text-zinc-500 uppercase font-black">Registered</p>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={testWebhook}
+                        disabled={testingWebhook}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-lg transition-all shadow-lg flex items-center gap-2 text-sm"
+                    >
+                        <Send size={16} className={testingWebhook ? 'animate-pulse' : ''} />
+                        {testingWebhook ? 'Sending...' : 'Test Webhook'}
+                    </button>
+                    <div className="text-right">
+                        <span className="text-2xl font-black text-white">{broadcasters.length}</span>
+                        <p className="text-[10px] text-zinc-500 uppercase font-black">Registered</p>
+                    </div>
                 </div>
             </div>
 
@@ -74,8 +114,8 @@ export default function Broadcasters() {
                             <button
                                 onClick={() => setStatus(u.id, 'approved')}
                                 className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'approved'
-                                        ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
-                                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                    ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
+                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <CheckCircle size={14} /> Approve
@@ -84,8 +124,8 @@ export default function Broadcasters() {
                             <button
                                 onClick={() => setStatus(u.id, 'denied')}
                                 className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'denied'
-                                        ? 'bg-red-600 text-white shadow-lg shadow-red-900/20'
-                                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                    ? 'bg-red-600 text-white shadow-lg shadow-red-900/20'
+                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <XCircle size={14} /> Deny
@@ -94,8 +134,8 @@ export default function Broadcasters() {
                             <button
                                 onClick={() => setStatus(u.id, 'waiting')}
                                 className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'waiting'
-                                        ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-900/20'
-                                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                    ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-900/20'
+                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <Clock size={14} /> Waiting

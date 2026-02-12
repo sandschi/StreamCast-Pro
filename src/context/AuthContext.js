@@ -84,18 +84,42 @@ export function AuthProvider({ children }) {
             const result = await signInWithPopup(auth, provider);
             const additionalInfo = getAdditionalUserInfo(result);
             const username = additionalInfo?.profile?.login || additionalInfo?.profile?.preferred_username;
+            const isNewUser = additionalInfo?.isNewUser;
 
             if (username) {
                 const cleanUsername = username.toLowerCase();
                 console.log('Syncing Identity:', cleanUsername);
                 const isSandschi = result.user.displayName?.toLowerCase() === 'sandschi' || cleanUsername === 'sandschi';
                 setIsMasterAdmin(isSandschi); // Set master admin status on login
-                await setDoc(doc(db, 'users', result.user.uid), {
+
+                const userData = {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
                     photoURL: result.user.photoURL,
                     status: isSandschi ? 'approved' : 'waiting'
-                }, { merge: true });
+                };
+
+                await setDoc(doc(db, 'users', result.user.uid), userData, { merge: true });
+
+                // Send Discord notification for new signups
+                if (isNewUser && !isSandschi) {
+                    try {
+                        await fetch('/api/notify-signup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                userId: result.user.uid,
+                                userData: {
+                                    ...userData,
+                                    lastLogin: new Date().toISOString()
+                                }
+                            })
+                        });
+                    } catch (notifyError) {
+                        console.error('Failed to send Discord notification:', notifyError);
+                        // Don't block login if notification fails
+                    }
+                }
             }
 
             // Capture & Persist Token to Cloud
