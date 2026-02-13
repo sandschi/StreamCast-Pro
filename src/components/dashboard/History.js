@@ -59,7 +59,7 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
     };
 
     return (
-        <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-transparent">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <HistoryIcon size={18} className="text-zinc-400" />

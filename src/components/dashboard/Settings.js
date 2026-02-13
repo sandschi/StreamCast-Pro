@@ -45,6 +45,17 @@ export default function Settings({ targetUid, isModeratorMode }) {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
+        if (!settings.fontFamily) return;
+        const link = document.createElement('link');
+        const fontName = settings.fontFamily.replace(/\s+/g, '+');
+        link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@400;700;900&display=swap`;
+        link.rel = 'stylesheet';
+        link.onerror = () => console.warn(`Failed to load font: ${settings.fontFamily}`);
+        document.head.appendChild(link);
+        return () => { try { document.head.removeChild(link); } catch (e) { } };
+    }, [settings.fontFamily]);
+
+    useEffect(() => {
         if (!effectiveUid) return;
         const configRef = doc(db, 'users', effectiveUid, 'settings', 'config');
         const unsubscribeConfig = onSnapshot(configRef, (doc) => {
@@ -100,7 +111,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-transparent">
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
                 <div className="flex items-center gap-4">

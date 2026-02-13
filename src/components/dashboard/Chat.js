@@ -199,7 +199,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
     };
 
     return (
-        <div className="flex flex-col h-[600px] bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex flex-col h-full bg-transparent">
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center group">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
