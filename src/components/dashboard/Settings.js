@@ -150,83 +150,82 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 </button>
             </div>
 
-            {/* Live Preview Section */}
-            <div className="p-6 border-b border-zinc-800 bg-zinc-950">
-                <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Sparkles size={14} />
-                    Live Preview
-                </h4>
-                <div
-                    className="relative w-full h-64 bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden"
-                    style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
-                >
-                    {/* Preview Message Bubble */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-10 scrollbar-hide">
+                {/* Live Preview Section (Now Scrollable) */}
+                <div className="p-6 bg-zinc-950 rounded-2xl border border-zinc-800">
+                    <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Sparkles size={14} />
+                        Live Preview
+                    </h4>
                     <div
-                        className="absolute flex items-start gap-3"
-                        style={{
-                            left: `${settings.posX}%`,
-                            top: `${settings.posY}%`,
-                            transform: 'translate(-50%, -50%)'
-                        }}
+                        className="relative w-full h-64 bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden"
+                        style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
                     >
-                        {/* Avatar */}
-                        {settings.showAvatar && (
-                            <img
-                                src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
-                                alt=""
-                                className="rounded-full border-2 border-white/10"
-                                style={{
-                                    width: `${settings.avatarSize}px`,
-                                    height: `${settings.avatarSize}px`
-                                }}
-                            />
-                        )}
-
-                        {/* Message Content */}
+                        {/* Preview Message Bubble */}
                         <div
-                            className="flex flex-col gap-1"
-                            style={{ borderRadius: `${settings.borderRadius}px` }}
+                            className="absolute flex items-start gap-3"
+                            style={{
+                                left: `${settings.posX}%`,
+                                top: `${settings.posY}%`,
+                                transform: 'translate(-50%, -50%)'
+                            }}
                         >
-                            {/* Username */}
-                            <div
-                                className="px-3 py-1 font-bold"
-                                style={{
-                                    fontSize: `${settings.nameSize}px`,
-                                    color: settings.textColor,
-                                    backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.8)',
-                                    borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
-                                    borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                                }}
-                            >
-                                TestUser
-                            </div>
+                            {/* Avatar */}
+                            {settings.showAvatar && (
+                                <img
+                                    src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
+                                    alt=""
+                                    className="rounded-full border-2 border-white/10"
+                                    style={{
+                                        width: `${settings.avatarSize}px`,
+                                        height: `${settings.avatarSize}px`
+                                    }}
+                                />
+                            )}
 
-                            {/* Message Text */}
+                            {/* Message Content */}
                             <div
-                                className="px-3 py-2"
-                                style={{
-                                    fontSize: `${settings.fontSize}px`,
-                                    color: settings.textColor,
-                                    backgroundColor: settings.bubbleStyle === 'glass' ? 'rgba(255,255,255,0.1)' :
-                                        settings.bubbleStyle === 'neon' ? 'rgba(0,0,0,0.9)' :
-                                            settings.bubbleStyle === 'minimal' ? 'transparent' :
-                                                'rgba(0,0,0,0.6)',
-                                    backdropFilter: settings.bubbleStyle === 'glass' ? 'blur(12px)' : 'none',
-                                    border: settings.bubbleStyle === 'neon' ? '1px solid rgb(147, 51, 234)' :
-                                        settings.bubbleStyle === 'glass' ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                                    boxShadow: settings.bubbleStyle === 'neon' ? '0 0 10px rgba(147, 51, 234, 0.5)' : 'none',
-                                    borderRadius: `0 0 ${settings.borderRadius}px ${settings.borderRadius}px`
-                                }}
+                                className="flex flex-col gap-1"
+                                style={{ borderRadius: `${settings.borderRadius}px` }}
                             >
-                                This is a preview message! 🎉
+                                {/* Username */}
+                                <div
+                                    className="px-3 py-1 font-bold"
+                                    style={{
+                                        fontSize: `${settings.nameSize}px`,
+                                        color: settings.textColor,
+                                        backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.8)',
+                                        borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
+                                        borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                                    }}
+                                >
+                                    TestUser
+                                </div>
+
+                                {/* Message Text */}
+                                <div
+                                    className="px-3 py-2"
+                                    style={{
+                                        fontSize: `${settings.fontSize}px`,
+                                        color: settings.textColor,
+                                        backgroundColor: settings.bubbleStyle === 'glass' ? 'rgba(255,255,255,0.1)' :
+                                            settings.bubbleStyle === 'neon' ? 'rgba(0,0,0,0.9)' :
+                                                settings.bubbleStyle === 'minimal' ? 'transparent' :
+                                                    'rgba(0,0,0,0.6)',
+                                        backdropFilter: settings.bubbleStyle === 'glass' ? 'blur(12px)' : 'none',
+                                        border: settings.bubbleStyle === 'neon' ? '1px solid rgb(147, 51, 234)' :
+                                            settings.bubbleStyle === 'glass' ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                                        boxShadow: settings.bubbleStyle === 'neon' ? '0 0 10px rgba(147, 51, 234, 0.5)' : 'none',
+                                        borderRadius: `0 0 ${settings.borderRadius}px ${settings.borderRadius}px`
+                                    }}
+                                >
+                                    This is a preview message! 🎉
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <p className="text-xs text-zinc-600 mt-2 italic">Preview updates in real-time as you adjust settings below</p>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-10 scrollbar-hide">
                 {/* 1. Identity */}
                 <section className="space-y-4">
                     <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
@@ -294,7 +293,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             <select
                                 value={settings.fontFamily}
                                 onChange={(e) => updateSetting('fontFamily', e.target.value)}
-                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-zinc-200 outline-none"
+                                className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none"
                             >
                                 {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
                             </select>
@@ -320,7 +319,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     </div>
                 </section>
 
-                {/* 3. Avatar Styling */}
+                {/* 4. Avatar Styling */}
                 <section className="space-y-4">
                     <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                         <ImageIcon size={14} /> Avatar Configuration
@@ -346,7 +345,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     )}
                 </section>
 
-                {/* 4. Precision Positioning */}
+                {/* 5. Precision Positioning */}
                 <section className="space-y-6">
                     <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                         <Move size={14} /> Precision Positioning (X,Y)
@@ -378,6 +377,72 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             <span className="text-[10px] font-bold text-zinc-700 select-none">PREVIEW GRID</span>
                         </div>
                     </div>
+                </section>
+
+                {/* 6. Sound Effects */}
+                <section className="space-y-4">
+                    <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Volume2 size={14} /> Sound Effects
+                    </h4>
+                    <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
+                        <div className="space-y-1">
+                            <p className="text-sm font-bold text-zinc-200">Enable Sound</p>
+                            <p className="text-xs text-zinc-500 italic">Play a sound when a message appears.</p>
+                        </div>
+                        <button
+                            onClick={() => updateSetting('soundEnabled', !settings.soundEnabled)}
+                            className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.soundEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                        >
+                            <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.soundEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+
+                    {settings.soundEnabled && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pl-2 animate-in slide-in-from-top-2 duration-300">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-400 uppercase">Sound Type</label>
+                                <select
+                                    value={settings.soundType || 'pop'}
+                                    onChange={(e) => {
+                                        updateSetting('soundType', e.target.value);
+                                        // Play preview
+                                        const audio = new Audio(SOUNDS[e.target.value]);
+                                        audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
+                                        audio.play().catch(e => console.error(e));
+                                    }}
+                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-600/50 transition-all"
+                                >
+                                    <option value="pop">Pop</option>
+                                    <option value="ding">Ding</option>
+                                    <option value="coin">Coin</option>
+                                    <option value="notify">Notify</option>
+                                    <option value="success">Success</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">
+                                    Volume <span>{Math.round((settings.soundVolume !== undefined ? settings.soundVolume : 0.5) * 100)}%</span>
+                                </label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value={settings.soundVolume !== undefined ? settings.soundVolume : 0.5}
+                                    onChange={(e) => {
+                                        const vol = parseFloat(e.target.value);
+                                        updateSetting('soundVolume', vol);
+                                    }}
+                                    onMouseUp={() => {
+                                        const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
+                                        audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
+                                        audio.play().catch(e => console.error(e));
+                                    }}
+                                    className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </section>
             </div>
         </div>
