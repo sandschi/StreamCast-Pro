@@ -364,7 +364,7 @@ function DashboardContent() {
                     </header>
                 )}
 
-                <div className="max-w-4xl">
+                <div className="w-full">
                     {/* Verifying Moderator Permissions UI */}
                     {isModeratorMode && verifyingMod && !isMasterAdmin && (
                         <div className="flex flex-col items-center justify-center p-20 space-y-4">

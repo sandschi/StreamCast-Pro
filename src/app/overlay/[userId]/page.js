@@ -1,15 +1,25 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'next/navigation';
 
+const SOUNDS = {
+    pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+    ding: 'https://assets.mixkit.co/active_storage/sfx/2860/2860-preview.mp3',
+    coin: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
+    notify: 'https://assets.mixkit.co/active_storage/sfx/2346/2346-preview.mp3',
+    success: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
+};
+
 export default function OverlayPage() {
     const { userId } = useParams();
     const [activeMessage, setActiveMessage] = useState(null);
+    const filters = useRef({ processedIds: new Set() });
+
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
         strokeColor: '#000000',
@@ -24,6 +34,9 @@ export default function OverlayPage() {
         posY: 90,
         showAvatar: true,
         bubbleStyle: 'classic', // classic, glass, neon, minimal, bold
+        soundEnabled: false,
+        soundType: 'pop',
+        soundVolume: 0.5,
     });
 
     // 1. Dynamic Font Loading
@@ -57,6 +70,25 @@ export default function OverlayPage() {
         const unsubscribeMessage = onSnapshot(messageRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
+
+                // Play Sound if enabled and it's a new message
+                if (settings.soundEnabled && data.id && !filters.current.processedIds.has(data.id)) {
+                    try {
+                        const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
+                        audio.volume = settings.soundVolume !== undefined ? settings.soundVolume : 0.5;
+                        audio.play().catch(e => console.warn('Audio play failed:', e));
+                        filters.current.processedIds.add(data.id);
+
+                        // Cleanup old IDs
+                        if (filters.current.processedIds.size > 50) {
+                            const it = filters.current.processedIds.values();
+                            filters.current.processedIds.delete(it.next().value);
+                        }
+                    } catch (e) {
+                        console.error("Sound Error:", e);
+                    }
+                }
+
                 setActiveMessage(data);
                 if (settings.displayDuration > 0) {
                     setTimeout(() => {
@@ -66,7 +98,7 @@ export default function OverlayPage() {
             }
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
-    }, [userId, settings.displayDuration]);
+    }, [userId, settings.displayDuration, settings.soundEnabled, settings.soundType, settings.soundVolume]);
 
     const getAnimationVariants = () => {
         const isRightPart = settings.posX > 50;

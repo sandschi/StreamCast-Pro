@@ -13,13 +13,22 @@ import {
     Image as ImageIcon,
     Move,
     Sparkles,
-    Send
+    Send,
+    Volume2
 } from 'lucide-react';
 
 const FONTS = [
     'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
     'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'
 ];
+
+const SOUNDS = {
+    pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+    ding: 'https://assets.mixkit.co/active_storage/sfx/2860/2860-preview.mp3',
+    coin: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
+    notify: 'https://assets.mixkit.co/active_storage/sfx/2346/2346-preview.mp3',
+    success: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
+};
 
 export default function Settings({ targetUid, isModeratorMode }) {
     const { user } = useAuth();
@@ -39,6 +48,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
         posY: 90, // Percentage from top
         showAvatar: true,
         bubbleStyle: 'classic', // Added bubbleStyle
+        soundEnabled: false,
+        soundType: 'pop',
+        soundVolume: 0.5,
     });
 
     const [twitchUsername, setTwitchUsername] = useState('');
@@ -113,7 +125,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     return (
         <div className="flex flex-col h-full bg-transparent">
             {/* Header */}
-            <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+            <div className="p-4 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                         <SettingsIcon size={18} className="text-zinc-400" />
