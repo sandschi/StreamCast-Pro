@@ -95,6 +95,17 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
     const updateSetting = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
+    const [activeMessage, setActiveMessage] = useState(null);
+
+    useEffect(() => {
+        if (!effectiveUid) return;
+        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+        const unsub = onSnapshot(msgRef, (doc) => {
+            setActiveMessage(doc.exists() ? doc.data() : null);
+        });
+        return () => unsub();
+    }, [effectiveUid]);
+
     const handleSave = async () => {
         if (!user) return;
         setSaving(true);
@@ -107,17 +118,18 @@ export default function Settings({ targetUid, isModeratorMode }) {
         } finally { setSaving(false); }
     };
 
-    const sendTestOverlay = async () => {
+    const sendTestOverlay = async (permanent = false) => {
         if (!effectiveUid) return;
         try {
             const testMessage = {
                 id: 'test-message-' + Date.now(),
                 username: 'TestUser',
-                fragments: [{ type: 'text', content: 'This is a test message from your settings!' }],
+                fragments: [{ type: 'text', content: permanent ? 'This message will stay until hidden! 📌' : 'This is a test message from your settings!' }],
                 timestamp: Date.now(),
-                color: '#FF0000', // Example color
+                color: '#FF0000',
                 badges: [],
-                avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png' // Example avatar
+                avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png',
+                duration: permanent ? -1 : undefined
             };
             await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), testMessage);
             console.log('Test overlay sent!');
@@ -127,16 +139,48 @@ export default function Settings({ targetUid, isModeratorMode }) {
         }
     };
 
+    const hideOverlay = async () => {
+        if (!effectiveUid) return;
+        try {
+            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), {}); // Clear message
+        } catch (e) {
+            console.error("Error hiding overlay:", e);
+        }
+    };
+
     return (
         <div className="relative">
             {/* Floating Controls - Fixed position to ensure they always stay on screen */}
-            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-zinc-900/80 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl">
+            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-zinc-900/80 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl transition-all">
+                {/* Hide Button (Only for Mods/Owner when Active) */}
+                {activeMessage && (user?.uid === effectiveUid || isModeratorMode) && (
+                    <>
+                        <button
+                            onClick={hideOverlay}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full text-xs font-bold transition-all border border-red-500/30 animate-in fade-in zoom-in duration-200"
+                        >
+                            <span className="hidden sm:inline">Hide</span>
+                            <span className="sm:hidden">X</span>
+                        </button>
+                        <div className="w-px h-4 bg-zinc-700" />
+                    </>
+                )}
+
                 <button
-                    onClick={sendTestOverlay}
+                    onClick={() => sendTestOverlay(false)}
                     className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
                 >
                     <Send size={14} />
-                    <span className="hidden sm:inline">Send Test</span>
+                    <span className="hidden sm:inline">Test</span>
+                </button>
+                <button
+                    onClick={() => sendTestOverlay(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
+                    title="Send Permanent Message"
+                >
+                    <Send size={14} />
+                    <span className="hidden sm:inline">∞</span>
+                    <span className="sm:hidden">∞</span>
                 </button>
                 <div className="w-px h-4 bg-zinc-700" />
                 <button
@@ -145,7 +189,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
                 >
                     <Save size={18} />
-                    {saving ? 'Saving...' : 'Save Changes'}
+                    {saving ? 'Saving...' : 'Save'}
                 </button>
             </div>
 
@@ -316,6 +360,21 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     </div>
 
                     <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">
+                                Display Duration <span>{settings.displayDuration}s</span>
+                            </label>
+                            <input
+                                type="range"
+                                min="3"
+                                max="60"
+                                value={settings.displayDuration}
+                                onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
+                                className="w-full accent-purple-600"
+                            />
+                            <p className="text-[10px] text-zinc-600 italic">How long the message stays on screen (in seconds).</p>
+                        </div>
+
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Message Text Size <span>{settings.fontSize}px</span></label>
                             <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-purple-600" />

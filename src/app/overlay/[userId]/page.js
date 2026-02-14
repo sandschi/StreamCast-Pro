@@ -95,10 +95,14 @@ export default function OverlayPage() {
                 }
 
                 setActiveMessage(data);
-                if (settings.displayDuration > 0) {
+
+                // Determine duration: per-message override > global setting
+                const duration = data.duration !== undefined ? data.duration : settings.displayDuration;
+
+                if (duration > 0) {
                     setTimeout(() => {
                         setActiveMessage(prev => (prev?.timestamp === data.timestamp ? null : prev));
-                    }, settings.displayDuration * 1000);
+                    }, duration * 1000);
                 }
             }
         });
