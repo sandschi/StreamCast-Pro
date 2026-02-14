@@ -123,31 +123,33 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="space-y-6">
-            {/* Header - Sticky relative to main page scroll */}
-            <div className="p-4 border border-zinc-800 bg-zinc-900/90 backdrop-blur-md rounded-2xl sticky top-0 z-50 flex items-center justify-between shadow-xl">
-                <div className="flex items-center gap-4">
-                    <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
-                        <SettingsIcon size={18} className="text-zinc-400" />
-                        Overlay Customization
-                    </h3>
-                    <div className="h-4 w-px bg-zinc-800" />
-                    <button
-                        onClick={sendTestOverlay}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[11px] font-bold transition-all border border-zinc-700"
-                    >
-                        <Send size={12} />
-                        Send Test Overlay
-                    </button>
-                </div>
+        <div className="relative">
+            {/* Floating Controls - Fixed position to ensure they always stay on screen */}
+            <div className="fixed top-6 right-6 md:right-10 z-[100] flex items-center gap-3">
+                <button
+                    onClick={sendTestOverlay}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-700 shadow-xl backdrop-blur-md"
+                >
+                    <Send size={14} />
+                    <span className="hidden sm:inline">Send Test</span>
+                </button>
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition-all shadow-lg active:scale-95"
+                    className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-xl shadow-purple-900/20 active:scale-95 text-white"
                 >
-                    <Save size={16} />
+                    <Save size={18} />
                     {saving ? 'Saving...' : 'Save Changes'}
                 </button>
+            </div>
+
+            {/* Header Title (Standard Flow) */}
+            <div className="mb-8 p-1">
+                <h3 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
+                    <SettingsIcon size={24} className="text-purple-500" />
+                    Overlay Customization
+                </h3>
+                <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
             </div>
 
             <div className="space-y-10">
