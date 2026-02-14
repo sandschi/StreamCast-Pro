@@ -5,7 +5,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
 // NEW: Icons for Suggestion
-import { History as HistoryIcon, RefreshCw, Send, ScreenShare } from 'lucide-react';
+import { History as HistoryIcon, RefreshCw, Send, ScreenShare, XCircle } from 'lucide-react';
 import { addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function History({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
