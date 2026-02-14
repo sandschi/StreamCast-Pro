@@ -128,9 +128,12 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 timestamp: Date.now(),
                 color: '#FF0000',
                 badges: [],
-                avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png',
-                duration: permanent ? -1 : undefined
+                avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png'
             };
+
+            if (permanent) {
+                testMessage.duration = -1;
+            }
             await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), testMessage);
             console.log('Test overlay sent!');
         } catch (e) {

@@ -144,7 +144,25 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
         return () => unsub();
     }, [effectiveUid, userRole]);
 
-    const sendToScreen = async (msg) => {
+    // Listen for active message to show Hide button
+    const [activeMessage, setActiveMessage] = useState(null);
+    useEffect(() => {
+        if (!effectiveUid) return;
+        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+        const unsub = onSnapshot(msgRef, (doc) => {
+            setActiveMessage(doc.exists() ? doc.data() : null);
+        });
+        return () => unsub();
+    }, [effectiveUid]);
+
+    const hideOverlay = async () => {
+        if (!effectiveUid) return;
+        try {
+            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), {});
+        } catch (e) { console.error("Error hiding:", e); }
+    };
+
+    const sendToScreen = async (msg, permanent = false) => {
         if (!user || userRole === 'denied') return;
 
         const isViewer = userRole === 'viewer';
@@ -156,21 +174,39 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
             fragments: msg.fragments,
             timestamp: serverTimestamp(),
             suggestedBy: user.uid,
-            suggestedByName: user.displayName
+            suggestedByName: user.displayName,
+            // duration: permanent ? -1 : null // null means use global setting, -1 means infinite. undefined is bad.
+            // Wait, if I set null, OverlayPage logic: (data.duration !== undefined ? data.duration : settings)
+            // null !== undefined is true. So duration becomes null.
+            // if (duration > 0) -> null > 0 is false. So infinite.
+            // So if I want "Standard", I should NOT send duration field at all?
+            // Or send undefined? No, Firestore errors.
+            // I should use "delete payload.duration" if standard.
         };
+
+        if (permanent) {
+            payload.duration = -1;
+        }
 
         try {
             if (isViewer) {
-                // VIEWERS: Send to suggestions pool
+                // ... (viewers can't send permanent anyway? or maybe they can suggest it? Let's keep it simple: Viewers suggest standard)
                 const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
+                // Remove duration for suggestions for now to avoid complexity
+                if (payload.duration) delete payload.duration;
                 await addDoc(suggestionsRef, payload);
                 console.log('Suggestion Sent ✅');
             } else {
                 // MODS/BROADCASTER: Send directly to screen
                 const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
                 const historyRef = collection(db, 'users', effectiveUid, 'history');
-                await setDoc(activeMsgRef, payload);
-                await addDoc(historyRef, payload);
+
+                // Ensure duration is handled
+                const finalPayload = { ...payload };
+                if (!permanent) delete finalPayload.duration;
+
+                await setDoc(activeMsgRef, finalPayload);
+                await addDoc(historyRef, finalPayload);
                 console.log('Sent to Screen ✅');
             }
         } catch (e) { console.error(e); }
@@ -199,7 +235,20 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
     };
 
     return (
-        <div className="flex flex-col h-full bg-transparent">
+        <div className="flex flex-col h-full bg-transparent relative">
+            {/* Hide Button (Floating) */}
+            {activeMessage && (userRole === 'broadcaster' || userRole === 'mod') && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+                    <button
+                        onClick={hideOverlay}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-all shadow-xl animate-in fade-in slide-in-from-top-4"
+                    >
+                        <XCircle size={14} />
+                        Hide Overlay
+                    </button>
+                </div>
+            )}
+
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center group">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
@@ -257,28 +306,40 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                                     {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
                                 </span>
                             </div>
-                            <button
-                                onClick={() => sendToScreen(msg)}
-                                className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20' : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
-                                    }`}
-                            >
-                                {userRole === 'viewer' ? (
-                                    <>
-                                        <Send size={12} />
-                                        <span className="text-[10px] font-bold uppercase tracking-wider">Suggest</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <ScreenShare size={12} />
-                                        <span className="text-[10px] font-bold uppercase tracking-wider">Show</span>
-                                    </>
+
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {(userRole === 'broadcaster' || userRole === 'mod') && (
+                                    <button
+                                        onClick={() => sendToScreen(msg, true)}
+                                        className="p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20"
+                                        title="Show Permanently (∞)"
+                                    >
+                                        <span className="text-[10px] font-bold">∞</span>
+                                    </button>
                                 )}
-                            </button>
+                                <button
+                                    onClick={() => sendToScreen(msg)}
+                                    className={`p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20' : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
+                                        }`}
+                                >
+                                    {userRole === 'viewer' ? (
+                                        <>
+                                            <Send size={12} />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">Suggest</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ScreenShare size={12} />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">Show</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                         <div className="text-zinc-200 text-sm flex flex-wrap items-center gap-1.5 leading-relaxed pl-7">
                             {msg.fragments.map((frag, i) => (
                                 frag.type === 'text' ? <span key={i}>{frag.content}</span> :
-                                    <img key={i} src={frag.url} alt={frag.name} className="h-6 inline-block align-middle select-none" />
+                                    <img key={i} src={frag.url} alt={frag.name} className="h-[1.2em] inline-block align-middle select-none" />
                             ))}
                         </div>
                     </div>
