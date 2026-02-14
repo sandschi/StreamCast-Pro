@@ -1,5 +1,7 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/sandschi/StreamCast-Pro?utm_source=oss&utm_medium=github&utm_campaign=sandschi%2FStreamCast-Pro&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![Node.js CI](https://github.com/sandschi/StreamCast-Pro/actions/workflows/node.js.yml/badge.svg)](https://github.com/sandschi/StreamCast-Pro/actions/workflows/node.js.yml)
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
 ## Getting Started
