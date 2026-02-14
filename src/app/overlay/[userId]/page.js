@@ -16,8 +16,8 @@ const SOUNDS = {
     chime: 'https://assets.mixkit.co/active_storage/sfx/2857/2857-preview.mp3',
     bloop: 'https://assets.mixkit.co/active_storage/sfx/2863/2863-preview.mp3',
     click: 'https://assets.mixkit.co/active_storage/sfx/2847/2847-preview.mp3',
-    ping: 'https://assets.mixkit.co/active_storage/sfx/320/320-preview.mp3',
-    glass: 'https://assets.mixkit.co/active_storage/sfx/319/319-preview.mp3',
+    tone: 'https://assets.mixkit.co/active_storage/sfx/2861/2861-preview.mp3',
+    note: 'https://assets.mixkit.co/active_storage/sfx/2858/2858-preview.mp3',
 };
 
 export default function OverlayPage() {
