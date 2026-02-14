@@ -369,7 +369,7 @@ export default function OverlayPage() {
                             className="font-bold leading-tight drop-shadow-2xl px-6 py-5 transition-all duration-500 relative"
                             style={{
                                 ...bubbleStyles.body,
-                                color: (effectiveSettings.bubbleStyle === 'bold' || effectiveSettings.bubbleStyle === 'comic') ? '#000' : effectiveSettings.textColor,
+                                color: effectiveSettings.textColor,
                                 fontSize: `${effectiveSettings.fontSize}px`,
                                 WebkitTextStroke: (effectiveSettings.bubbleStyle === 'minimal' || effectiveSettings.bubbleStyle === 'retro') ? 'none' : `1px ${effectiveSettings.strokeColor}`,
                                 textStroke: (effectiveSettings.bubbleStyle === 'minimal' || effectiveSettings.bubbleStyle === 'retro') ? 'none' : `1px ${effectiveSettings.strokeColor}`,

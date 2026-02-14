@@ -205,7 +205,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                         className="px-3 py-1 font-bold truncate"
                                         style={{
                                             fontSize: `${settings.nameSize}px`,
-                                            color: settings.textColor,
+                                            color: '#ffffff',
                                             backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.9)',
                                             borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
                                             borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
