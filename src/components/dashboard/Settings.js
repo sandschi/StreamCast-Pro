@@ -412,7 +412,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
                             <div className="space-y-1">
                                 <p className="text-sm font-bold text-zinc-200">Enable Profile Pictures</p>
-                                <p className="text-xs text-zinc-500 italic">Show the sender's circular avatar next to their name.</p>
+                                <p className="text-xs text-zinc-500 italic">Show the sender&apos;s circular avatar next to their name.</p>
                             </div>
                             <button
                                 onClick={() => updateSetting('showAvatar', !settings.showAvatar)}

@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         if (!auth || !auth.onAuthStateChanged) {
-            setLoading(false);
+            setTimeout(() => setLoading(false), 0);
             return;
         }
 

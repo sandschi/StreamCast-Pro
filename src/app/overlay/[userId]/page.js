@@ -322,7 +322,7 @@ export default function OverlayPage() {
             <AnimatePresence mode="wait">
                 {activeMessage && (
                     <motion.div
-                        key={activeMessage.timestamp?.seconds || Date.now()}
+                        key={activeMessage.id || activeMessage.timestamp?.seconds || 'default-message-key'}
                         variants={getAnimationVariants()}
                         initial="initial" animate="animate" exit="exit"
                         className="absolute flex flex-col gap-0 max-w-2xl"

@@ -71,19 +71,23 @@ function DashboardContent() {
         // Master Admin bypass
         if (isMasterAdmin) {
             console.log('Permission Check: Master Admin detected. Full Access Granted.');
-            setIsModAuthorized(true);
-            setUserRole('broadcaster'); // Master admin effectively has broadcaster rights
-            setVerifyingMod(false);
-            setBroadcasterStatus('approved'); // Master admin is always approved
+            setTimeout(() => {
+                setIsModAuthorized(true);
+                setUserRole('broadcaster'); // Master admin effectively has broadcaster rights
+                setVerifyingMod(false);
+                setBroadcasterStatus('approved'); // Master admin is always approved
+            }, 0);
             return; // Skip further permission checks
         }
 
         // Broadcaster check: If no host param or I am the owner of this UID
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
             console.log('Permission Check: Broadcaster/Local detected. Access Granted.');
-            setIsModAuthorized(true);
-            setUserRole('broadcaster');
-            setVerifyingMod(false);
+            setTimeout(() => {
+                setIsModAuthorized(true);
+                setUserRole('broadcaster');
+                setVerifyingMod(false);
+            }, 0);
 
             // Listen for broadcaster status if it's the user's own dashboard
             unsubscribeBroadcasterStatus = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
@@ -112,7 +116,7 @@ function DashboardContent() {
             });
         } else {
             // NEW: Permission Listener (Manual Roles) for moderator mode
-            setVerifyingMod(true);
+            setTimeout(() => setVerifyingMod(true), 0);
             const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
             unsubscribeRole = onSnapshot(roleRef, (doc) => {
                 const data = doc.data();

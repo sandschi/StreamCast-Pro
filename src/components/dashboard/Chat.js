@@ -39,13 +39,14 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
     useEffect(() => {
         emotesRef.current = thirdPartyEmotes;
-        if (messages.length > 0) {
-            setMessages(prev => prev.map(msg => ({
-                ...msg,
-                fragments: parseTwitchMessage(msg.message, msg.rawEmotes, thirdPartyEmotes)
-            })));
-        }
     }, [thirdPartyEmotes]);
+
+    const displayMessages = useMemo(() => {
+        return messages.map(msg => ({
+            ...msg,
+            fragments: parseTwitchMessage(msg.message, msg.rawEmotes, thirdPartyEmotes)
+        }));
+    }, [messages, thirdPartyEmotes]);
 
     useEffect(() => {
         if (!user || !effectiveUid) return;
@@ -70,7 +71,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
         };
         fetchUserData();
         return () => { active = false; };
-    }, [user?.uid, effectiveUid]);
+    }, [user, effectiveUid]);
 
     useEffect(() => {
         if (!user || !channelName || connectingRef.current) return;
@@ -124,7 +125,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
         };
         connect();
         return () => { if (clientRef.current) { clientRef.current.removeAllListeners(); clientRef.current.disconnect().catch(() => { }); } connectingRef.current = false; };
-    }, [user?.uid, channelName]);
+    }, [user, channelName]);
 
     useEffect(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -296,7 +297,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                 </div>
             )}
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-                {messages.map((msg) => (
+                {displayMessages.map((msg) => (
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
