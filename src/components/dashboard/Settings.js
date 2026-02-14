@@ -26,8 +26,13 @@ const SOUNDS = {
     pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
     ding: 'https://assets.mixkit.co/active_storage/sfx/2860/2860-preview.mp3',
     coin: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
-    notify: 'https://assets.mixkit.co/active_storage/sfx/1124/1124-preview.mp3', // Updated
-    success: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Updated
+    notify: 'https://assets.mixkit.co/active_storage/sfx/1124/1124-preview.mp3',
+    success: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3',
+    chime: 'https://assets.mixkit.co/active_storage/sfx/2857/2857-preview.mp3',
+    bloop: 'https://assets.mixkit.co/active_storage/sfx/2863/2863-preview.mp3',
+    click: 'https://assets.mixkit.co/active_storage/sfx/2847/2847-preview.mp3',
+    ping: 'https://assets.mixkit.co/active_storage/sfx/320/320-preview.mp3',
+    glass: 'https://assets.mixkit.co/active_storage/sfx/319/319-preview.mp3',
 };
 
 export default function Settings({ targetUid, isModeratorMode }) {
@@ -125,18 +130,19 @@ export default function Settings({ targetUid, isModeratorMode }) {
     return (
         <div className="relative">
             {/* Floating Controls - Fixed position to ensure they always stay on screen */}
-            <div className="fixed top-6 right-6 md:right-10 z-[100] flex items-center gap-3">
+            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-zinc-900/80 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl">
                 <button
                     onClick={sendTestOverlay}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-700 shadow-xl backdrop-blur-md"
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
                 >
                     <Send size={14} />
                     <span className="hidden sm:inline">Send Test</span>
                 </button>
+                <div className="w-px h-4 bg-zinc-700" />
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-xl shadow-purple-900/20 active:scale-95 text-white"
+                    className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
                 >
                     <Save size={18} />
                     {saving ? 'Saving...' : 'Save Changes'}
@@ -419,6 +425,11 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                     <option value="coin">Coin</option>
                                     <option value="notify">Notify</option>
                                     <option value="success">Success</option>
+                                    <option value="chime">Chime (Subtle)</option>
+                                    <option value="bloop">Bloop (Subtle)</option>
+                                    <option value="click">Click (Subtle)</option>
+                                    <option value="ping">Ping (Subtle)</option>
+                                    <option value="glass">Glass (Subtle)</option>
                                 </select>
                             </div>
                             <div className="space-y-2">
