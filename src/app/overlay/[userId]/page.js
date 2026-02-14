@@ -11,8 +11,8 @@ const SOUNDS = {
     pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
     ding: 'https://assets.mixkit.co/active_storage/sfx/2860/2860-preview.mp3',
     coin: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
-    notify: 'https://assets.mixkit.co/active_storage/sfx/2346/2346-preview.mp3',
-    success: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
+    notify: 'https://assets.mixkit.co/active_storage/sfx/1124/1124-preview.mp3', // Updated
+    success: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Updated
 };
 
 export default function OverlayPage() {

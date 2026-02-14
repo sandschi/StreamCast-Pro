@@ -26,8 +26,8 @@ const SOUNDS = {
     pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
     ding: 'https://assets.mixkit.co/active_storage/sfx/2860/2860-preview.mp3',
     coin: 'https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3',
-    notify: 'https://assets.mixkit.co/active_storage/sfx/2346/2346-preview.mp3',
-    success: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
+    notify: 'https://assets.mixkit.co/active_storage/sfx/1124/1124-preview.mp3', // Updated
+    success: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', // Updated
 };
 
 export default function Settings({ targetUid, isModeratorMode }) {
@@ -123,9 +123,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-transparent">
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between">
+        <div className="space-y-6">
+            {/* Header - Sticky relative to main page scroll */}
+            <div className="p-4 border border-zinc-800 bg-zinc-900/90 backdrop-blur-md rounded-2xl sticky top-0 z-50 flex items-center justify-between shadow-xl">
                 <div className="flex items-center gap-4">
                     <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
                         <SettingsIcon size={18} className="text-zinc-400" />
@@ -150,7 +150,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-10 scrollbar-hide">
+            <div className="space-y-10">
                 {/* Live Preview Section (Now Scrollable) */}
                 <div className="p-6 bg-zinc-950 rounded-2xl border border-zinc-800">
                     <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
