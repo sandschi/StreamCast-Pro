@@ -73,7 +73,7 @@ export default function OverlayPage() {
 
         const messageRef = doc(db, 'users', userId, 'active_message', 'current');
         const unsubscribeMessage = onSnapshot(messageRef, (doc) => {
-            if (doc.exists()) {
+            if (doc.exists() && Object.keys(doc.data()).length > 0) {
                 const data = doc.data();
 
                 // Play Sound if enabled and it's a new message
@@ -104,6 +104,8 @@ export default function OverlayPage() {
                         setActiveMessage(prev => (prev?.timestamp === data.timestamp ? null : prev));
                     }, duration * 1000);
                 }
+            } else {
+                setActiveMessage(null); // Clear overlay if doc is deleted or empty
             }
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };

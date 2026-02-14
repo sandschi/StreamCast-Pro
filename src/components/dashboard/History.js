@@ -11,6 +11,8 @@ import { addDoc, serverTimestamp } from 'firebase/firestore';
 export default function History({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
     const { user } = useAuth();
     const effectiveUid = targetUid || user?.uid;
+    const [history, setHistory] = useState([]); // Restored missing state
+
     // Listen for active message to show Hide button
     const [activeMessage, setActiveMessage] = useState(null);
     useEffect(() => {
@@ -25,7 +27,7 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
     const hideOverlay = async () => {
         if (!effectiveUid) return;
         try {
-            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), {});
+            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
         } catch (e) { console.error("Error hiding:", e); }
     };
 

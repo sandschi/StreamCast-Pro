@@ -158,7 +158,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
     const hideOverlay = async () => {
         if (!effectiveUid) return;
         try {
-            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), {});
+            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
         } catch (e) { console.error("Error hiding:", e); }
     };
 

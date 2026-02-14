@@ -145,7 +145,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     const hideOverlay = async () => {
         if (!effectiveUid) return;
         try {
-            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), {}); // Clear message
+            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current')); // Clear message
         } catch (e) {
             console.error("Error hiding overlay:", e);
         }
