@@ -155,46 +155,132 @@ export default function Settings({ targetUid, isModeratorMode }) {
     return (
         <div className="relative">
             {/* Floating Controls - Fixed position to ensure they always stay on screen */}
-            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-zinc-900/80 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl transition-all">
-                {/* Hide Button (Only for Mods/Owner when Active) */}
-                {activeMessage && (user?.uid === effectiveUid || isModeratorMode) && (
-                    <>
-                        <button
-                            onClick={hideOverlay}
-                            className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full text-xs font-bold transition-all border border-red-500/30 animate-in fade-in zoom-in duration-200"
-                        >
-                            <span className="hidden sm:inline">Hide</span>
-                            <span className="sm:hidden">X</span>
-                        </button>
-                        <div className="w-px h-4 bg-zinc-700" />
-                    </>
-                )}
+            {/* Fixed Control Center: Preview + Actions */}
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-3 w-full max-w-md pointer-events-none">
 
-                <button
-                    onClick={() => sendTestOverlay(false)}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
-                >
-                    <Send size={14} />
-                    <span className="hidden sm:inline">Test</span>
-                </button>
-                <button
-                    onClick={() => sendTestOverlay(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
-                    title="Send Permanent Message"
-                >
-                    <Send size={14} />
-                    <span className="hidden sm:inline">∞</span>
-                    <span className="sm:hidden">∞</span>
-                </button>
-                <div className="w-px h-4 bg-zinc-700" />
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
-                >
-                    <Save size={18} />
-                    {saving ? 'Saving...' : 'Save'}
-                </button>
+                {/* 1. Live Preview (Pointer Events Auto) */}
+                <div className="pointer-events-auto bg-zinc-900/90 backdrop-blur-xl p-3 rounded-2xl border border-zinc-700/50 shadow-2xl animate-in slide-in-from-top-4 duration-500 w-full max-w-[320px]">
+                    <div className="flex justify-between items-center mb-2 px-1">
+                        <h4 className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
+                            <Sparkles size={12} /> Live Preview
+                        </h4>
+                        <div className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full">
+                            Interactive
+                        </div>
+                    </div>
+
+                    <div
+                        className="relative w-full aspect-[2.5/1] bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-inner flex items-center justify-center p-4 bg-[radial-gradient(#333_1px,transparent_1px)] [background-size:16px_16px]"
+                        style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
+                    >
+                        {/* Preview Message Bubble (Centered in preview box, scaling down if needed) */}
+                        <div className="scale-90 origin-center flex items-center justify-center">
+                            <div
+                                className="flex items-start gap-3 w-max max-w-full"
+                                style={{
+                                    // For the preview BOX, we just center it nicely. The "settings.posX/Y" affects the REAL overlay.
+                                    // Here we just show what it LOOKS like.
+                                }}
+                            >
+                                {/* Avatar */}
+                                {settings.showAvatar && (
+                                    <img
+                                        src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
+                                        alt=""
+                                        className="rounded-full border-2 border-white/10 shadow-lg"
+                                        style={{
+                                            width: `${settings.avatarSize}px`,
+                                            height: `${settings.avatarSize}px`
+                                        }}
+                                    />
+                                )}
+
+                                {/* Message Content */}
+                                <div
+                                    className="flex flex-col gap-1 shadow-2xl"
+                                    style={{ borderRadius: `${settings.borderRadius}px` }}
+                                >
+                                    {/* Username */}
+                                    <div
+                                        className="px-3 py-1 font-bold truncate"
+                                        style={{
+                                            fontSize: `${settings.nameSize}px`,
+                                            color: settings.textColor,
+                                            backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.9)',
+                                            borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
+                                            borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                                        }}
+                                    >
+                                        PreviewUser
+                                    </div>
+
+                                    {/* Message Text */}
+                                    <div
+                                        className="px-3 py-2"
+                                        style={{
+                                            fontSize: `${settings.fontSize}px`,
+                                            color: settings.textColor,
+                                            backgroundColor: settings.bubbleStyle === 'glass' ? 'rgba(255,255,255,0.1)' :
+                                                settings.bubbleStyle === 'neon' ? 'rgba(0,0,0,0.95)' :
+                                                    settings.bubbleStyle === 'minimal' ? 'transparent' :
+                                                        'rgba(0,0,0,0.7)',
+                                            backdropFilter: settings.bubbleStyle === 'glass' ? 'blur(16px)' : 'none',
+                                            border: settings.bubbleStyle === 'neon' ? '1px solid rgb(147, 51, 234)' :
+                                                settings.bubbleStyle === 'glass' ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                                            boxShadow: settings.bubbleStyle === 'neon' ? '0 0 15px rgba(147, 51, 234, 0.6)' : 'none',
+                                            borderRadius: `0 0 ${settings.borderRadius}px ${settings.borderRadius}px`
+                                        }}
+                                    >
+                                        Settings looks good! ✨
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Floating Buttons (Pointer Events Auto) */}
+                <div className="pointer-events-auto flex items-center gap-3 bg-zinc-900/90 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl transition-all">
+                    {/* Hide Button (Only for Mods/Owner when Active) */}
+                    {activeMessage && (user?.uid === effectiveUid || isModeratorMode) && (
+                        <>
+                            <button
+                                onClick={hideOverlay}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full text-xs font-bold transition-all border border-red-500/30 animate-in fade-in zoom-in duration-200"
+                            >
+                                <span className="hidden sm:inline">Hide</span>
+                                <span className="sm:hidden">X</span>
+                            </button>
+                            <div className="w-px h-4 bg-zinc-700" />
+                        </>
+                    )}
+
+                    <button
+                        onClick={() => sendTestOverlay(false)}
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
+                    >
+                        <Send size={14} />
+                        <span className="hidden sm:inline">Test</span>
+                    </button>
+                    <button
+                        onClick={() => sendTestOverlay(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
+                        title="Send Permanent Message"
+                    >
+                        <Send size={14} />
+                        <span className="hidden sm:inline">Send ∞</span>
+                        <span className="sm:hidden">∞</span>
+                    </button>
+                    <div className="w-px h-4 bg-zinc-700" />
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
+                    >
+                        <Save size={18} />
+                        {saving ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
             </div>
 
             {/* Header Title (Standard Flow) */}
@@ -206,7 +292,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-8">
+            <div className="flex flex-col lg:flex-row gap-8 pt-48">
                 {/* Visual Settings Column */}
                 <div className="flex-1 space-y-10">
 
@@ -431,89 +517,6 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                         )}
                     </section>
-                </div>
-
-                {/* Floating Preview Sidebar */}
-                <div className="lg:w-80 xl:w-96 flex-shrink-0">
-                    <div className="sticky top-6 space-y-4">
-                        <div className="p-4 bg-zinc-900/50 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
-                            <h4 className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Sparkles size={14} /> Live Preview</span>
-                                <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">Interactive</span>
-                            </h4>
-                            <div
-                                className="relative w-full aspect-[9/16] max-h-[500px] bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-inner group"
-                                style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
-                            >
-                                {/* Grid Pattern */}
-                                <div className="absolute inset-0 opacity-20 pointer-events-none group-hover:opacity-30 transition-opacity" style={{ backgroundImage: 'linear-gradient(to right, #333 1px, transparent 1px), linear-gradient(to bottom, #333 1px, transparent 1px)', backgroundSize: '10% 10%' }} />
-
-                                {/* Preview Message Bubble */}
-                                <div
-                                    className="absolute flex items-start gap-3 w-max max-w-[90%]"
-                                    style={{
-                                        left: `${settings.posX}%`,
-                                        top: `${settings.posY}%`,
-                                        transform: 'translate(-50%, -50%)',
-                                        transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                                    }}
-                                >
-                                    {/* Avatar */}
-                                    {settings.showAvatar && (
-                                        <img
-                                            src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
-                                            alt=""
-                                            className="rounded-full border-2 border-white/10 shadow-lg"
-                                            style={{
-                                                width: `${settings.avatarSize}px`,
-                                                height: `${settings.avatarSize}px`
-                                            }}
-                                        />
-                                    )}
-
-                                    {/* Message Content */}
-                                    <div
-                                        className="flex flex-col gap-1 shadow-2xl"
-                                        style={{ borderRadius: `${settings.borderRadius}px` }}
-                                    >
-                                        {/* Username */}
-                                        <div
-                                            className="px-3 py-1 font-bold truncate"
-                                            style={{
-                                                fontSize: `${settings.nameSize}px`,
-                                                color: settings.textColor,
-                                                backgroundColor: settings.bubbleStyle === 'minimal' ? 'transparent' : 'rgba(147, 51, 234, 0.9)',
-                                                borderRadius: `${settings.borderRadius}px ${settings.borderRadius}px 0 0`,
-                                                borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                                            }}
-                                        >
-                                            PreviewUser
-                                        </div>
-
-                                        {/* Message Text */}
-                                        <div
-                                            className="px-3 py-2"
-                                            style={{
-                                                fontSize: `${settings.fontSize}px`,
-                                                color: settings.textColor,
-                                                backgroundColor: settings.bubbleStyle === 'glass' ? 'rgba(255,255,255,0.1)' :
-                                                    settings.bubbleStyle === 'neon' ? 'rgba(0,0,0,0.95)' :
-                                                        settings.bubbleStyle === 'minimal' ? 'transparent' :
-                                                            'rgba(0,0,0,0.7)',
-                                                backdropFilter: settings.bubbleStyle === 'glass' ? 'blur(16px)' : 'none',
-                                                border: settings.bubbleStyle === 'neon' ? '1px solid rgb(147, 51, 234)' :
-                                                    settings.bubbleStyle === 'glass' ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                                                boxShadow: settings.bubbleStyle === 'neon' ? '0 0 15px rgba(147, 51, 234, 0.6)' : 'none',
-                                                borderRadius: `0 0 ${settings.borderRadius}px ${settings.borderRadius}px`
-                                            }}
-                                        >
-                                            Settings looks good! ✨
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

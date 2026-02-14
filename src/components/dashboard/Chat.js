@@ -314,7 +314,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                                         className="p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20"
                                         title="Show Permanently (∞)"
                                     >
-                                        <span className="text-[10px] font-bold">∞</span>
+                                        <span className="text-[10px] font-bold">Send ∞</span>
                                     </button>
                                 )}
                                 <button
