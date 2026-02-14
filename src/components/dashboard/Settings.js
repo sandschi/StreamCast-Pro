@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { doc, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import {
     Settings as SettingsIcon,
     Save,

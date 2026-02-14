@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
@@ -33,14 +33,25 @@ import Link from 'next/link';
 
 function DashboardContent() {
     const { user, twitchToken, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
-    const [activeTab, setActiveTab] = useState('chat');
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // URL-based Tab State
+    const activeTab = searchParams.get('tab') || 'chat';
+    const hostParam = searchParams.get('host');
+
+    // Helper to update URL without losing other params (like host)
+    const setActiveTab = (tab) => {
+        const params = new URLSearchParams(searchParams);
+        params.set('tab', tab);
+        router.push(`?${params.toString()}`);
+    };
+
     const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
     const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
     const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
-    const searchParams = useSearchParams();
-    const hostParam = searchParams.get('host');
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
