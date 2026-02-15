@@ -21,7 +21,7 @@ export default function KaraFun({ targetUid, userSettings }) {
 
     const fetchQueue = async () => {
         if (!partyId) {
-            setError("No Party ID configured. Go to Settings to set it up.");
+            setError("No Party ID configured. Enter your Party ID above to start tracking.");
             setLoading(false);
             return;
         }

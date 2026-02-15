@@ -151,23 +151,27 @@ function DashboardContent() {
             heartbeatInterval = setInterval(updatePresence, 30000); // 30s heartbeat
         }
 
-        // NEW: Load User Settings (for dynamic sidebar features)
-        let unsubscribeSettings = () => { };
-        if (targetUid) {
-            const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
-            unsubscribeSettings = onSnapshot(settingsRef, (doc) => {
-                if (doc.exists()) setUserSettings(doc.data());
-            });
-        }
-
         return () => {
             ignore = true;
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
-            unsubscribeSettings();
         };
     }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin, targetUid]);
+
+    // NEW Stable Settings Listener
+    useEffect(() => {
+        if (!targetUid) return;
+        const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
+        const unsubscribe = onSnapshot(settingsRef, (doc) => {
+            if (doc.exists()) {
+                setUserSettings(doc.data());
+            } else {
+                setUserSettings({ karafunEnabled: false });
+            }
+        });
+        return () => unsubscribe();
+    }, [targetUid]);
 
     useEffect(() => {
         if (copyState) {
@@ -264,7 +268,7 @@ function DashboardContent() {
                                 </button>
                             )}
 
-                            {!!userSettings?.karafunEnabled && (
+                            {(userRole === 'broadcaster' || isMasterAdmin || userSettings?.karafunEnabled) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
