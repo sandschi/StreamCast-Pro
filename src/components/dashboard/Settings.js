@@ -295,9 +295,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide mt-10 space-y-10 pb-20">
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide mt-36 space-y-12 pb-32">
                 {/* Visual Settings Column */}
-                <div className="space-y-10">
+                <div className="space-y-12">
 
                     {/* 1. Identity */}
                     <section className="space-y-4">
@@ -541,7 +541,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </button>
                         </div>
                         {settings.karafunEnabled && (
-                            <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                            <div className="mt-6 space-y-4 animate-in slide-in-from-top-2 duration-300 bg-zinc-900/40 p-6 rounded-2xl border border-white/5">
                                 <label className="text-xs font-bold text-zinc-400 uppercase">KaraFun Party ID</label>
                                 <input
                                     type="text"

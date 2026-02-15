@@ -54,7 +54,7 @@ function DashboardContent() {
     const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
-    const [userSettings, setUserSettings] = useState(null);
+    const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -264,7 +264,7 @@ function DashboardContent() {
                                 </button>
                             )}
 
-                            {((userRole === 'broadcaster' || userRole === 'mod' || isMasterAdmin) && userSettings?.karafunEnabled) && (
+                            {(userSettings?.karafunEnabled && (userRole === 'broadcaster' || userRole === 'mod' || isMasterAdmin)) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
