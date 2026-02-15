@@ -19,29 +19,6 @@ export default function KaraFun({ targetUid, userSettings }) {
         setTempPartyId(userSettings?.karafunPartyId || '');
     }, [userSettings?.karafunPartyId]);
 
-    const fetchQueue = async () => {
-        if (!partyId) {
-            setError("No Party ID configured. Enter your Party ID above to start tracking.");
-            setLoading(false);
-            return;
-        }
-
-        try {
-            const res = await fetch(`/api/karafun/queue?partyId=${partyId}`);
-            if (!res.ok) throw new Error("Failed to fetch queue data");
-
-            const data = await res.json();
-            setQueueData(data);
-            setLastUpdated(new Date());
-            setError(null);
-        } catch (err) {
-            console.error(err);
-            setError("Could not connect to KaraFun. Check your Party ID.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleSavePartyId = async () => {
         if (!targetUid || !tempPartyId) return;
         setIsSavingId(true);
@@ -57,12 +34,126 @@ export default function KaraFun({ targetUid, userSettings }) {
     };
 
     useEffect(() => {
-        if (partyId) {
-            fetchQueue();
-            const interval = setInterval(fetchQueue, 30000); // Poll every 30s
-            return () => clearInterval(interval);
-        }
-    }, [partyId]);
+        if (!partyId || !userSettings?.karafunEnabled) return;
+
+        setLoading(true);
+        let ws = null;
+        let reconnectTimeout = null;
+
+        const connect = () => {
+            try {
+                // KaraFun uses kcpj~v2 subprotocol for JSON over WebSocket
+                // This bypasses the need for a backend scraper and provides real-time updates
+                ws = new WebSocket('wss://www.karafun.com/remote/', ['kcpj~v2']);
+
+                ws.onopen = () => {
+                    console.log('KaraFun Sync: Connected to', partyId);
+                    setError(null);
+
+                    // Handshake: Identify as a guest for this channel
+                    ws.send(JSON.stringify({
+                        id: 1,
+                        type: "auth.ProcessRemoteLoginRequest",
+                        payload: { channel: partyId }
+                    }));
+
+                    // Request initial status and queue
+                    ws.send(JSON.stringify({
+                        id: 2,
+                        type: "remote.StatusRequest",
+                        payload: {}
+                    }));
+                    ws.send(JSON.stringify({
+                        id: 3,
+                        type: "remote.QueueRequest",
+                        payload: {}
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        // Handle server-side pings to keep connection alive
+                        if (data.type === 'core.PingRequest') {
+                            ws.send(JSON.stringify({
+                                id: data.id,
+                                type: "core.PingResponse",
+                                payload: {}
+                            }));
+                            return;
+                        }
+
+                        // Update queue data
+                        if (data.type === 'remote.QueueEvent' || data.type === 'remote.QueueResponse') {
+                            const items = data.payload.queue?.items || [];
+                            const transformed = items.map(item => ({
+                                title: item.song?.title || item.quiz?.title || 'Unknown',
+                                artist: item.song?.artist || '',
+                                singer: item.options?.singer || ''
+                            }));
+
+                            setQueueData(prev => ({
+                                ...prev,
+                                upcoming: transformed,
+                                timestamp: Date.now()
+                            }));
+                            setLastUpdated(new Date());
+                            setLoading(false);
+                            setError(null);
+                        }
+
+                        // Update current song status
+                        if (data.type === 'remote.StatusEvent' || data.type === 'remote.StatusResponse') {
+                            const current = data.payload.status?.current;
+                            if (current) {
+                                setQueueData(prev => ({
+                                    ...prev,
+                                    currentSong: {
+                                        title: current.song?.title || current.quiz?.title || 'Unknown',
+                                        artist: current.song?.artist || '',
+                                        singer: current.options?.singer || ''
+                                    }
+                                }));
+                            } else {
+                                setQueueData(prev => ({ ...prev, currentSong: null }));
+                            }
+                            setLoading(false);
+                            setError(null);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing KaraFun message:', e);
+                    }
+                };
+
+                ws.onclose = (e) => {
+                    console.log('KaraFun Sync: Disconnected', e.code, e.reason);
+                    if (userSettings?.karafunEnabled) {
+                        reconnectTimeout = setTimeout(connect, 5000); // Retry every 5s
+                    }
+                };
+
+                ws.onerror = (err) => {
+                    console.error('KaraFun Sync Error:', err);
+                    setError("Connection intermittent. Retrying...");
+                };
+
+            } catch (err) {
+                console.error('WebSocket creation error:', err);
+                setError("Failed to initialize sync.");
+            }
+        };
+
+        connect();
+
+        return () => {
+            if (ws) {
+                ws.onclose = null; // Prevent reconnect on intentional close
+                ws.close();
+            }
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        };
+    }, [partyId, userSettings?.karafunEnabled]);
 
     if (!userSettings?.karafunEnabled) {
         return (
