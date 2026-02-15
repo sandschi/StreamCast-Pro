@@ -236,7 +236,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
     };
 
     return (
-        <div className="flex flex-col h-full bg-transparent relative">
+        <div className="flex flex-col flex-1 min-h-0 bg-transparent relative">
             {/* Hide Button (Floating) */}
             {activeMessage && (userRole === 'broadcaster' || userRole === 'mod') && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
