@@ -156,7 +156,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="relative">
+        <div className="relative flex flex-col h-full overflow-hidden">
             {/* Floating Controls - Fixed position to ensure they always stay on screen */}
             {/* Fixed Control Center: Preview + Actions */}
             <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-3 w-full max-w-md pointer-events-none">
@@ -295,9 +295,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-8 pt-48">
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide mt-10 space-y-10 pb-20">
                 {/* Visual Settings Column */}
-                <div className="flex-1 space-y-10">
+                <div className="space-y-10">
 
                     {/* 1. Identity */}
                     <section className="space-y-4">
@@ -523,7 +523,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 </div>
 
                 {/* KaraFun Integration */}
-                <div className="flex-1 space-y-10">
+                <div className="space-y-10 border-t border-zinc-800 pt-10">
                     <section className="space-y-4">
                         <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
                             <Music size={14} /> KaraFun Integration

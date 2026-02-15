@@ -264,7 +264,7 @@ function DashboardContent() {
                                 </button>
                             )}
 
-                            {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
+                            {((userRole === 'broadcaster' || userRole === 'mod' || isMasterAdmin) && userSettings?.karafunEnabled) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
