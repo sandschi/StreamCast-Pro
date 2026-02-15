@@ -14,7 +14,8 @@ import {
     Move,
     Sparkles,
     Send,
-    Volume2
+    Volume2,
+    Music
 } from 'lucide-react';
 
 const FONTS = [
@@ -56,6 +57,8 @@ export default function Settings({ targetUid, isModeratorMode }) {
         soundEnabled: false,
         soundType: 'pop',
         soundVolume: 0.5,
+        karafunEnabled: false,
+        karafunPartyId: '',
     });
 
     const [twitchUsername, setTwitchUsername] = useState('');
@@ -514,6 +517,40 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                         className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
                                     />
                                 </div>
+                            </div>
+                        )}
+                    </section>
+                </div>
+
+                {/* KaraFun Integration */}
+                <div className="flex-1 space-y-10">
+                    <section className="space-y-4">
+                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                            <Music size={14} /> KaraFun Integration
+                        </h4>
+                        <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
+                            <div className="space-y-1">
+                                <p className="text-sm font-bold text-zinc-200">Enable KaraFun</p>
+                                <p className="text-xs text-zinc-500 italic">Show song queue and current song in the sidebar.</p>
+                            </div>
+                            <button
+                                onClick={() => updateSetting('karafunEnabled', !settings.karafunEnabled)}
+                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                            >
+                                <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+                        {settings.karafunEnabled && (
+                            <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                                <label className="text-xs font-bold text-zinc-400 uppercase">KaraFun Party ID</label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter Party ID (e.g. 123456)"
+                                    value={settings.karafunPartyId || ''}
+                                    onChange={(e) => updateSetting('karafunPartyId', e.target.value)}
+                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
+                                />
+                                <p className="text-[10px] text-zinc-600 italic">This ID can be found on your KaraFun remote control page URL.</p>
                             </div>
                         )}
                     </section>

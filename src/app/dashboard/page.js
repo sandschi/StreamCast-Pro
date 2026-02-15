@@ -24,10 +24,12 @@ import {
     Check,
     Link as LinkIcon,
     Users,
-    Clock
+    Clock,
+    Music
 } from 'lucide-react';
 import UsersTab from '@/components/dashboard/Users';
 import Broadcasters from '@/components/dashboard/Broadcasters';
+import KaraFunTab from '@/components/dashboard/KaraFun';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -52,6 +54,7 @@ function DashboardContent() {
     const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
+    const [userSettings, setUserSettings] = useState(null);
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -148,13 +151,23 @@ function DashboardContent() {
             heartbeatInterval = setInterval(updatePresence, 30000); // 30s heartbeat
         }
 
+        // NEW: Load User Settings (for dynamic sidebar features)
+        let unsubscribeSettings = () => { };
+        if (targetUid) {
+            const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
+            unsubscribeSettings = onSnapshot(settingsRef, (doc) => {
+                if (doc.exists()) setUserSettings(doc.data());
+            });
+        }
+
         return () => {
             ignore = true;
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
+            unsubscribeSettings();
         };
-    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin]);
+    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin, targetUid]);
 
     useEffect(() => {
         if (copyState) {
@@ -251,6 +264,16 @@ function DashboardContent() {
                                 </button>
                             )}
 
+                            {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
+                                <button
+                                    onClick={() => setActiveTab('karafun')}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                >
+                                    <Music size={20} />
+                                    <span className="font-medium">KaraFun</span>
+                                </button>
+                            )}
+
                             {(userRole === 'broadcaster' || isMasterAdmin) && (
                                 <button
                                     onClick={() => setActiveTab('settings')}
@@ -343,6 +366,7 @@ function DashboardContent() {
                                 {activeTab === 'chat' && 'Moderation Dashboard'}
                                 {activeTab === 'history' && 'Message History'}
                                 {activeTab === 'users' && 'Manage Users'}
+                                {activeTab === 'karafun' && 'KaraFun Queue'}
                                 {activeTab === 'settings' && 'Overlay Customization'}
                                 {activeTab === 'broadcasters' && 'Manage Broadcasters'}
                             </h2>
@@ -350,6 +374,7 @@ function DashboardContent() {
                                 {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
                                 {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
                                 {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
+                                {activeTab === 'karafun' && 'Live song queue from your KaraFun party.'}
                                 {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
                                 {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
                             </p>
@@ -453,6 +478,7 @@ function DashboardContent() {
                             </div>
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
+                            {activeTab === 'karafun' && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
                             {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
                             {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
                         </>
