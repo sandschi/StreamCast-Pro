@@ -210,7 +210,7 @@ function DashboardContent() {
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-zinc-100 flex font-sans">
+        <div className="h-screen bg-zinc-950 text-zinc-100 flex font-sans overflow-hidden">
             {/* Sidebar */}
             <aside className="w-20 md:w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col p-4">
                 <div className="flex items-center gap-3 px-2 mb-10">
@@ -335,7 +335,7 @@ function DashboardContent() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+            <main className="flex-1 p-6 md:p-10 flex flex-col min-h-0">
                 {hasVerifiedAccess && (
                     <header className="mb-8 flex justify-between items-start">
                         <div>

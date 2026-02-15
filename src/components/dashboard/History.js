@@ -13,6 +13,23 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
     const effectiveUid = targetUid || user?.uid;
     const [history, setHistory] = useState([]); // Restored missing state
 
+    useEffect(() => {
+        if (!effectiveUid) return;
+
+        const historyRef = collection(db, 'users', effectiveUid, 'history');
+        const q = query(historyRef, orderBy('timestamp', 'desc'), limit(50));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const messages = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setHistory(messages);
+        });
+
+        return () => unsubscribe();
+    }, [effectiveUid]);
+
     // Listen for active message to show Hide button
     const [activeMessage, setActiveMessage] = useState(null);
     useEffect(() => {

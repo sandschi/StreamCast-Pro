@@ -22,8 +22,9 @@ const SOUNDS = {
 
 export default function OverlayPage() {
     const { userId } = useParams();
-    const [activeMessage, setActiveMessage] = useState(null);
-    const filters = useRef({ processedIds: new Set() });
+    const [messageQueue, setMessageQueue] = useState([]);
+    const [processedIds] = useState(() => new Set());
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -76,45 +77,78 @@ export default function OverlayPage() {
             if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() }));
         });
 
-        const messageRef = doc(db, 'users', userId, 'active_message', 'current');
-        const unsubscribeMessage = onSnapshot(messageRef, (doc) => {
+        const activeMsgRef = doc(db, 'users', userId, 'active_message', 'current');
+        const unsubscribeMessage = onSnapshot(activeMsgRef, (doc) => {
             if (doc.exists() && Object.keys(doc.data()).length > 0) {
                 const data = doc.data();
 
-                // Play Sound if enabled and it's a new message
-                if (effectiveSettings.soundEnabled && data.id && !filters.current.processedIds.has(data.id)) {
-                    try {
-                        const audio = new Audio(SOUNDS[effectiveSettings.soundType || 'pop']);
-                        audio.volume = effectiveSettings.soundVolume !== undefined ? effectiveSettings.soundVolume : 0.5;
-                        audio.play().catch(e => console.warn('Audio play failed:', e));
-                        filters.current.processedIds.add(data.id);
-
-                        // Cleanup old IDs
-                        if (filters.current.processedIds.size > 50) {
-                            const it = filters.current.processedIds.values();
-                            filters.current.processedIds.delete(it.next().value);
-                        }
-                    } catch (e) {
-                        console.error("Sound Error:", e);
-                    }
+                // If it's a new ID, add to queue
+                if (data.id && !processedIds.has(data.id)) {
+                    processedIds.add(data.id);
+                    setMessageQueue(prev => [...prev, data]);
+                } else if (!data.id) {
+                    // Fallback for messages without IDs (testing)
+                    setMessageQueue(prev => [...prev, data]);
                 }
-
-                setActiveMessage(data);
-
-                // Determine duration: per-message override > global setting
-                const duration = data.duration !== undefined ? data.duration : effectiveSettings.displayDuration;
-
-                if (duration > 0) {
-                    setTimeout(() => {
-                        setActiveMessage(prev => (prev?.timestamp === data.timestamp ? null : prev));
-                    }, duration * 1000);
-                }
-            } else {
-                setActiveMessage(null); // Clear overlay if doc is deleted or empty
             }
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
-    }, [userId, effectiveSettings.displayDuration, effectiveSettings.soundEnabled, effectiveSettings.soundType, effectiveSettings.soundVolume]);
+    }, [userId, processedIds]);
+
+    // 3. Queue Processor
+    useEffect(() => {
+        if (messageQueue.length > 0 && !activeMessage && !isProcessing) {
+            processNextMessage();
+        }
+    }, [messageQueue, activeMessage, isProcessing]);
+
+    const processNextMessage = async () => {
+        setIsProcessing(true);
+        const nextMsg = messageQueue[0];
+
+        // Play Sound
+        if (settings.soundEnabled) {
+            try {
+                const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
+                audio.volume = settings.soundVolume !== undefined ? settings.soundVolume : 0.5;
+                audio.play().catch(e => console.warn('Audio play failed:', e));
+            } catch (e) {
+                console.error("Sound Error:", e);
+            }
+        }
+
+        setActiveMessage(nextMsg);
+        setMessageQueue(prev => prev.slice(1));
+
+        const duration = nextMsg.duration !== undefined ? nextMsg.duration : settings.displayDuration;
+
+        if (duration > 0) {
+            setTimeout(() => {
+                setActiveMessage(null);
+                setIsProcessing(false);
+            }, duration * 1000 + 500); // Add a small buffer for animation
+        } else {
+            // Permanent message - stays until NEXT message arrives in queue
+            // The useEffect queue processor will handle this:
+            // if we have a queue and no active message, it starts.
+            // But for permanent messages, we stay active.
+            // So we need a way to "interrupt" the permanent message.
+        }
+    };
+
+    // Interrupt permanent messages if new ones arrive
+    useEffect(() => {
+        if (activeMessage && (activeMessage.duration === -1 || activeMessage.duration === undefined) && messageQueue.length > 0) {
+            // If the current message is permanent (or standard without a timeout set yet) 
+            // and something else is waiting, clear it.
+            // We only do this if it's been showing for at least 3 seconds to avoid flashing.
+            const timer = setTimeout(() => {
+                setActiveMessage(null);
+                setIsProcessing(false);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [messageQueue.length, activeMessage]);
 
     const getAnimationVariants = () => {
         const isRightPart = effectiveSettings.posX > 50;
