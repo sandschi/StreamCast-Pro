@@ -22,6 +22,7 @@ export const metadata = {
 };
 
 import { AuthProvider } from "@/context/AuthContext";
+import { PostHogProvider } from "@/providers/PostHogProvider";
 
 export default function RootLayout({ children }) {
   return (
@@ -29,9 +30,11 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <PostHogProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </PostHogProvider>
         <SpeedInsights />
       </body>
     </html>
