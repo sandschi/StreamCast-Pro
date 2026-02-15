@@ -40,13 +40,36 @@ export default function KaraFun({ targetUid, userSettings }) {
         let ws = null;
         let reconnectTimeout = null;
 
-        const connect = () => {
+        const connect = async () => {
             try {
-                // KaraFun uses kcpj~v2 subprotocol for JSON over WebSocket
-                // This bypasses the need for a backend scraper and provides real-time updates
-                ws = new WebSocket('wss://www.karafun.com/remote/', ['kcpj~v2']);
+                // Discovery Phase: Get the specific KCS URL for this session
+                // We need to bypass potential CORS/Forbidden issues if possible, 
+                // but usually the remote client does this via a direct fetch.
+                let baseUrl = `https://www.karafun.com/${partyId}/`;
+                try {
+                    const response = await fetch(`${baseUrl}?type=session_info&hash=`, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.kcs_url) {
+                            console.log('KaraFun Sync: Discovered KCS URL:', data.kcs_url);
+                            ws = new WebSocket(data.kcs_url, ['kcpj~v2+emuping']);
+                        }
+                    }
+                } catch (discoveryError) {
+                    console.warn('KaraFun Sync: Discovery failed, falling back to default endpoint', discoveryError);
+                }
+
+                // Fallback to default if discovery didn't create a socket
+                if (!ws) {
+                    ws = new WebSocket('wss://www.karafun.com/remote/', ['kcpj~v2+emuping']);
+                }
 
                 ws.onopen = () => {
+                    if (!ws) return; // Guard against race conditions during reconnect
                     console.log('KaraFun Sync: Connected to', partyId);
                     setError(null);
 
@@ -71,14 +94,15 @@ export default function KaraFun({ targetUid, userSettings }) {
                 };
 
                 ws.onmessage = (event) => {
+                    if (!ws) return;
                     try {
                         const data = JSON.parse(event.data);
 
                         // Handle server-side pings to keep connection alive
-                        if (data.type === 'core.PingRequest') {
+                        if (data.type === 'core.PingRequest' || data.type === 'auth.ProcessRemoteLoginRequest') {
                             ws.send(JSON.stringify({
                                 id: data.id,
-                                type: "core.PingResponse",
+                                type: data.type === 'core.PingRequest' ? "core.PingResponse" : "auth.ProcessRemoteLoginResponse",
                                 payload: {}
                             }));
                             return;
@@ -128,8 +152,9 @@ export default function KaraFun({ targetUid, userSettings }) {
 
                 ws.onclose = (e) => {
                     console.log('KaraFun Sync: Disconnected', e.code, e.reason);
+                    ws = null;
                     if (userSettings?.karafunEnabled) {
-                        reconnectTimeout = setTimeout(connect, 5000); // Retry every 5s
+                        reconnectTimeout = setTimeout(() => connect(), 5000); // Retry every 5s
                     }
                 };
 
