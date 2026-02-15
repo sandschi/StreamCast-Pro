@@ -540,19 +540,6 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                 <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
                             </button>
                         </div>
-                        {settings.karafunEnabled && (
-                            <div className="mt-6 space-y-4 animate-in slide-in-from-top-2 duration-300 bg-zinc-900/40 p-6 rounded-2xl border border-white/5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase">KaraFun Party ID</label>
-                                <input
-                                    type="text"
-                                    placeholder="Enter Party ID (e.g. 123456)"
-                                    value={settings.karafunPartyId || ''}
-                                    onChange={(e) => updateSetting('karafunPartyId', e.target.value)}
-                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
-                                />
-                                <p className="text-[10px] text-zinc-600 italic">This ID can be found on your KaraFun remote control page URL.</p>
-                            </div>
-                        )}
                     </section>
                 </div>
             </div>

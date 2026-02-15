@@ -1,15 +1,23 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Music, RefreshCw, AlertCircle, Play, ListMusic, User } from 'lucide-react';
+import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save } from 'lucide-react';
+import { db } from '@/lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 export default function KaraFun({ targetUid, userSettings }) {
     const [queueData, setQueueData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
+    const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
+    const [isSavingId, setIsSavingId] = useState(false);
 
     const partyId = userSettings?.karafunPartyId;
+
+    useEffect(() => {
+        setTempPartyId(userSettings?.karafunPartyId || '');
+    }, [userSettings?.karafunPartyId]);
 
     const fetchQueue = async () => {
         if (!partyId) {
@@ -34,10 +42,26 @@ export default function KaraFun({ targetUid, userSettings }) {
         }
     };
 
+    const handleSavePartyId = async () => {
+        if (!targetUid || !tempPartyId) return;
+        setIsSavingId(true);
+        try {
+            const configRef = doc(db, 'users', targetUid, 'settings', 'config');
+            await updateDoc(configRef, { karafunPartyId: tempPartyId });
+        } catch (err) {
+            console.error("Error saving Party ID:", err);
+            setError("Failed to save Party ID. Check permissions.");
+        } finally {
+            setIsSavingId(false);
+        }
+    };
+
     useEffect(() => {
-        fetchQueue();
-        const interval = setInterval(fetchQueue, 30000); // Poll every 30s
-        return () => clearInterval(interval);
+        if (partyId) {
+            fetchQueue();
+            const interval = setInterval(fetchQueue, 30000); // Poll every 30s
+            return () => clearInterval(interval);
+        }
     }, [partyId]);
 
     if (!userSettings?.karafunEnabled) {
@@ -50,28 +74,61 @@ export default function KaraFun({ targetUid, userSettings }) {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Header / Info */}
-            <div className="flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
-                <div className="flex items-center gap-3">
-                    <div className="bg-indigo-500/20 p-2 rounded-lg">
-                        <Music className="text-indigo-400" size={20} />
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl">
+            {/* ID CONFIGURATION SECTION */}
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="bg-purple-500/20 p-2 rounded-lg">
+                        <Music className="text-purple-400" size={18} />
                     </div>
-                    <div>
-                        <h3 className="font-bold text-zinc-100">KaraFun Party: {partyId}</h3>
-                        <p className="text-xs text-zinc-500">
-                            {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Syncing...'}
-                        </p>
-                    </div>
+                    <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Party Configuration</h4>
                 </div>
-                <button
-                    onClick={() => { setLoading(true); fetchQueue(); }}
-                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400"
-                    title="Force Refresh"
-                >
-                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                </button>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                        type="text"
+                        placeholder="Enter KaraFun Party ID (e.g. 123456)"
+                        value={tempPartyId}
+                        onChange={(e) => setTempPartyId(e.target.value)}
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
+                    />
+                    <button
+                        onClick={handleSavePartyId}
+                        disabled={isSavingId || tempPartyId === partyId}
+                        className="px-6 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:hover:bg-purple-600 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                    >
+                        <Save size={18} />
+                        {isSavingId ? 'Saving...' : 'Save ID'}
+                    </button>
+                </div>
+                {!partyId && (
+                    <p className="text-xs text-zinc-500 italic">Enter your Party ID to start tracking the queue.</p>
+                )}
             </div>
+
+            {/* Header / Info (Only shown if ID is set) */}
+            {partyId && (
+                <div className="flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-indigo-500/20 p-2 rounded-lg">
+                            <Music className="text-indigo-400" size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-zinc-100">KaraFun Party: {partyId}</h3>
+                            <p className="text-xs text-zinc-500">
+                                {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Syncing...'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => { setLoading(true); fetchQueue(); }}
+                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400"
+                        title="Force Refresh"
+                    >
+                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
+            )}
 
             {error && (
                 <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-3 text-red-200 text-sm">
