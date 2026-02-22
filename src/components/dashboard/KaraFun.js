@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save } from 'lucide-react';
+import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save, Monitor } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
@@ -39,6 +39,16 @@ export default function KaraFun({ targetUid, userSettings }) {
             setError("Failed to save Party ID. Check permissions.");
         } finally {
             setIsSavingId(false);
+        }
+    };
+
+    const handleToggleSetting = async (field, value) => {
+        if (!targetUid) return;
+        try {
+            const configRef = doc(db, 'users', targetUid, 'settings', 'config');
+            await updateDoc(configRef, { [field]: value });
+        } catch (err) {
+            console.error(`Error saving ${field}:`, err);
         }
     };
 
@@ -181,6 +191,62 @@ export default function KaraFun({ targetUid, userSettings }) {
                 {!partyId && (
                     <p className="text-xs text-zinc-500 italic">Enter your Party ID to start tracking the queue.</p>
                 )}
+            </div>
+
+            {/* OVERLAY CONFIGURATION SECTION */}
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="bg-pink-500/20 p-2 rounded-lg">
+                        <Monitor className="text-pink-400" size={18} />
+                    </div>
+                    <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Overlay Settings</h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="flex items-center gap-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
+                        <div className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={userSettings?.karafunOverlayQueueEnabled || false}
+                                onChange={(e) => handleToggleSetting('karafunOverlayQueueEnabled', e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                        </div>
+                        <span className="font-medium text-zinc-300">Show Queue (Next 5 Songs)</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
+                        <div className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={userSettings?.karafunOverlayNowPlayingEnabled || false}
+                                onChange={(e) => handleToggleSetting('karafunOverlayNowPlayingEnabled', e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                        </div>
+                        <span className="font-medium text-zinc-300">Show Now Playing Popup</span>
+                    </label>
+
+                    <div className="md:col-span-2 bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-center justify-between">
+                        <span className="font-medium text-zinc-300">Overlay Theme</span>
+                        <select
+                            className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 outline-none focus:border-pink-500 transition-colors cursor-pointer"
+                            value={userSettings?.karafunOverlayTheme || 'classic'}
+                            onChange={(e) => handleToggleSetting('karafunOverlayTheme', e.target.value)}
+                        >
+                            <option value="classic">Classic</option>
+                            <option value="glass">Glass</option>
+                            <option value="neon">Neon</option>
+                            <option value="minimal">Minimal</option>
+                            <option value="cyberpunk">Cyberpunk</option>
+                            <option value="retro">Retro</option>
+                            <option value="comic">Comic</option>
+                            <option value="future">Future</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             {/* Header / Info (Only shown if ID is set) */}

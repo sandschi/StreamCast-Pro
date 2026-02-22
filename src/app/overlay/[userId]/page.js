@@ -6,6 +6,8 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'next/navigation';
+import io from 'socket.io-client';
+import { ListMusic, User, Play } from 'lucide-react';
 
 const SOUNDS = {
     pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
@@ -25,6 +27,12 @@ export default function OverlayPage() {
     const [messageQueue, setMessageQueue] = useState([]);
     const [processedIds] = useState(() => new Set());
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // KaraFun State
+    const [karafunQueue, setKarafunQueue] = useState([]);
+    const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
+    const [karafunPlayState, setKarafunPlayState] = useState('stop');
+    const [showNowPlaying, setShowNowPlaying] = useState(false);
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -149,6 +157,170 @@ export default function OverlayPage() {
             return () => clearTimeout(timer);
         }
     }, [messageQueue.length, activeMessage]);
+
+    // 4. KaraFun Integration
+    useEffect(() => {
+        if (!settings.karafunEnabled || (!settings.karafunOverlayQueueEnabled && !settings.karafunOverlayNowPlayingEnabled)) {
+            return;
+        }
+
+        const partyId = settings.karafunPartyId;
+        if (!partyId) return;
+
+        const suffix = Math.floor(1000 + Math.random() * 9000);
+        const loginName = `StreamCastOverlay${suffix}`;
+
+        const socket = io('https://www.karafun.com', {
+            query: { remote: `kf${partyId}` },
+            transports: ['polling', 'websocket'],
+            forceNew: true,
+            reconnection: true,
+        });
+
+        socket.on('connect', () => {
+            socket.emit('authenticate', {
+                login: loginName,
+                channel: partyId,
+                role: 'participant',
+                app: 'karafun',
+                socket_id: null,
+            }, null);
+        });
+
+        socket.on('queue', (items) => {
+            const transformed = (items || []).map(item => ({
+                title: item.title || 'Unknown',
+                artist: item.artist || '',
+                singer: item.singer || '',
+            })).slice(0, 5); // next 5 songs only
+            setKarafunQueue(transformed);
+        });
+
+        socket.on('status', (status) => {
+            const cur = status?.songPlaying || status?.current || null;
+            if (cur) {
+                setKarafunNowPlaying({
+                    title: cur.title || cur.song?.title || 'Unknown',
+                    artist: cur.artist || cur.song?.artist || '',
+                    singer: cur.singer || cur.singerName || cur.options?.singer || '',
+                });
+                setKarafunPlayState(status.state);
+            } else {
+                setKarafunNowPlaying((status?.state === 'infoscreen' || status?.state === 'stop') ? null : (prev => prev));
+                setKarafunPlayState(status?.state);
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled, settings.karafunPartyId]);
+
+    // Trigger Now Playing animation when a new song starts
+    useEffect(() => {
+        if (settings.karafunOverlayNowPlayingEnabled && karafunPlayState === 'playing' && karafunNowPlaying) {
+            setShowNowPlaying(true);
+            const timer = setTimeout(() => {
+                setShowNowPlaying(false);
+            }, 10000); // Show for 10 seconds
+            return () => clearTimeout(timer);
+        } else {
+            setShowNowPlaying(false);
+        }
+    }, [karafunNowPlaying?.title, karafunNowPlaying?.singer, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
+
+    const getKaraFunThemeStyles = () => {
+        const theme = settings.karafunOverlayTheme || 'classic';
+        const baseStyles = {
+            queueContainer: "absolute left-6 top-6 flex flex-col gap-3 w-80",
+            nowPlayingContainer: "absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2",
+        };
+
+        switch (theme) {
+            case 'cyberpunk':
+                return {
+                    ...baseStyles,
+                    card: "bg-black/90 border-2 border-[#00f0ff] p-4 text-[#00f0ff] shadow-[0_0_10px_#00f0ff,inset_0_0_10px_#00f0ff]",
+                    highlight: "bg-[#ff003c] text-white border-2 border-[#ff003c]",
+                    textPrimary: "font-black uppercase tracking-wider text-white",
+                    textSecondary: "text-[#00f0ff] font-bold text-sm",
+                    textTertiary: "text-zinc-400 text-xs",
+                };
+            case 'comic':
+                return {
+                    ...baseStyles,
+                    card: "bg-white border-4 border-black p-4 text-black shadow-[8px_8px_0_0_#000] rotate-[-1deg]",
+                    highlight: "bg-[#9146FF] text-white",
+                    textPrimary: "font-black uppercase text-2xl text-black",
+                    textSecondary: "font-bold text-black text-sm",
+                    textTertiary: "text-zinc-600 text-xs font-bold",
+                };
+            case 'retro':
+                return {
+                    ...baseStyles,
+                    card: "bg-black border-4 border-white p-4 shadow-[4px_4px_0_0_#000] font-mono",
+                    highlight: "bg-white text-black",
+                    textPrimary: "font-bold uppercase text-white",
+                    textSecondary: "text-zinc-300 text-sm",
+                    textTertiary: "text-zinc-500 text-xs",
+                };
+            case 'future':
+                return {
+                    ...baseStyles,
+                    card: "bg-[#0b1622]/85 backdrop-blur-md border border-[#1271ff]/40 p-4 shadow-[0_0_30px_rgba(18,113,255,0.2)]",
+                    highlight: "bg-[#1271ff]/20 border border-[#1271ff]",
+                    textPrimary: "font-black text-white",
+                    textSecondary: "text-[#1271ff] text-sm",
+                    textTertiary: "text-blue-300/60 text-xs",
+                };
+            case 'glass':
+                return {
+                    ...baseStyles,
+                    card: "bg-black/40 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
+                    highlight: "bg-white/10 border-white/40",
+                    textPrimary: "font-bold text-white",
+                    textSecondary: "text-zinc-300 text-sm",
+                    textTertiary: "text-zinc-400 text-xs",
+                };
+            case 'neon':
+                return {
+                    ...baseStyles,
+                    card: "bg-black/80 border border-white/10 p-4 shadow-[0_0_15px_#9146FF] rounded-xl",
+                    highlight: "bg-[#9146FF] shadow-[0_0_10px_#9146FF]",
+                    textPrimary: "font-black text-white",
+                    textSecondary: "text-[#d7b8ff] text-sm",
+                    textTertiary: "text-zinc-400 text-xs",
+                };
+            case 'minimal':
+                return {
+                    ...baseStyles,
+                    card: "bg-black/90 p-4 rounded-lg",
+                    highlight: "border-l-4 border-white pl-4",
+                    textPrimary: "font-medium text-white",
+                    textSecondary: "text-zinc-400 text-sm",
+                    textTertiary: "text-zinc-500 text-xs",
+                };
+            case 'bold':
+                return {
+                    ...baseStyles,
+                    card: "bg-black/95 border-4 border-white p-4",
+                    highlight: "bg-white text-black",
+                    textPrimary: "font-black text-white",
+                    textSecondary: "text-zinc-300 text-sm font-bold",
+                    textTertiary: "text-zinc-400 text-xs font-bold",
+                };
+            case 'classic':
+            default:
+                return {
+                    ...baseStyles,
+                    card: "bg-black/60 backdrop-blur-md border border-white/5 p-4 rounded-xl",
+                    highlight: "bg-white/10",
+                    textPrimary: "font-bold text-white",
+                    textSecondary: "text-zinc-300 text-sm",
+                    textTertiary: "text-zinc-400 text-xs",
+                };
+        }
+    };
 
     const getAnimationVariants = () => {
         const isRightPart = effectiveSettings.posX > 50;
@@ -420,6 +592,58 @@ export default function OverlayPage() {
                                         <img key={i} src={frag.url} alt={frag.name} className="h-[1.2em] inline-block align-middle select-none" />
                                 ))}
                             </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* KaraFun Overlays */}
+            {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                <div className={getKaraFunThemeStyles().queueContainer}>
+                    <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-500 z-0`}>
+                        <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
+                    </div>
+                    {karafunQueue.map((song, i) => {
+                        const isNext = i === 0;
+                        const theme = getKaraFunThemeStyles();
+                        return (
+                            <div key={i} className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}>
+                                {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
+                                <div className={theme.textPrimary}>{song.title}</div>
+                                <div className={theme.textSecondary}>{song.artist}</div>
+                                {song.singer && (
+                                    <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md w-max ${theme.textTertiary} bg-white/5`}>
+                                        <User size={12} /> {song.singer}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            <AnimatePresence>
+                {settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 50, scale: 0.9, transition: { duration: 0.5 } }}
+                        className={getKaraFunThemeStyles().nowPlayingContainer}
+                    >
+                        <div className="bg-green-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-[0_0_10px_#22c55e] mb-[-12px] relative z-10">
+                            Now Playing
+                        </div>
+                        <div className={`${getKaraFunThemeStyles().card} !pb-6 !pt-8 !px-8 min-w-[400px] text-center flex flex-col items-center gap-2`}>
+                            <h2 className={`${getKaraFunThemeStyles().textPrimary} text-4xl mb-1`}>{karafunNowPlaying.title}</h2>
+                            <p className={`${getKaraFunThemeStyles().textSecondary} text-xl`}>{karafunNowPlaying.artist}</p>
+                            {karafunNowPlaying.singer && (
+                                <div className="mt-4 bg-white/10 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
+                                    <User size={18} className="text-pink-400" />
+                                    <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white`}>
+                                        Sung by <span className="text-pink-400">{karafunNowPlaying.singer}</span>
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
