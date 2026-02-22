@@ -13,6 +13,14 @@ export default function KaraFun({ targetUid, userSettings }) {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
     const [isSavingId, setIsSavingId] = useState(false);
+    const [reconnectKey, setReconnectKey] = useState(0);
+
+    const handleReconnect = () => {
+        setQueueData(null);
+        setLastUpdated(null);
+        setError(null);
+        setReconnectKey(k => k + 1);
+    };
 
     const partyId = userSettings?.karafunPartyId;
 
@@ -131,7 +139,7 @@ export default function KaraFun({ targetUid, userSettings }) {
             console.log('KaraFun Sync: Cleaning up socket');
             socket.disconnect();
         };
-    }, [partyId, userSettings?.karafunEnabled]);
+    }, [partyId, userSettings?.karafunEnabled, reconnectKey]);
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -189,7 +197,16 @@ export default function KaraFun({ targetUid, userSettings }) {
                             </p>
                         </div>
                     </div>
-                    <div className={`w-2.5 h-2.5 rounded-full ${error ? 'bg-red-500' : lastUpdated ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} title={error ? 'Disconnected' : lastUpdated ? 'Connected' : 'Connecting...'} />
+                    <div className="flex items-center gap-3">
+                        <div className={`w-2.5 h-2.5 rounded-full ${error ? 'bg-red-500' : lastUpdated ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} title={error ? 'Disconnected' : lastUpdated ? 'Connected' : 'Connecting...'} />
+                        <button
+                            onClick={handleReconnect}
+                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+                            title="Force Reconnect"
+                        >
+                            <RefreshCw size={16} className={loading && !lastUpdated ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
                 </div>
             )}
 
