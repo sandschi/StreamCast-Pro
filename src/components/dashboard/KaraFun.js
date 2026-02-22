@@ -54,6 +54,15 @@ export default function KaraFun({ targetUid, userSettings }) {
         socket.on('connect', () => {
             console.log('KaraFun Sync: Connected to party', partyId);
             setError(null);
+
+            // KaraFun requires an authenticate event before it pushes any data
+            socket.emit('authenticate', {
+                login: 'StreamCastPro',
+                channel: partyId,
+                role: 'participant',
+                app: 'karafun',
+                socket_id: null,
+            }, null);
         });
 
         socket.on('connect_error', (err) => {
@@ -66,12 +75,13 @@ export default function KaraFun({ targetUid, userSettings }) {
         });
 
         // Real-time queue updates
+        // Real queue items have top-level: { title, artist, singer, songId, queueId, status }
         socket.on('queue', (items) => {
             console.log('KaraFun Sync: Queue received', items);
             const transformed = (items || []).map(item => ({
-                title: item.title || item.song?.title || 'Unknown',
-                artist: item.artist || item.song?.artist || '',
-                singer: item.singerName || item.options?.singer || '',
+                title: item.title || 'Unknown',
+                artist: item.artist || '',
+                singer: item.singer || '',
             }));
             setQueueData(prev => ({
                 ...prev,
