@@ -27,6 +27,7 @@ export default function OverlayPage() {
     const [messageQueue, setMessageQueue] = useState([]);
     const [processedIds] = useState(() => new Set());
     const [isProcessing, setIsProcessing] = useState(false);
+    const [activeMessage, setActiveMessage] = useState(null);
 
     // KaraFun State
     const [karafunQueue, setKarafunQueue] = useState([]);
