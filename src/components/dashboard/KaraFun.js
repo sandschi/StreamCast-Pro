@@ -100,26 +100,28 @@ export default function KaraFun({ targetUid, userSettings }) {
 
         // Real-time playback status
         socket.on('status', (status) => {
-            console.log('KaraFun Sync: Status received', status);
+            console.log('KaraFun Sync: Status received (full):', JSON.stringify(status));
             setLoading(false);
             setError(null);
             setLastUpdated(new Date());
-            // status.state can be 'playing', 'paused', 'infoscreen', etc.
-            // The current song may be available on the status object
-            if (status && status.current) {
+
+            // Resolve current song from whichever field KaraFun uses when playing
+            const cur = status?.songPlaying || status?.current || null;
+            if (cur) {
                 setQueueData(prev => ({
                     ...prev,
                     currentSong: {
-                        title: status.current.title || status.current.song?.title || 'Unknown',
-                        artist: status.current.artist || status.current.song?.artist || '',
-                        singer: status.current.singerName || status.current.options?.singer || '',
+                        title: cur.title || cur.song?.title || 'Unknown',
+                        artist: cur.artist || cur.song?.artist || '',
+                        singer: cur.singer || cur.singerName || cur.options?.singer || '',
                     },
                     playState: status.state,
                 }));
             } else {
-                // status object itself is the playback status (pitch, volume, state etc.)
                 setQueueData(prev => ({
                     ...prev,
+                    // Clear current song if state is infoscreen (nothing playing)
+                    currentSong: (status?.state === 'infoscreen' || status?.state === 'stop') ? null : prev?.currentSong,
                     playState: status?.state,
                 }));
             }
