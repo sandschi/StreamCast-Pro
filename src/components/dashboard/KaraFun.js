@@ -40,6 +40,10 @@ export default function KaraFun({ targetUid, userSettings }) {
         setLoading(true);
         setError(null);
 
+        // Unique login per session — avoids duplicate-name rejection on reconnects
+        const suffix = Math.floor(1000 + Math.random() * 9000);
+        const loginName = `StreamCastPro${suffix}`;
+
         // KaraFun uses Socket.IO v2 at https://www.karafun.com
         // The party is identified by the query parameter: remote=kf[partyId]
         const socket = io('https://www.karafun.com', {
@@ -56,8 +60,9 @@ export default function KaraFun({ targetUid, userSettings }) {
             setError(null);
 
             // KaraFun requires an authenticate event before it pushes any data
+            console.log('KaraFun Sync: Authenticating as', loginName);
             socket.emit('authenticate', {
-                login: 'StreamCastPro',
+                login: loginName,
                 channel: partyId,
                 role: 'participant',
                 app: 'karafun',
