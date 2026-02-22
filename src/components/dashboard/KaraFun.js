@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import io from 'socket.io-client';
 
 export default function KaraFun({ targetUid, userSettings }) {
     const [queueData, setQueueData] = useState(null);
@@ -37,146 +38,81 @@ export default function KaraFun({ targetUid, userSettings }) {
         if (!partyId || !userSettings?.karafunEnabled) return;
 
         setLoading(true);
-        let ws = null;
-        let reconnectTimeout = null;
+        setError(null);
 
-        const connect = async () => {
-            try {
-                // Discovery Phase: Get the specific KCS URL for this session
-                // We need to bypass potential CORS/Forbidden issues if possible, 
-                // but usually the remote client does this via a direct fetch.
-                let baseUrl = `https://www.karafun.com/${partyId}/`;
-                try {
-                    const response = await fetch(`${baseUrl}?type=session_info&hash=`, {
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.kcs_url) {
-                            console.log('KaraFun Sync: Discovered KCS URL:', data.kcs_url);
-                            ws = new WebSocket(data.kcs_url, ['kcpj~v2+emuping']);
-                        }
-                    }
-                } catch (discoveryError) {
-                    console.warn('KaraFun Sync: Discovery failed, falling back to default endpoint', discoveryError);
-                }
+        // KaraFun uses Socket.IO v2 at https://www.karafun.com
+        // The party is identified by the query parameter: remote=kf[partyId]
+        const socket = io('https://www.karafun.com', {
+            query: { remote: `kf${partyId}` },
+            transports: ['polling', 'websocket'],
+            forceNew: true,
+            reconnection: true,
+            reconnectionDelay: 3000,
+            reconnectionAttempts: Infinity,
+        });
 
-                // Fallback to default if discovery didn't create a socket
-                if (!ws) {
-                    ws = new WebSocket('wss://www.karafun.com/remote/', ['kcpj~v2+emuping']);
-                }
+        socket.on('connect', () => {
+            console.log('KaraFun Sync: Connected to party', partyId);
+            setError(null);
+        });
 
-                ws.onopen = () => {
-                    if (!ws) return; // Guard against race conditions during reconnect
-                    console.log('KaraFun Sync: Connected to', partyId);
-                    setError(null);
+        socket.on('connect_error', (err) => {
+            console.error('KaraFun Sync: Connection error', err);
+            setError('Connection error. Retrying...');
+        });
 
-                    // Handshake: Identify as a guest for this channel
-                    ws.send(JSON.stringify({
-                        id: 1,
-                        type: "auth.ProcessRemoteLoginRequest",
-                        payload: { channel: partyId }
-                    }));
+        socket.on('disconnect', (reason) => {
+            console.log('KaraFun Sync: Disconnected -', reason);
+        });
 
-                    // Request initial status and queue
-                    ws.send(JSON.stringify({
-                        id: 2,
-                        type: "remote.StatusRequest",
-                        payload: {}
-                    }));
-                    ws.send(JSON.stringify({
-                        id: 3,
-                        type: "remote.QueueRequest",
-                        payload: {}
-                    }));
-                };
+        // Real-time queue updates
+        socket.on('queue', (items) => {
+            console.log('KaraFun Sync: Queue received', items);
+            const transformed = (items || []).map(item => ({
+                title: item.title || item.song?.title || 'Unknown',
+                artist: item.artist || item.song?.artist || '',
+                singer: item.singerName || item.options?.singer || '',
+            }));
+            setQueueData(prev => ({
+                ...prev,
+                upcoming: transformed,
+                timestamp: Date.now(),
+            }));
+            setLastUpdated(new Date());
+            setLoading(false);
+            setError(null);
+        });
 
-                ws.onmessage = (event) => {
-                    if (!ws) return;
-                    try {
-                        const data = JSON.parse(event.data);
-
-                        // Handle server-side pings to keep connection alive
-                        if (data.type === 'core.PingRequest' || data.type === 'auth.ProcessRemoteLoginRequest') {
-                            ws.send(JSON.stringify({
-                                id: data.id,
-                                type: data.type === 'core.PingRequest' ? "core.PingResponse" : "auth.ProcessRemoteLoginResponse",
-                                payload: {}
-                            }));
-                            return;
-                        }
-
-                        // Update queue data
-                        if (data.type === 'remote.QueueEvent' || data.type === 'remote.QueueResponse') {
-                            const items = data.payload.queue?.items || [];
-                            const transformed = items.map(item => ({
-                                title: item.song?.title || item.quiz?.title || 'Unknown',
-                                artist: item.song?.artist || '',
-                                singer: item.options?.singer || ''
-                            }));
-
-                            setQueueData(prev => ({
-                                ...prev,
-                                upcoming: transformed,
-                                timestamp: Date.now()
-                            }));
-                            setLastUpdated(new Date());
-                            setLoading(false);
-                            setError(null);
-                        }
-
-                        // Update current song status
-                        if (data.type === 'remote.StatusEvent' || data.type === 'remote.StatusResponse') {
-                            const current = data.payload.status?.current;
-                            if (current) {
-                                setQueueData(prev => ({
-                                    ...prev,
-                                    currentSong: {
-                                        title: current.song?.title || current.quiz?.title || 'Unknown',
-                                        artist: current.song?.artist || '',
-                                        singer: current.options?.singer || ''
-                                    }
-                                }));
-                            } else {
-                                setQueueData(prev => ({ ...prev, currentSong: null }));
-                            }
-                            setLoading(false);
-                            setError(null);
-                        }
-                    } catch (e) {
-                        console.error('Error parsing KaraFun message:', e);
-                    }
-                };
-
-                ws.onclose = (e) => {
-                    console.log('KaraFun Sync: Disconnected', e.code, e.reason);
-                    ws = null;
-                    if (userSettings?.karafunEnabled) {
-                        reconnectTimeout = setTimeout(() => connect(), 5000); // Retry every 5s
-                    }
-                };
-
-                ws.onerror = (err) => {
-                    console.error('KaraFun Sync Error:', err);
-                    setError("Connection intermittent. Retrying...");
-                };
-
-            } catch (err) {
-                console.error('WebSocket creation error:', err);
-                setError("Failed to initialize sync.");
+        // Real-time playback status
+        socket.on('status', (status) => {
+            console.log('KaraFun Sync: Status received', status);
+            setLoading(false);
+            setError(null);
+            setLastUpdated(new Date());
+            // status.state can be 'playing', 'paused', 'infoscreen', etc.
+            // The current song may be available on the status object
+            if (status && status.current) {
+                setQueueData(prev => ({
+                    ...prev,
+                    currentSong: {
+                        title: status.current.title || status.current.song?.title || 'Unknown',
+                        artist: status.current.artist || status.current.song?.artist || '',
+                        singer: status.current.singerName || status.current.options?.singer || '',
+                    },
+                    playState: status.state,
+                }));
+            } else {
+                // status object itself is the playback status (pitch, volume, state etc.)
+                setQueueData(prev => ({
+                    ...prev,
+                    playState: status?.state,
+                }));
             }
-        };
-
-        connect();
+        });
 
         return () => {
-            if (ws) {
-                ws.onclose = null; // Prevent reconnect on intentional close
-                ws.close();
-            }
-            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+            console.log('KaraFun Sync: Cleaning up socket');
+            socket.disconnect();
         };
     }, [partyId, userSettings?.karafunEnabled]);
 
@@ -203,7 +139,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                 <div className="flex flex-col sm:flex-row gap-3">
                     <input
                         type="text"
-                        placeholder="Enter KaraFun Party ID (e.g. 123456)"
+                        placeholder="Enter KaraFun Party ID (e.g. 727383)"
                         value={tempPartyId}
                         onChange={(e) => setTempPartyId(e.target.value)}
                         className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
@@ -232,17 +168,11 @@ export default function KaraFun({ targetUid, userSettings }) {
                         <div>
                             <h3 className="font-bold text-zinc-100">KaraFun Party: {partyId}</h3>
                             <p className="text-xs text-zinc-500">
-                                {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Syncing...'}
+                                {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Connecting...'}
                             </p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => { setLoading(true); fetchQueue(); }}
-                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400"
-                        title="Force Refresh"
-                    >
-                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                    </button>
+                    <div className={`w-2.5 h-2.5 rounded-full ${error ? 'bg-red-500' : lastUpdated ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} title={error ? 'Disconnected' : lastUpdated ? 'Connected' : 'Connecting...'} />
                 </div>
             )}
 
@@ -253,7 +183,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                 </div>
             )}
 
-            {loading && !queueData && (
+            {loading && !queueData && partyId && (
                 <div className="flex justify-center p-12">
                     <RefreshCw className="animate-spin text-indigo-500" size={32} />
                 </div>
@@ -284,7 +214,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                             </div>
                         ) : (
                             <div className="bg-zinc-900/30 border border-zinc-800 border-dashed p-12 rounded-3xl text-center text-zinc-600">
-                                No song playing currently
+                                {queueData.playState === 'infoscreen' ? 'Waiting for a song to start...' : 'No song playing currently'}
                             </div>
                         )}
                     </div>

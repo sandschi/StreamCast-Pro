@@ -18,6 +18,7 @@
     "posthog-js": "^1.347.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "socket.io-client": "^2.5.0",
     "tmi.js": "^1.8.5"
   },
   "devDependencies": {
