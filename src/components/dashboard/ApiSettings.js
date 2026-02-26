@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle } from 'lucide-react';
+import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -226,8 +226,8 @@ function EndpointButton({ label, description, icon, onClick, copied, isDestructi
         <button
             onClick={onClick}
             className={`w-full text-left p-4 rounded-2xl border transition-all flex items-start gap-4 group hover:shadow-lg ${isDestructive
-                    ? 'bg-rose-500/5 border-rose-500/10 hover:bg-rose-500/10 hover:border-rose-500/30'
-                    : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50'
+                ? 'bg-rose-500/5 border-rose-500/10 hover:bg-rose-500/10 hover:border-rose-500/30'
+                : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50'
                 }`}
         >
             <div className={`p-2 rounded-xl shrink-0 mt-0.5 transition-transform group-hover:scale-110 ${isDestructive ? 'bg-rose-500/20' : 'bg-zinc-900 border border-zinc-800'
