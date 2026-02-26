@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 
 export async function GET() {
     return NextResponse.json({ success: false, error: "Method Not Allowed. Please use POST with a Bearer token." }, { status: 405 });
@@ -53,8 +53,12 @@ export async function POST(request, { params }) {
 
         switch (action) {
             case 'toggle-karafun-queue':
-                newState = !configData.karafunOverlayQueueEnabled;
-                await updateDoc(configRef, { karafunOverlayQueueEnabled: newState });
+                await runTransaction(db, async (transaction) => {
+                    const sfDoc = await transaction.get(configRef);
+                    if (!sfDoc.exists()) throw new Error("Document does not exist!");
+                    newState = !sfDoc.data().karafunOverlayQueueEnabled;
+                    transaction.update(configRef, { karafunOverlayQueueEnabled: newState });
+                });
                 break;
             case 'karafun-queue-on':
                 newState = true;
@@ -65,8 +69,12 @@ export async function POST(request, { params }) {
                 await updateDoc(configRef, { karafunOverlayQueueEnabled: false });
                 break;
             case 'toggle-now-playing':
-                newState = !configData.karafunOverlayNowPlayingEnabled;
-                await updateDoc(configRef, { karafunOverlayNowPlayingEnabled: newState });
+                await runTransaction(db, async (transaction) => {
+                    const sfDoc = await transaction.get(configRef);
+                    if (!sfDoc.exists()) throw new Error("Document does not exist!");
+                    newState = !sfDoc.data().karafunOverlayNowPlayingEnabled;
+                    transaction.update(configRef, { karafunOverlayNowPlayingEnabled: newState });
+                });
                 break;
             case 'now-playing-on':
                 newState = true;

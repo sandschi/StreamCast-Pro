@@ -39,7 +39,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
         const baseUrl = window.location.origin;
         const uid = targetUid || user.uid;
         // Token is no longer in the URL, clients must send POST with Bearer token
-        const url = `${baseUrl}/api/overlay/${uid}?action=${action}`;
+        const url = `${baseUrl}/api/overlay/${uid}?action=${encodeURIComponent(action)}`;
 
         try {
             await navigator.clipboard.writeText(url);

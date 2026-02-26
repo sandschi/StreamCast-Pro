@@ -183,7 +183,10 @@ function DashboardContent() {
 
         // 2. Fetch private config (apiToken) securely
         const fetchPrivateConfig = async () => {
-            if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
+            if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) {
+                setPrivateConfig({ apiToken: null });
+                return;
+            }
             try {
                 const privateRef = doc(db, 'users', targetUid, 'private', 'config');
                 const privateSnap = await getDoc(privateRef);
@@ -528,8 +531,8 @@ function DashboardContent() {
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
                             {activeTab === 'karafun' && ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
-                            {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
-                            {activeTab === 'api' && <ApiSettings targetUid={targetUid} user={user} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig} isMasterAdmin={isMasterAdmin} userRole={userRole} />}
+                            {activeTab === 'settings' && (userRole === 'broadcaster' || isMasterAdmin) && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                            {activeTab === 'api' && (userRole === 'broadcaster' || isMasterAdmin) && <ApiSettings targetUid={targetUid} user={user} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig} isMasterAdmin={isMasterAdmin} userRole={userRole} />}
                             {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
                         </>
                     )}
