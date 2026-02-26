@@ -23,20 +23,30 @@ export async function POST(request, { params }) {
             return NextResponse.json({ success: false, error: "Missing required parameters" }, { status: 400 });
         }
 
-        // 1. Verify Token against User's Config
+        // 1. Verify Token against User's Private Config
+        const privateConfigRef = doc(db, 'users', userId, 'private', 'config');
+        const privateConfigSnap = await getDoc(privateConfigRef);
+
+        if (!privateConfigSnap.exists()) {
+            return NextResponse.json({ success: false, error: "Authentication configuration not found" }, { status: 404 });
+        }
+
+        const privateConfigData = privateConfigSnap.data();
+
+        // Ensure the token matches the stored token securely
+        if (!privateConfigData.apiToken || privateConfigData.apiToken !== token) {
+            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
+        }
+
+        // 2. Fetch User's Overlay Settings
         const configRef = doc(db, 'users', userId, 'settings', 'config');
         const configSnap = await getDoc(configRef);
 
         if (!configSnap.exists()) {
-            return NextResponse.json({ success: false, error: "User configuration not found" }, { status: 404 });
+            return NextResponse.json({ success: false, error: "Settings configuration not found" }, { status: 404 });
         }
 
         const configData = configSnap.data();
-
-        // Ensure the token matches the stored token securely
-        if (!configData.apiToken || configData.apiToken !== token) {
-            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
-        }
 
         // 2. Perform Requested Action
         let newState = null;
@@ -79,6 +89,6 @@ export async function POST(request, { params }) {
 
     } catch (error) {
         console.error("Error in overlay API:", error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
     }
 }

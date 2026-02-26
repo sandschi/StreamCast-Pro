@@ -5,7 +5,7 @@ import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Li
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
-export default function ApiSettings({ targetUid, user, userSettings, isMasterAdmin, userRole }) {
+export default function ApiSettings({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole }) {
     const [generatingToken, setGeneratingToken] = useState(false);
     const [copyState, setCopyState] = useState(null);
 
@@ -21,9 +21,12 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
         setGeneratingToken(true);
         try {
             const token = crypto.randomUUID();
-            await setDoc(doc(db, 'users', targetUid || user.uid, 'settings', 'config'), {
+            await setDoc(doc(db, 'users', targetUid || user.uid, 'private', 'config'), {
                 apiToken: token
             }, { merge: true });
+            if (setPrivateConfig) {
+                setPrivateConfig({ apiToken: token });
+            }
         } catch (err) {
             console.error('Error generating token:', err);
         } finally {
@@ -32,7 +35,7 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
     };
 
     const copyApiCommand = async (action) => {
-        if (!user || !userSettings?.apiToken) return;
+        if (!user || !privateConfig?.apiToken) return;
         const baseUrl = window.location.origin;
         const uid = targetUid || user.uid;
         // Token is no longer in the URL, clients must send POST with Bearer token
@@ -47,16 +50,16 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
     };
 
     const copyTokenOnly = async () => {
-        if (!userSettings?.apiToken) return;
+        if (!privateConfig?.apiToken) return;
         try {
-            await navigator.clipboard.writeText(userSettings.apiToken);
+            await navigator.clipboard.writeText(privateConfig.apiToken);
             setCopyState('token');
         } catch (err) {
             console.error('Failed to copy token!', err);
         }
     }
 
-    if (!userSettings?.apiToken) {
+    if (!privateConfig?.apiToken) {
         return (
             <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2 scrollbar-hide">
                 <div className="bg-zinc-900 border border-zinc-800 p-12 rounded-3xl space-y-6 text-center shadow-2xl">
@@ -120,7 +123,7 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
                     <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Active Authentication Token</p>
                         <div className="font-mono text-zinc-300 text-sm truncate opacity-60 hover:opacity-100 transition-opacity blur-sm hover:blur-none select-all cursor-text py-1">
-                            {userSettings.apiToken}
+                            {privateConfig.apiToken}
                         </div>
                     </div>
                     <button
