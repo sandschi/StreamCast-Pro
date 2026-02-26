@@ -166,7 +166,7 @@ export default function KaraFun({ targetUid, userSettings }) {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl">
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32">
             {/* ID CONFIGURATION SECTION */}
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
                 <div className="flex items-center gap-3 mb-2">
