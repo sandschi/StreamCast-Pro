@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-export async function GET(request, { params }) {
+export async function GET() {
+    return NextResponse.json({ success: false, error: "Method Not Allowed. Please use POST with a Bearer token." }, { status: 405 });
+}
+
+export async function POST(request, { params }) {
     try {
-        const userId = params.userId;
+        const { userId } = await params;
         const { searchParams } = new URL(request.url);
-        const token = searchParams.get('token');
         const action = searchParams.get('action');
+
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return NextResponse.json({ success: false, error: "Missing or invalid Authorization header" }, { status: 401 });
+        }
+
+        const token = authHeader.split(' ')[1];
 
         if (!userId || !token || !action) {
             return NextResponse.json({ success: false, error: "Missing required parameters" }, { status: 400 });

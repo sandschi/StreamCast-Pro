@@ -35,7 +35,8 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
         if (!user || !userSettings?.apiToken) return;
         const baseUrl = window.location.origin;
         const uid = targetUid || user.uid;
-        const url = `${baseUrl}/api/overlay/${uid}?token=${userSettings.apiToken}&action=${action}`;
+        // Token is no longer in the URL, clients must send POST with Bearer token
+        const url = `${baseUrl}/api/overlay/${uid}?action=${action}`;
 
         try {
             await navigator.clipboard.writeText(url);
@@ -65,7 +66,9 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
                     <div className="space-y-3">
                         <h2 className="text-2xl font-bold text-zinc-100">Remote API Control</h2>
                         <p className="text-zinc-400 max-w-md mx-auto leading-relaxed">
-                            Generate a secure API token to trigger stream events (like hiding messages or toggling KaraFun UI) from external tools like Stream Deck, Touch Portal, or custom scripts via simple GET requests.
+                            Generate a secure API token to trigger stream events (like hiding messages or toggling KaraFun UI) from external tools like Stream Deck, Touch Portal, or custom scripts.
+                            <br /><br />
+                            <span className="text-emerald-400 font-medium">Note: Requests must be sent as POST with your token in the Authorization header.</span>
                         </p>
                     </div>
                     <button
@@ -132,9 +135,15 @@ export default function ApiSettings({ targetUid, user, userSettings, isMasterAdm
 
             {/* Generated Endpoints Directory */}
             <div className="space-y-4">
-                <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 pl-2">
-                    <LinkIcon size={14} /> Available Endpoints
-                </h4>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pl-2 pr-1">
+                    <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                        <LinkIcon size={14} /> Available POST Endpoints
+                    </h4>
+
+                    <div className="text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1.5 rounded-lg border border-zinc-700/50 flex items-center gap-2 font-mono">
+                        Header: <span className="text-emerald-400">Authorization: Bearer {'<Token>'}</span>
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 

@@ -273,7 +273,7 @@ function DashboardContent() {
                                 </button>
                             )}
 
-                            {(userRole === 'broadcaster' || isMasterAdmin || userSettings?.karafunEnabled) && (
+                            {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
@@ -498,7 +498,7 @@ function DashboardContent() {
                             </div>
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
-                            {activeTab === 'karafun' && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
+                            {activeTab === 'karafun' && ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
                             {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
                             {activeTab === 'api' && <ApiSettings targetUid={targetUid} user={user} userSettings={userSettings} isMasterAdmin={isMasterAdmin} userRole={userRole} />}
                             {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
