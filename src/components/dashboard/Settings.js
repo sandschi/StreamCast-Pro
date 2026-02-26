@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { doc, updateDoc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
@@ -14,7 +15,8 @@ import {
     Move,
     Sparkles,
     Send,
-    Volume2
+    Volume2,
+    Music
 } from 'lucide-react';
 
 const FONTS = [
@@ -56,6 +58,8 @@ export default function Settings({ targetUid, isModeratorMode }) {
         soundEnabled: false,
         soundType: 'pop',
         soundVolume: 0.5,
+        karafunEnabled: false,
+        karafunPartyId: '',
     });
 
     const [twitchUsername, setTwitchUsername] = useState('');
@@ -153,7 +157,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="relative">
+        <div className="relative flex flex-col h-full overflow-hidden">
             {/* Floating Controls - Fixed position to ensure they always stay on screen */}
             {/* Fixed Control Center: Preview + Actions */}
             <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-3 w-full max-w-md pointer-events-none">
@@ -184,15 +188,20 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             >
                                 {/* Avatar */}
                                 {settings.showAvatar && (
-                                    <img
-                                        src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
-                                        alt=""
-                                        className="rounded-full border-2 border-white/10 shadow-lg"
+                                    <div
+                                        className="relative overflow-hidden rounded-full border-2 border-white/10 shadow-lg shrink-0"
                                         style={{
                                             width: `${settings.avatarSize}px`,
                                             height: `${settings.avatarSize}px`
                                         }}
-                                    />
+                                    >
+                                        <Image
+                                            src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
+                                            alt=""
+                                            fill
+                                            style={{ objectFit: 'cover' }}
+                                        />
+                                    </div>
                                 )}
 
                                 {/* Message Content */}
@@ -292,9 +301,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-8 pt-48">
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide mt-36 space-y-12 pb-32">
                 {/* Visual Settings Column */}
-                <div className="flex-1 space-y-10">
+                <div className="space-y-12">
 
                     {/* 1. Identity */}
                     <section className="space-y-4">
@@ -516,6 +525,30 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                 </div>
                             </div>
                         )}
+                    </section>
+                </div>
+
+                {/* KaraFun Integration */}
+                <div className="space-y-10 border-t border-zinc-800 pt-10">
+                    <section className="space-y-4">
+                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                            <Music size={14} /> KaraFun Integration
+                        </h4>
+                        <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
+                            <div className="space-y-1">
+                                <p className="text-sm font-bold text-zinc-200">Enable KaraFun</p>
+                                <p className="text-xs text-zinc-500 italic">Show song queue and current song in the sidebar.</p>
+                            </div>
+                            <button
+                                onClick={() => updateSetting('karafunEnabled', !settings.karafunEnabled)}
+                                role="switch"
+                                aria-checked={settings.karafunEnabled}
+                                aria-label="Enable KaraFun Integration"
+                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                            >
+                                <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
                     </section>
                 </div>
             </div>

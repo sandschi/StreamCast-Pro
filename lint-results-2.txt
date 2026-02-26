@@ -1,0 +1,20 @@
+[0m[0m
+[0m[4mC:\Users\sandr\Documents\Antigravity\Twitch Chat\src\app\overlay\[userId]\page.js[24m[0m
+[0m  [2m249:13[22m  [31merror[39m  Error: Calling setState synchronously within an effect can trigger cascading renders[0m
+[0m[0m
+[0mEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:[0m
+[0m* Update external systems with the latest state from React.[0m
+[0m* Subscribe for updates from some external system, calling setState in a callback function when external state changes.[0m
+[0m[0m
+[0mCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).[0m
+[0m[0m
+[0m  247 |             };[0m
+[0m  248 |         } else {[0m
+[0m> 249 |             setShowNowPlaying(false);[0m
+[0m      |             ^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect[0m
+[0m  250 |         }[0m
+[0m  251 |     }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);[0m
+[0m  252 |  [2mreact-hooks/set-state-in-effect[22m[0m
+[0m[0m
+[0m[31m[1m✖ 1 problem (1 error, 0 warnings)[22m[39m[0m
+[0m[31m[1m[22m[39m[0m

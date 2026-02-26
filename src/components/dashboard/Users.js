@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import {
     collection,
@@ -101,7 +102,9 @@ export default function Users({ targetUid, user }) {
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <img src={u.photoURL} alt="" className="w-12 h-12 rounded-full border-2 border-zinc-800 bg-zinc-800" />
+                                    <div className="relative w-12 h-12 overflow-hidden rounded-full border-2 border-zinc-800 bg-zinc-800">
+                                        <Image src={u.photoURL} alt="" fill className="object-cover" />
+                                    </div>
                                     {u.isOnline && (
                                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-zinc-900 rounded-full" />
                                     )}

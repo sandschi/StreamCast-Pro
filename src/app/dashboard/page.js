@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useSearchParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
@@ -24,10 +25,17 @@ import {
     Check,
     Link as LinkIcon,
     Users,
-    Clock
+    Clock,
+    Music,
+    Terminal,
+    Key,
+    Power,
+    EyeOff
 } from 'lucide-react';
 import UsersTab from '@/components/dashboard/Users';
 import Broadcasters from '@/components/dashboard/Broadcasters';
+import KaraFunTab from '@/components/dashboard/KaraFun';
+import ApiSettings from '@/components/dashboard/ApiSettings';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -52,6 +60,8 @@ function DashboardContent() {
     const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
+    const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
+    const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -154,7 +164,47 @@ function DashboardContent() {
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
-    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin]);
+    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin, targetUid]);
+
+    // NEW Stable Settings Listener
+    useEffect(() => {
+        if (!targetUid) return;
+
+        // 1. Listen to public settings
+        const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
+        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setUserSettings(data);
+            } else {
+                setUserSettings({ karafunEnabled: false });
+            }
+        });
+
+        // 2. Fetch private config (apiToken) securely
+        const fetchPrivateConfig = async () => {
+            if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) {
+                setPrivateConfig({ apiToken: null });
+                return;
+            }
+            try {
+                const privateRef = doc(db, 'users', targetUid, 'private', 'config');
+                const privateSnap = await getDoc(privateRef);
+                if (privateSnap.exists()) {
+                    setPrivateConfig(privateSnap.data());
+                } else {
+                    setPrivateConfig({ apiToken: null });
+                }
+            } catch (err) {
+                console.error("Error fetching private config:", err);
+                setPrivateConfig({ apiToken: null });
+            }
+        };
+
+        fetchPrivateConfig();
+
+        return () => unsubscribe();
+    }, [targetUid, user, isMasterAdmin, userRole]);
 
     useEffect(() => {
         if (copyState) {
@@ -214,8 +264,8 @@ function DashboardContent() {
             {/* Sidebar */}
             <aside className="w-20 md:w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col p-4">
                 <div className="flex items-center gap-3 px-2 mb-10">
-                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 overflow-hidden">
-                        <img src="/logo.png" alt="StreamCast Logo" className="w-full h-full object-cover" />
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 relative overflow-hidden">
+                        <Image src="/logo.png" alt="StreamCast Logo" fill style={{ objectFit: 'cover' }} priority sizes="40px" />
                     </div>
                     <span className="hidden md:block font-bold text-xl tracking-tight">STREAMCAST</span>
                 </div>
@@ -251,14 +301,33 @@ function DashboardContent() {
                                 </button>
                             )}
 
-                            {(userRole === 'broadcaster' || isMasterAdmin) && (
+                            {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
                                 <button
-                                    onClick={() => setActiveTab('settings')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    onClick={() => setActiveTab('karafun')}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                 >
-                                    <SettingsIcon size={20} />
-                                    <span className="font-medium">Settings</span>
+                                    <Music size={20} />
+                                    <span className="font-medium">KaraFun</span>
                                 </button>
+                            )}
+
+                            {(userRole === 'broadcaster' || isMasterAdmin) && (
+                                <>
+                                    <button
+                                        onClick={() => setActiveTab('settings')}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    >
+                                        <SettingsIcon size={20} />
+                                        <span className="font-medium">Settings</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('api')}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'api' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    >
+                                        <Terminal size={20} />
+                                        <span className="font-medium">API controls</span>
+                                    </button>
+                                </>
                             )}
                         </>
                     )}
@@ -316,8 +385,12 @@ function DashboardContent() {
                     </button>
 
                     <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 px-2">
-                        <div className="relative">
-                            <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full border border-zinc-700 object-cover bg-zinc-800" />
+                        <div className="relative w-9 h-9 shrink-0">
+                            {user.photoURL ? (
+                                <Image src={user.photoURL} alt="Profile" fill style={{ objectFit: 'cover' }} className="rounded-full border border-zinc-700 bg-zinc-800" sizes="36px" />
+                            ) : (
+                                <div className="w-full h-full rounded-full border border-zinc-700 bg-zinc-800" />
+                            )}
                             <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full" />
                         </div>
                         <div className="hidden md:block overflow-hidden">
@@ -343,14 +416,18 @@ function DashboardContent() {
                                 {activeTab === 'chat' && 'Moderation Dashboard'}
                                 {activeTab === 'history' && 'Message History'}
                                 {activeTab === 'users' && 'Manage Users'}
+                                {activeTab === 'karafun' && 'KaraFun Queue'}
                                 {activeTab === 'settings' && 'Overlay Customization'}
+                                {activeTab === 'api' && 'Remote API Controls'}
                                 {activeTab === 'broadcasters' && 'Manage Broadcasters'}
                             </h2>
                             <p className="text-zinc-500 text-sm md:text-base">
                                 {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
                                 {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
                                 {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
+                                {activeTab === 'karafun' && 'Live song queue from your KaraFun party.'}
                                 {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
+                                {activeTab === 'api' && 'Generate secure URLs for stream tools like Stream Deck.'}
                                 {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
                             </p>
                         </div>
@@ -453,7 +530,9 @@ function DashboardContent() {
                             </div>
                             {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
                             {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
-                            {activeTab === 'settings' && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                            {activeTab === 'karafun' && ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
+                            {activeTab === 'settings' && (userRole === 'broadcaster' || isMasterAdmin) && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
+                            {activeTab === 'api' && (userRole === 'broadcaster' || isMasterAdmin) && <ApiSettings targetUid={targetUid} user={user} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig} isMasterAdmin={isMasterAdmin} userRole={userRole} />}
                             {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
                         </>
                     )}
