@@ -3,6 +3,7 @@
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { MessageSquare, Sparkles, Shield, Zap, Users, CheckCircle, Clock, ExternalLink } from 'lucide-react';
 
@@ -39,8 +40,8 @@ export default function Home() {
         <header className="border-b border-zinc-800/50 backdrop-blur-sm bg-zinc-950/50">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
-                <img src="/logo.png" alt="StreamCast Logo" className="w-full h-full object-cover rounded-lg" />
+              <div className="w-10 h-10 bg-white rounded-lg relative overflow-hidden shadow-lg shadow-purple-500/20">
+                <Image src="/logo.png" alt="StreamCast Logo" fill style={{ objectFit: 'cover' }} priority />
               </div>
               <span className="font-bold text-xl tracking-tight">STREAMCAST PRO</span>
             </div>

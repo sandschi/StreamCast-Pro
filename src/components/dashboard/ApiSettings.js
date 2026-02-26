@@ -8,6 +8,7 @@ import { doc, setDoc } from 'firebase/firestore';
 export default function ApiSettings({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole }) {
     const [generatingToken, setGeneratingToken] = useState(false);
     const [copyState, setCopyState] = useState(null);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (copyState) {
@@ -19,6 +20,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
     const handleGenerateToken = async () => {
         if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
         setGeneratingToken(true);
+        setError(null);
         try {
             const token = crypto.randomUUID();
             await setDoc(doc(db, 'users', targetUid || user.uid, 'private', 'config'), {
@@ -29,6 +31,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
             }
         } catch (err) {
             console.error('Error generating token:', err);
+            setError(err.message || 'Failed to generate API token. Please try again.');
         } finally {
             setGeneratingToken(false);
         }
@@ -74,6 +77,13 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                             <span className="text-emerald-400 font-medium">Note: Requests must be sent as POST with your token in the Authorization header.</span>
                         </p>
                     </div>
+                    {error && (
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm font-medium flex items-center gap-3 text-left">
+                            <AlertTriangle size={18} className="shrink-0" />
+                            {error}
+                        </div>
+                    )}
+
                     <button
                         onClick={handleGenerateToken}
                         disabled={generatingToken}
@@ -118,6 +128,13 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                         {generatingToken ? 'Revoking...' : 'Revoke & Rotate Token'}
                     </button>
                 </div>
+
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm font-medium flex items-center gap-3">
+                        <AlertTriangle size={18} className="shrink-0" />
+                        {error}
+                    </div>
+                )}
 
                 <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">

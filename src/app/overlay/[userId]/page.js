@@ -1,7 +1,8 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -116,14 +117,7 @@ export default function OverlayPage() {
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
     }, [userId, processedIds]);
 
-    // 3. Queue Processor
-    useEffect(() => {
-        if (messageQueue.length > 0 && !activeMessage && !isProcessing) {
-            processNextMessage();
-        }
-    }, [messageQueue, activeMessage, isProcessing]);
-
-    const processNextMessage = async () => {
+    const processNextMessage = useCallback(async () => {
         setIsProcessing(true);
         const nextMsg = messageQueue[0];
 
@@ -150,12 +144,19 @@ export default function OverlayPage() {
             }, duration * 1000 + 500); // Add a small buffer for animation
         } else {
             // Permanent message - stays until NEXT message arrives in queue
-            // The useEffect queue processor will handle this:
-            // if we have a queue and no active message, it starts.
-            // But for permanent messages, we stay active.
-            // So we need a way to "interrupt" the permanent message.
         }
-    };
+    }, [messageQueue, settings.soundEnabled, settings.soundType, settings.soundVolume, settings.displayDuration]);
+
+    // 3. Queue Processor
+    useEffect(() => {
+        if (messageQueue.length > 0 && !activeMessage && !isProcessing) {
+            // Use setTimeout to avoid synchronous setState inside an effect (lint fix)
+            const timer = setTimeout(() => {
+                processNextMessage();
+            }, 0);
+            return () => clearTimeout(timer);
+        }
+    }, [messageQueue, activeMessage, isProcessing, processNextMessage]);
 
     // Interrupt permanent messages if new ones arrive
     useEffect(() => {
@@ -232,15 +233,25 @@ export default function OverlayPage() {
     // Trigger Now Playing animation when a new song starts
     useEffect(() => {
         if (settings.karafunOverlayNowPlayingEnabled && karafunPlayState === 'playing' && karafunNowPlaying) {
-            setShowNowPlaying(true);
+            // Use setTimeout to avoid synchronous setState inside an effect (lint fix)
+            const popupTimer = setTimeout(() => {
+                setShowNowPlaying(true);
+            }, 0);
+
             const timer = setTimeout(() => {
                 setShowNowPlaying(false);
             }, 10000); // Show for 10 seconds
-            return () => clearTimeout(timer);
+            return () => {
+                clearTimeout(popupTimer);
+                clearTimeout(timer);
+            };
         } else {
-            setShowNowPlaying(false);
+            const hideTimer = setTimeout(() => {
+                setShowNowPlaying(false);
+            }, 0);
+            return () => clearTimeout(hideTimer);
         }
-    }, [karafunNowPlaying?.title, karafunNowPlaying?.singer, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
+    }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
 
     const getKaraFunThemeStyles = () => {
         const theme = settings.karafunOverlayTheme || 'classic';
@@ -561,16 +572,19 @@ export default function OverlayPage() {
                             }}
                         >
                             {effectiveSettings.showAvatar && (
-                                <img
-                                    src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
-                                    alt=""
-                                    className={`rounded-full shadow-md object-cover flex-shrink-0 transition-all ${effectiveSettings.bubbleStyle === 'bold' || effectiveSettings.bubbleStyle === 'comic' ? 'border-4 border-black' :
-                                        effectiveSettings.bubbleStyle === 'retro' ? 'border-4 border-white' :
-                                            'border-2 border-white/40'
-                                        }`}
+                                <div className={`relative overflow-hidden rounded-full shadow-md flex-shrink-0 transition-all ${effectiveSettings.bubbleStyle === 'bold' || effectiveSettings.bubbleStyle === 'comic' ? 'border-4 border-black' :
+                                    effectiveSettings.bubbleStyle === 'retro' ? 'border-4 border-white' :
+                                        'border-2 border-white/40'
+                                    }`}
                                     style={{ width: `${effectiveSettings.avatarSize}px`, height: `${effectiveSettings.avatarSize}px` }}
-                                    onError={(e) => { e.target.src = "https://static-cdn.jtvnw.net/user-default-pictures-uv/ce57112a-449d-4beb-a573-0357fb8853d4-profile_image-70x70.png"; }}
-                                />
+                                >
+                                    <Image
+                                        src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
+                                        alt=""
+                                        fill
+                                        style={{ objectFit: 'cover' }}
+                                    />
+                                </div>
                             )}
                             <span
                                 className={`font-black tracking-tight drop-shadow-lg ${effectiveSettings.bubbleStyle === 'retro' ? 'uppercase font-mono' : ''}`}
@@ -602,7 +616,9 @@ export default function OverlayPage() {
                             <div className={`flex flex-wrap items-center gap-2 ${effectiveSettings.bubbleStyle === 'minimal' ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : ''}`}>
                                 {activeMessage.fragments?.map((frag, i) => (
                                     frag.type === 'text' ? <span key={i} className={effectiveSettings.bubbleStyle === 'retro' ? 'font-mono uppercase tracking-tighter' : ''}>{frag.content}</span> :
-                                        <img key={i} src={frag.url} alt={frag.name} className="h-[1.2em] inline-block align-middle select-none" />
+                                        <span key={i} className="h-[1.2em] w-[1.2em] relative inline-block align-middle select-none">
+                                            <Image src={frag.url} alt={frag.name} fill unoptimized />
+                                        </span>
                                 ))}
                             </div>
                         </div>

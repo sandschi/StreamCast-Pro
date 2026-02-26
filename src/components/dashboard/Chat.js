@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import Image from 'next/image';
 import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
@@ -279,7 +280,9 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                         {suggestions.map(sug => (
                             <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-indigo-500/30 group/sug animate-in zoom-in-95 duration-200">
                                 <div className="flex items-center gap-2 max-w-[150px]">
-                                    <img src={sug.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                                    <div className="relative w-4 h-4 shrink-0">
+                                        <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" />
+                                    </div>
                                     <span className="text-[11px] font-bold truncate" style={{ color: sug.color }}>{sug.username}:</span>
                                     <span className="text-[11px] text-zinc-300 truncate">{sug.fragments[0]?.content}</span>
                                 </div>
@@ -301,7 +304,9 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <img src={msg.avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover bg-zinc-800" />
+                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800">
+                                    <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
+                                </div>
                                 <span className="font-bold text-sm tracking-wide" style={{ color: msg.color }}>
                                     {msg.username}
                                     {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
@@ -340,7 +345,9 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                         <div className="text-zinc-200 text-sm flex flex-wrap items-center gap-1.5 leading-relaxed pl-7">
                             {msg.fragments.map((frag, i) => (
                                 frag.type === 'text' ? <span key={i}>{frag.content}</span> :
-                                    <img key={i} src={frag.url} alt={frag.name} className="h-[1.2em] inline-block align-middle select-none" />
+                                    <span key={i} className="h-[1.2em] w-[1.2em] relative inline-block align-middle select-none">
+                                        <Image src={frag.url} alt={frag.name} fill unoptimized />
+                                    </span>
                             ))}
                         </div>
                     </div>

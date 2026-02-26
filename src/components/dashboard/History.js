@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from 'firebase/firestore';
@@ -111,7 +112,9 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 {msg.avatarUrl && (
-                                    <img src={msg.avatarUrl} alt="" className="w-4 h-4 rounded-full border border-white/10" />
+                                    <div className="relative w-4 h-4 overflow-hidden rounded-full border border-white/10 shrink-0">
+                                        <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
+                                    </div>
                                 )}
                                 <span className="font-bold text-xs" style={{ color: msg.color }}>
                                     {msg.username}
@@ -147,7 +150,9 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                 frag.type === 'text' ? (
                                     <span key={i}>{frag.content}</span>
                                 ) : (
-                                    <img key={i} src={frag.url} alt={frag.name} className="h-5 inline-block" />
+                                    <span key={i} className="h-5 w-5 relative inline-block align-middle select-none">
+                                        <Image src={frag.url} alt={frag.name} fill unoptimized />
+                                    </span>
                                 )
                             ))}
                         </div>

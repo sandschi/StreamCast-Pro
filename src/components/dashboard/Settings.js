@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { doc, updateDoc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
@@ -187,15 +188,20 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             >
                                 {/* Avatar */}
                                 {settings.showAvatar && (
-                                    <img
-                                        src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
-                                        alt=""
-                                        className="rounded-full border-2 border-white/10 shadow-lg"
+                                    <div
+                                        className="relative overflow-hidden rounded-full border-2 border-white/10 shadow-lg shrink-0"
                                         style={{
                                             width: `${settings.avatarSize}px`,
                                             height: `${settings.avatarSize}px`
                                         }}
-                                    />
+                                    >
+                                        <Image
+                                            src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
+                                            alt=""
+                                            fill
+                                            style={{ objectFit: 'cover' }}
+                                        />
+                                    </div>
                                 )}
 
                                 {/* Message Content */}

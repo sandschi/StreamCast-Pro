@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
 
@@ -34,19 +35,19 @@ export async function POST(request, { params }) {
         const privateConfigData = privateConfigSnap.data();
 
         // Ensure the token matches the stored token securely
-        if (!privateConfigData.apiToken || privateConfigData.apiToken !== token) {
+        if (!privateConfigData.apiToken) {
             return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
         }
 
-        // 2. Fetch User's Overlay Settings
-        const configRef = doc(db, 'users', userId, 'settings', 'config');
-        const configSnap = await getDoc(configRef);
+        const storedTokenBuffer = Buffer.from(privateConfigData.apiToken);
+        const providedTokenBuffer = Buffer.from(token);
 
-        if (!configSnap.exists()) {
-            return NextResponse.json({ success: false, error: "Settings configuration not found" }, { status: 404 });
+        if (storedTokenBuffer.length !== providedTokenBuffer.length || !crypto.timingSafeEqual(storedTokenBuffer, providedTokenBuffer)) {
+            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
         }
 
-        const configData = configSnap.data();
+        // 2. Perform Requested Action
+        const configRef = doc(db, 'users', userId, 'settings', 'config');
 
         // 2. Perform Requested Action
         let newState = null;
@@ -97,6 +98,9 @@ export async function POST(request, { params }) {
 
     } catch (error) {
         console.error("Error in overlay API:", error);
+        if (error.code === 'not-found' || error.message?.includes('No document to update')) {
+            return NextResponse.json({ success: false, error: "Settings configuration not found" }, { status: 404 });
+        }
         return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
     }
 }

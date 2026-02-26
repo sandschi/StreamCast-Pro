@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send } from 'lucide-react';
@@ -98,7 +99,14 @@ export default function Broadcasters() {
                 {broadcasters.map((u) => (
                     <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between group hover:border-zinc-700 transition-all">
                         <div className="flex items-center gap-4">
-                            <img src={u.photoURL} alt="" className="w-12 h-12 rounded-full border-2 border-zinc-800 shadow-xl" />
+                            <div className="relative w-12 h-12">
+                                <Image
+                                    src={u.photoURL}
+                                    alt=""
+                                    fill
+                                    className="rounded-full border-2 border-zinc-800 shadow-xl object-cover"
+                                />
+                            </div>
                             <div>
                                 <p className="font-bold text-zinc-100 flex items-center gap-2">
                                     {u.displayName}
