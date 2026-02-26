@@ -25,7 +25,11 @@ import {
     Link as LinkIcon,
     Users,
     Clock,
-    Music
+    Music,
+    Terminal,
+    Key,
+    Power,
+    EyeOff
 } from 'lucide-react';
 import UsersTab from '@/components/dashboard/Users';
 import Broadcasters from '@/components/dashboard/Broadcasters';
@@ -55,6 +59,7 @@ function DashboardContent() {
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
     const [verifyingMod, setVerifyingMod] = useState(true);
     const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
+    const [generatingToken, setGeneratingToken] = useState(false);
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -195,6 +200,35 @@ function DashboardContent() {
         }
     };
 
+    const handleGenerateToken = async () => {
+        if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
+        setGeneratingToken(true);
+        try {
+            const token = crypto.randomUUID();
+            await setDoc(doc(db, 'users', targetUid || user.uid, 'settings', 'config'), {
+                apiToken: token
+            }, { merge: true });
+        } catch (err) {
+            console.error('Error generating token:', err);
+        } finally {
+            setGeneratingToken(false);
+        }
+    };
+
+    const copyApiCommand = async (action) => {
+        if (!user || !userSettings?.apiToken) return;
+        const baseUrl = window.location.origin;
+        const uid = targetUid || user.uid;
+        const url = `${baseUrl}/api/overlay/${uid}?token=${userSettings.apiToken}&action=${action}`;
+
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopyState(`api-${action}`);
+        } catch (err) {
+            console.error('Failed to copy API link!', err);
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -329,6 +363,67 @@ function DashboardContent() {
                                     {copyState === 'mod' ? 'Copied!' : 'Copy Mod Link'}
                                 </span>
                             </button>
+
+                            {/* API Toolkit (Broadcaster Only) */}
+                            <div className="pt-4 border-t border-zinc-800/50 mt-4 space-y-2 hidden md:block">
+                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-3 mb-2 flex items-center gap-2">
+                                    <Terminal size={12} /> Remote API Links
+                                </p>
+
+                                {!userSettings?.apiToken ? (
+                                    <button
+                                        onClick={handleGenerateToken}
+                                        disabled={generatingToken}
+                                        className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30 hover:bg-purple-600/30 transition-all font-bold text-xs"
+                                    >
+                                        <Key size={14} /> {generatingToken ? 'Generating...' : 'Generate API Token'}
+                                    </button>
+                                ) : (
+                                    <div className="flex flex-col gap-1.5 mt-2">
+                                        <div className="px-2 py-1.5 border border-zinc-800/50 bg-zinc-800/20 rounded-xl space-y-1">
+                                            <p className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold ml-1 mb-1">Queue Overlay</p>
+                                            <button onClick={() => copyApiCommand('toggle-karafun-queue')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-toggle-karafun-queue' ? <Check size={14} className="text-green-500 shrink-0" /> : <RefreshCw size={14} className="shrink-0 text-blue-400" />} Toggle Visibility
+                                            </button>
+                                            <button onClick={() => copyApiCommand('karafun-queue-on')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-karafun-queue-on' ? <Check size={14} className="text-green-500 shrink-0" /> : <Power size={14} className="shrink-0 text-green-500/80" />} Turn On
+                                            </button>
+                                            <button onClick={() => copyApiCommand('karafun-queue-off')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-karafun-queue-off' ? <Check size={14} className="text-green-500 shrink-0" /> : <Power size={14} className="shrink-0 text-red-500/80" />} Turn Off
+                                            </button>
+                                        </div>
+
+                                        <div className="px-2 py-1.5 border border-zinc-800/50 bg-zinc-800/20 rounded-xl space-y-1">
+                                            <p className="text-[9px] uppercase tracking-widest text-zinc-500 font-bold ml-1 mb-1">Now Playing Popup</p>
+                                            <button onClick={() => copyApiCommand('toggle-now-playing')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-toggle-now-playing' ? <Check size={14} className="text-green-500 shrink-0" /> : <RefreshCw size={14} className="shrink-0 text-blue-400" />} Toggle Popup
+                                            </button>
+                                            <button onClick={() => copyApiCommand('now-playing-on')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-now-playing-on' ? <Check size={14} className="text-green-500 shrink-0" /> : <Power size={14} className="shrink-0 text-green-500/80" />} Turn On
+                                            </button>
+                                            <button onClick={() => copyApiCommand('now-playing-off')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition-colors text-xs text-left">
+                                                {copyState === 'api-now-playing-off' ? <Check size={14} className="text-green-500 shrink-0" /> : <Power size={14} className="shrink-0 text-red-500/80" />} Turn Off
+                                            </button>
+                                        </div>
+
+                                        <div className="px-2 py-1.5 border border-red-500/10 bg-red-500/5 rounded-xl space-y-1">
+                                            <p className="text-[9px] uppercase tracking-widest text-red-500/70 font-bold ml-1 mb-1">Active Message</p>
+                                            <button onClick={() => copyApiCommand('hide-message')} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-xs text-left font-medium">
+                                                {copyState === 'api-hide-message' ? <Check size={14} className="text-green-500 shrink-0" /> : <EyeOff size={14} className="shrink-0 text-red-400" />} Hide Message
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            onClick={handleGenerateToken}
+                                            disabled={generatingToken}
+                                            className="w-full mt-2 flex items-center justify-center gap-2 p-1.5 rounded-lg border border-red-500/20 text-red-400/50 hover:bg-red-500/10 hover:text-red-400 transition-all text-[10px]"
+                                            title="Generates a new token, invalidating all previously copied links."
+                                        >
+                                            <Key size={12} /> {generatingToken ? 'Revoking...' : 'Revoke & Rotate Token'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </nav>
