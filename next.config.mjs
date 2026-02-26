@@ -9,6 +9,16 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'static-cdn.jtvnw.net',
+        pathname: '/user-default-pictures-uv/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'static-cdn.jtvnw.net',
+        pathname: '/emoticons/v2/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'api.dicebear.com',
         pathname: '/**',
       },

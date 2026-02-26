@@ -541,6 +541,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('karafunEnabled', !settings.karafunEnabled)}
+                                role="switch"
+                                aria-checked={settings.karafunEnabled}
+                                aria-label="Enable KaraFun Integration"
                                 className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
                             >
                                 <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />

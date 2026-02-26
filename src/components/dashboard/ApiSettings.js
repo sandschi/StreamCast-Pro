@@ -19,11 +19,15 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
 
     const handleGenerateToken = async () => {
         if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
+
+        // Security check: Only master admins can target other users
+        const effectiveUid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
+
         setGeneratingToken(true);
         setError(null);
         try {
             const token = crypto.randomUUID();
-            await setDoc(doc(db, 'users', targetUid || user.uid, 'private', 'config'), {
+            await setDoc(doc(db, 'users', effectiveUid, 'private', 'config'), {
                 apiToken: token
             }, { merge: true });
             if (setPrivateConfig) {
@@ -40,15 +44,16 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
     const copyApiCommand = async (action) => {
         if (!user || !privateConfig?.apiToken) return;
         const baseUrl = window.location.origin;
-        const uid = targetUid || user.uid;
-        // Token is no longer in the URL, clients must send POST with Bearer token
+        const uid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
+
         const url = `${baseUrl}/api/overlay/${uid}?action=${encodeURIComponent(action)}`;
+        const curlCommand = `curl -X POST "${url}" -H "Authorization: Bearer ${privateConfig.apiToken}"`;
 
         try {
-            await navigator.clipboard.writeText(url);
+            await navigator.clipboard.writeText(curlCommand);
             setCopyState(`api-${action}`);
         } catch (err) {
-            console.error('Failed to copy API link!', err);
+            console.error('Failed to copy API command!', err);
         }
     };
 

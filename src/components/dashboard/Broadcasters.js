@@ -101,8 +101,8 @@ export default function Broadcasters() {
                         <div className="flex items-center gap-4">
                             <div className="relative w-12 h-12">
                                 <Image
-                                    src={u.photoURL}
-                                    alt=""
+                                    src={u.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${u.id}`}
+                                    alt={`${u.displayName || 'Broadcaster'}'s avatar (Live on Twitch)`}
                                     fill
                                     className="rounded-full border-2 border-zinc-800 shadow-xl object-cover"
                                 />

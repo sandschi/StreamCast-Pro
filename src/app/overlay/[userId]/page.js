@@ -112,6 +112,9 @@ export default function OverlayPage() {
                     // Fallback for messages without IDs (testing)
                     setMessageQueue(prev => [...prev, data]);
                 }
+            } else if (!doc.exists()) {
+                // Detected deletion (either via onSnapshot removed or doc.exists false)
+                setActiveMessage(null);
             }
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
@@ -202,7 +205,11 @@ export default function OverlayPage() {
         });
 
         socket.on('queue', (items) => {
-            const transformed = (items || []).map(item => ({
+            if (!Array.isArray(items)) {
+                setKarafunQueue([]);
+                return;
+            }
+            const transformed = items.map(item => ({
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
