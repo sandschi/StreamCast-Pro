@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save, Monitor } from 'lucide-react';
+import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save, Monitor, Type, Move } from 'lucide-react';
+
+const FONTS = [
+    'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
+    'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'
+];
 import { db } from '@/lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
@@ -245,6 +250,87 @@ export default function KaraFun({ targetUid, userSettings }) {
                             <option value="comic">Comic</option>
                             <option value="future">Future</option>
                         </select>
+                    </div>
+                </div>
+
+                {/* OVERLAY STYLING & POSITIONING SECTION */}
+                <div className="pt-6 border-t border-zinc-800">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-blue-500/20 p-2 rounded-lg">
+                            <Type className="text-blue-400" size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Typography & Colors</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2 select-none">
+                            <label className="text-xs font-bold text-zinc-400 uppercase">Font Family</label>
+                            <select
+                                value={userSettings?.karafunFontFamily || 'Inter'}
+                                onChange={(e) => handleToggleSetting('karafunFontFamily', e.target.value)}
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-blue-600/50"
+                            >
+                                {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-2 select-none">
+                            <label className="text-xs font-bold text-zinc-400 uppercase">Primary Text Color</label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="color"
+                                    value={userSettings?.karafunTextColor || '#ffffff'}
+                                    onChange={(e) => handleToggleSetting('karafunTextColor', e.target.value)}
+                                    className="w-10 h-10 rounded-lg bg-zinc-950 border-none cursor-pointer p-0"
+                                />
+                                <input
+                                    type="text"
+                                    value={userSettings?.karafunTextColor || '#ffffff'}
+                                    readOnly
+                                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-[10px] text-zinc-500 uppercase font-mono"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-6 border-t border-zinc-800">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-green-500/20 p-2 rounded-lg">
+                            <Move className="text-green-400" size={18} />
+                        </div>
+                        <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Precision Positioning</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 select-none">
+                        {/* Queue Position */}
+                        <div className="space-y-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-800">
+                            <h5 className="text-xs font-bold text-zinc-300 uppercase flex items-center gap-2 mb-2">
+                                <ListMusic size={14} className="text-zinc-500" /> Queue Overlay
+                            </h5>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Horizontal (X) <span className="text-green-500">{userSettings?.karafunQueuePosX ?? 5}%</span></label>
+                                <input type="range" min="0" max="100" value={userSettings?.karafunQueuePosX ?? 5} onChange={(e) => handleToggleSetting('karafunQueuePosX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Vertical (Y) <span className="text-green-500">{userSettings?.karafunQueuePosY ?? 5}%</span></label>
+                                <input type="range" min="0" max="100" value={userSettings?.karafunQueuePosY ?? 5} onChange={(e) => handleToggleSetting('karafunQueuePosY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
+                            </div>
+                        </div>
+
+                        {/* Now Playing Position */}
+                        <div className="space-y-4 bg-zinc-950 p-4 rounded-2xl border border-zinc-800">
+                            <h5 className="text-xs font-bold text-zinc-300 uppercase flex items-center gap-2 mb-2">
+                                <Play size={14} className="text-zinc-500" /> Now Playing Overlay
+                            </h5>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Horizontal (X) <span className="text-green-500">{userSettings?.karafunNowPlayingPosX ?? 50}%</span></label>
+                                <input type="range" min="0" max="100" value={userSettings?.karafunNowPlayingPosX ?? 50} onChange={(e) => handleToggleSetting('karafunNowPlayingPosX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Vertical (Y) <span className="text-green-500">{userSettings?.karafunNowPlayingPosY ?? 90}%</span></label>
+                                <input type="range" min="0" max="100" value={userSettings?.karafunNowPlayingPosY ?? 90} onChange={(e) => handleToggleSetting('karafunNowPlayingPosY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

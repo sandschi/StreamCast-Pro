@@ -79,6 +79,18 @@ export default function OverlayPage() {
         return () => { try { document.head.removeChild(link); } catch (e) { } };
     }, [effectiveSettings.fontFamily]);
 
+    // KaraFun Dynamic Font Loading
+    useEffect(() => {
+        if (!settings.karafunFontFamily) return;
+        const link = document.createElement('link');
+        const fontName = settings.karafunFontFamily.replace(/\s+/g, '+');
+        link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@400;700;900&display=swap`;
+        link.rel = 'stylesheet';
+        link.onerror = () => { console.warn(`Failed to load font: ${settings.karafunFontFamily}`); };
+        document.head.appendChild(link);
+        return () => { try { document.head.removeChild(link); } catch (e) { } };
+    }, [settings.karafunFontFamily]);
+
     useEffect(() => {
         if (!userId) return;
         const settingsRef = doc(db, 'users', userId, 'settings', 'config');
@@ -233,8 +245,8 @@ export default function OverlayPage() {
     const getKaraFunThemeStyles = () => {
         const theme = settings.karafunOverlayTheme || 'classic';
         const baseStyles = {
-            queueContainer: "absolute left-6 top-6 flex flex-col gap-3 w-80",
-            nowPlayingContainer: "absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2",
+            queueContainer: "absolute flex flex-col gap-3 w-80",
+            nowPlayingContainer: "absolute flex flex-col items-center gap-2",
         };
 
         switch (theme) {
@@ -600,7 +612,16 @@ export default function OverlayPage() {
 
             {/* KaraFun Overlays */}
             {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
-                <div className={getKaraFunThemeStyles().queueContainer}>
+                <div
+                    className={getKaraFunThemeStyles().queueContainer}
+                    style={{
+                        left: `${settings.karafunQueuePosX ?? 5}%`,
+                        top: `${settings.karafunQueuePosY ?? 5}%`,
+                        transform: `translate(${(settings.karafunQueuePosX ?? 5) > 50 ? '-100%' : '0%'}, ${(settings.karafunQueuePosY ?? 5) > 50 ? '-100%' : '0%'})`,
+                        fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
+                        color: settings.karafunTextColor || undefined
+                    }}
+                >
                     <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-500 z-0`}>
                         <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
                     </div>
@@ -630,6 +651,13 @@ export default function OverlayPage() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 50, scale: 0.9, transition: { duration: 0.5 } }}
                         className={getKaraFunThemeStyles().nowPlayingContainer}
+                        style={{
+                            left: `${settings.karafunNowPlayingPosX ?? 50}%`,
+                            top: `${settings.karafunNowPlayingPosY ?? 90}%`,
+                            transform: `translate(${(settings.karafunNowPlayingPosX ?? 50) > 40 && (settings.karafunNowPlayingPosX ?? 50) < 60 ? '-50%' : (settings.karafunNowPlayingPosX ?? 50) >= 60 ? '-100%' : '0%'}, ${(settings.karafunNowPlayingPosY ?? 90) > 50 ? '-100%' : '0%'})`,
+                            fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
+                            color: settings.karafunTextColor || undefined
+                        }}
                     >
                         <div className="bg-green-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-[0_0_10px_#22c55e] mb-[-12px] relative z-10">
                             Now Playing
