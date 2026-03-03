@@ -2,26 +2,55 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { PostHog } from 'posthog-node';
 
 export async function GET() {
     return NextResponse.json({ success: false, error: "Method Not Allowed. Please use POST with a Bearer token." }, { status: 405 });
 }
 
 export async function POST(request, { params }) {
+    const posthog = new PostHog(
+        process.env.NEXT_PUBLIC_POSTHOG_KEY,
+        { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com' }
+    );
+
     try {
         const { userId } = await params;
         const { searchParams } = new URL(request.url);
         const action = searchParams.get('action');
 
+        posthog.capture({
+            distinctId: userId || 'anonymous',
+            event: 'api_overlay_request_started',
+            properties: {
+                action: action,
+                userId: userId,
+            }
+        });
+
         const authHeader = request.headers.get('authorization');
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return NextResponse.json({ success: false, error: "Missing or invalid Authorization header" }, { status: 401 });
+            const errorMsg = "Missing or invalid Authorization header";
+            posthog.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_overlay_error',
+                properties: { error: errorMsg, status: 401, action: action, userId: userId }
+            });
+            await posthog.shutdown();
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
         const token = authHeader.split(' ')[1];
 
         if (!userId || !token || !action) {
-            return NextResponse.json({ success: false, error: "Missing required parameters" }, { status: 400 });
+            const errorMsg = "Missing required parameters";
+            posthog.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_overlay_error',
+                properties: { error: errorMsg, status: 400, action: action, userId: userId }
+            });
+            await posthog.shutdown();
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
         // 1. Verify Token against User's Private Config
@@ -29,21 +58,42 @@ export async function POST(request, { params }) {
         const privateConfigSnap = await getDoc(privateConfigRef);
 
         if (!privateConfigSnap.exists()) {
-            return NextResponse.json({ success: false, error: "Authentication configuration not found" }, { status: 404 });
+            const errorMsg = "Authentication configuration not found";
+            posthog.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_overlay_error',
+                properties: { error: errorMsg, status: 404, action: action, userId: userId }
+            });
+            await posthog.shutdown();
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
         }
 
         const privateConfigData = privateConfigSnap.data();
 
         // Ensure the token matches the stored token securely
         if (!privateConfigData.apiToken) {
-            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
+            const errorMsg = "Unauthorized or invalid token";
+            posthog.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_overlay_error',
+                properties: { error: errorMsg, status: 401, action: action, userId: userId }
+            });
+            await posthog.shutdown();
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
         const storedTokenBuffer = Buffer.from(privateConfigData.apiToken);
         const providedTokenBuffer = Buffer.from(token);
 
         if (storedTokenBuffer.length !== providedTokenBuffer.length || !crypto.timingSafeEqual(storedTokenBuffer, providedTokenBuffer)) {
-            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
+            const errorMsg = "Unauthorized or invalid token";
+            posthog.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_overlay_error',
+                properties: { error: errorMsg, status: 401, action: action, userId: userId }
+            });
+            await posthog.shutdown();
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
         // 2. Perform Requested Action
@@ -89,18 +139,54 @@ export async function POST(request, { params }) {
                 // Hide message deletes the current active message document
                 const msgRef = doc(db, 'users', userId, 'active_message', 'current');
                 await deleteDoc(msgRef);
+                posthog.capture({
+                    distinctId: userId || 'anonymous',
+                    event: 'api_overlay_success',
+                    properties: { action: action, userId: userId, message_hidden: true }
+                });
+                await posthog.shutdown();
                 return NextResponse.json({ success: true, action: action, message_hidden: true });
             default:
-                return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+                const errorMsg = "Invalid action";
+                posthog.capture({
+                    distinctId: userId || 'anonymous',
+                    event: 'api_overlay_error',
+                    properties: { error: errorMsg, status: 400, action: action, userId: userId }
+                });
+                await posthog.shutdown();
+                return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
+        posthog.capture({
+            distinctId: userId || 'anonymous',
+            event: 'api_overlay_success',
+            properties: { action: action, state: newState, userId: userId }
+        });
+        await posthog.shutdown();
         return NextResponse.json({ success: true, action: action, state: newState });
 
     } catch (error) {
         console.error("Error in overlay API:", error);
-        if (error.code === 'not-found' || error.message?.includes('No document to update')) {
-            return NextResponse.json({ success: false, error: "Settings configuration not found" }, { status: 404 });
+
+        const isNotFound = error.code === 'not-found' || error.message?.includes('No document to update');
+        const status = isNotFound ? 404 : 500;
+        const errorMsg = isNotFound ? "Settings configuration not found" : "Internal server error";
+
+        posthog.capture({
+            distinctId: 'anonymous', // we might not have userId if it failed early
+            event: 'api_overlay_error',
+            properties: {
+                error: errorMsg,
+                status: status,
+                exception: error.message,
+                stack: error.stack
+            }
+        });
+        await posthog.shutdown();
+
+        if (isNotFound) {
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
         }
-        return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
     }
 }

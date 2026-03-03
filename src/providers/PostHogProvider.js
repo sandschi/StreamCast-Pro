@@ -13,6 +13,53 @@ export function PostHogProvider({ children }) {
                 person_profiles: 'identified_only',
                 capture_pageview: false // Disable automatic pageview capture, as we use manual capture below
             })
+
+            // Override console methods to capture logs
+            const wrapConsole = (method) => {
+                const original = console[method]
+                console[method] = (...args) => {
+                    const message = args.map(arg => {
+                        try {
+                            return typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                        } catch (e) {
+                            return String(arg)
+                        }
+                    }).join(' ')
+
+                    if (posthog) {
+                        posthog.capture(`console_${method}`, { message })
+                    }
+                    original.apply(console, args)
+                }
+            }
+
+            wrapConsole('log')
+            wrapConsole('warn')
+            wrapConsole('error')
+            wrapConsole('info')
+
+            // Global error handler
+            window.addEventListener('error', (event) => {
+                if (posthog) {
+                    posthog.capture('$exception', {
+                        message: event.message,
+                        source: event.filename,
+                        lineno: event.lineno,
+                        colno: event.colno,
+                        error: event.error ? event.error.stack : null
+                    })
+                }
+            })
+
+            // Unhandled promise rejection
+            window.addEventListener('unhandledrejection', (event) => {
+                if (posthog) {
+                    posthog.capture('$exception', {
+                        message: event.reason ? (event.reason.message || String(event.reason)) : 'Unhandled Promise Rejection',
+                        error: event.reason && event.reason.stack ? event.reason.stack : null
+                    })
+                }
+            })
         }
     }, [])
 
