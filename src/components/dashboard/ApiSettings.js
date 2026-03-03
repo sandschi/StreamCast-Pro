@@ -47,13 +47,12 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
         const uid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
 
         const url = `${baseUrl}/api/overlay/${uid}?action=${encodeURIComponent(action)}`;
-        const curlCommand = `curl -X POST "${url}" -H "Authorization: Bearer ${privateConfig.apiToken}"`;
 
         try {
-            await navigator.clipboard.writeText(curlCommand);
+            await navigator.clipboard.writeText(url);
             setCopyState(`api-${action}`);
         } catch (err) {
-            console.error('Failed to copy API command!', err);
+            console.error('Failed to copy API link!', err);
         }
     };
 
