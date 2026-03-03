@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { adminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
 import { PostHog } from 'posthog-node';
 
 let posthogClient = null;
@@ -62,6 +62,8 @@ export async function POST(request, { params }) {
             }
             return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
+
+        const adminDb = getAdminDb();
 
         // 1. Verify Token against User's Private Config
         const privateConfigRef = adminDb.collection('users').doc(userId).collection('private').doc('config');
