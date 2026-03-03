@@ -4,12 +4,17 @@ import { PostHog } from 'posthog-node';
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/1471625368908595382/7c7Gut2JK8ZOTuxId4AFvtNBPuEuIP7FEVEOBCQXEG2ZZ6KRYS1PgY8tDTNDFdG-rHDN";
 const DISCORD_USER_ID = "520983375885107200";
 
-export async function POST(request) {
-    const posthog = new PostHog(
-        process.env.NEXT_PUBLIC_POSTHOG_KEY,
-        { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com' }
+let posthogClient = null;
+try {
+    posthogClient = new PostHog(
+        process.env.NEXT_PUBLIC_POSTHOG_KEY || 'phc_placeholder',
+        { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com', flushAt: 1, flushInterval: 0 }
     );
+} catch (e) {
+    console.warn("PostHog initialization failed:", e);
+}
 
+export async function POST(request) {
     try {
         const { userId, userData } = await request.json();
 
@@ -20,24 +25,28 @@ export async function POST(request) {
         const status = userData.status || "waiting";
         const timestamp = userData.lastLogin || new Date().toISOString();
 
-        posthog.capture({
-            distinctId: userId || 'anonymous',
-            event: 'api_signup_notification_started',
-            properties: {
-                userId: userId,
-                status: status,
-                twitchUsername: twitchUsername
-            }
-        });
+        if (posthogClient) {
+            posthogClient.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_signup_notification_started',
+                properties: {
+                    userId: userId,
+                    status: status,
+                    twitchUsername: twitchUsername
+                }
+            });
+        }
 
         // Skip notification if user is already approved (e.g., sandschi)
         if (status === "approved") {
-            posthog.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_signup_notification_skipped',
-                properties: { userId: userId, reason: "auto-approved" }
-            });
-            await posthog.shutdown();
+            if (posthogClient) {
+                posthogClient.capture({
+                    distinctId: userId || 'anonymous',
+                    event: 'api_signup_notification_skipped',
+                    properties: { userId: userId, reason: "auto-approved" }
+                });
+                await posthogClient.flush();
+            }
             return NextResponse.json({ success: true, skipped: true, reason: "auto-approved" });
         }
 
@@ -99,41 +108,47 @@ export async function POST(request) {
             const errorText = await response.text();
             console.error("Discord webhook failed:", response.status, errorText);
 
-            posthog.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_signup_notification_error',
-                properties: {
-                    error: "Discord webhook failed",
-                    status: response.status,
-                    details: errorText,
-                    userId: userId
-                }
-            });
-            await posthog.shutdown();
+            if (posthogClient) {
+                posthogClient.capture({
+                    distinctId: userId || 'anonymous',
+                    event: 'api_signup_notification_error',
+                    properties: {
+                        error: "Discord webhook failed",
+                        status: response.status,
+                        details: errorText,
+                        userId: userId
+                    }
+                });
+                await posthogClient.flush();
+            }
             return NextResponse.json({ success: false, error: "Discord webhook failed" }, { status: 500 });
         }
 
-        posthog.capture({
-            distinctId: userId || 'anonymous',
-            event: 'api_signup_notification_success',
-            properties: { userId: userId }
-        });
-        await posthog.shutdown();
+        if (posthogClient) {
+            posthogClient.capture({
+                distinctId: userId || 'anonymous',
+                event: 'api_signup_notification_success',
+                properties: { userId: userId }
+            });
+            await posthogClient.flush();
+        }
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("Error sending Discord notification:", error);
 
-        posthog.capture({
-            distinctId: 'anonymous',
-            event: 'api_signup_notification_error',
-            properties: {
-                error: "Internal server error",
-                exception: error.message,
-                stack: error.stack
-            }
-        });
-        await posthog.shutdown();
+        if (posthogClient) {
+            posthogClient.capture({
+                distinctId: 'anonymous',
+                event: 'api_signup_notification_error',
+                properties: {
+                    error: "Internal server error",
+                    exception: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                }
+            });
+            await posthogClient.flush();
+        }
 
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
     }
 }
