@@ -168,21 +168,25 @@ export async function POST(request, { params }) {
     } catch (error) {
         console.error("Error in overlay API:", error);
 
-        const isNotFound = error.code === 'not-found' || error.message?.includes('No document to update');
+        const isNotFound = error?.code === 'not-found' || error?.message?.includes('No document to update');
         const status = isNotFound ? 404 : 500;
         const errorMsg = isNotFound ? "Settings configuration not found" : "Internal server error";
 
-        posthog.capture({
-            distinctId: 'anonymous', // we might not have userId if it failed early
-            event: 'api_overlay_error',
-            properties: {
-                error: errorMsg,
-                status: status,
-                exception: error.message,
-                stack: error.stack
-            }
-        });
-        await posthog.shutdown();
+        try {
+            posthog.capture({
+                distinctId: 'anonymous', // we might not have userId if it failed early
+                event: 'api_overlay_error',
+                properties: {
+                    error: errorMsg,
+                    status: status,
+                    exception: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                }
+            });
+            await posthog.shutdown();
+        } catch (posthogError) {
+            console.error("Failed to send error to PostHog:", posthogError);
+        }
 
         if (isNotFound) {
             return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
