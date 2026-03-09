@@ -39,6 +39,7 @@ export default function OverlayPage() {
     const lastTriggeredSongRef = useRef(null);
     const lastPlayStateRef = useRef(null);
     const lastManualTriggerRef = useRef(0); // Store timestamp of last manual trigger
+    const hideTimerRef = useRef(null); // Consolidated Ref for auto-hiding the "Now Playing" popup
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -128,7 +129,6 @@ export default function OverlayPage() {
     useEffect(() => {
         if (!userId) return;
         const triggerRef = doc(db, 'users', userId, 'overlay_triggers', 'now_playing');
-        let hideTimeout = null;
         const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -144,20 +144,20 @@ export default function OverlayPage() {
                     // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
                     if (!isStale) {
                         setShowNowPlaying(true);
-                        if (hideTimeout) clearTimeout(hideTimeout);
-                        hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 10000);
                     } else if (wasStaleOnLoad) {
                         console.log("[Trigger] Ignoring stale manual trigger on page load");
                     }
                 }
             } else {
-                if (hideTimeout) clearTimeout(hideTimeout);
+                if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
                 setShowNowPlaying(false);
             }
         });
         return () => {
             unsubscribeTrigger();
-            if (hideTimeout) clearTimeout(hideTimeout);
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         };
     }, [userId]);
 
@@ -292,8 +292,9 @@ export default function OverlayPage() {
 
         // 1. If playback stops or nothing is playing, hide immediately
         if (!isPlaying || !karafunNowPlaying) {
-            const timer = setTimeout(() => setShowNowPlaying(false), 0);
-            return () => clearTimeout(timer);
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 0);
+            return;
         }
 
         // 2. Trigger on:
@@ -306,19 +307,18 @@ export default function OverlayPage() {
             console.log(`[NowPlaying] Triggered: ${songKey} (Changed: ${hasSongChanged}, Resumed: ${hasBecomePlaying})`);
             lastTriggeredSongRef.current = songKey;
 
-            const popupTimer = setTimeout(() => {
-                setShowNowPlaying(true);
-            }, 0);
-            const hideTimer = setTimeout(() => {
+            // Clear any existing hide timer
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+
+            // Pop showing immediately
+            setShowNowPlaying(true);
+
+            // Arm the shared hide timer
+            hideTimerRef.current = setTimeout(() => {
                 setShowNowPlaying(false);
             }, 10000);
-
-            return () => {
-                clearTimeout(popupTimer);
-                clearTimeout(hideTimer);
-            };
         }
-    }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
+    }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled, hideTimerRef]);
 
     const getKaraFunThemeStyles = () => {
         const theme = settings.karafunOverlayTheme || 'classic';
