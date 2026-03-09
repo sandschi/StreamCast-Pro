@@ -38,6 +38,7 @@ export default function OverlayPage() {
     // Track the last song title+state that triggered the popup so we only fire on genuine song starts
     const lastTriggeredSongRef = useRef(null);
     const lastPlayStateRef = useRef(null);
+    const lastManualTriggerRef = useRef(0); // Store timestamp of last manual trigger
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -130,12 +131,25 @@ export default function OverlayPage() {
         let hideTimeout = null;
         const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
             if (snap.exists()) {
-                // Manual override: show the popup immediately. 
-                // We DON'T reset lastTriggeredSongRef here to avoid the automatic trigger 
-                // refiring on the next socket update while the song is still the same.
-                setShowNowPlaying(true);
-                if (hideTimeout) clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                const data = snap.data();
+                const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+                const now = Date.now();
+                const isStale = (now - triggerTime) > 10000;
+
+                // Update ref immediately to prevent replaying this specific trigger doc later
+                if (triggerTime > lastManualTriggerRef.current) {
+                    const wasStaleOnLoad = lastManualTriggerRef.current === 0 && isStale;
+                    lastManualTriggerRef.current = triggerTime;
+
+                    // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
+                    if (!isStale) {
+                        setShowNowPlaying(true);
+                        if (hideTimeout) clearTimeout(hideTimeout);
+                        hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                    } else if (wasStaleOnLoad) {
+                        console.log("[Trigger] Ignoring stale manual trigger on page load");
+                    }
+                }
             } else {
                 if (hideTimeout) clearTimeout(hideTimeout);
                 setShowNowPlaying(false);
@@ -237,6 +251,7 @@ export default function OverlayPage() {
                 return;
             }
             const transformed = items.map(item => ({
+                id: item.queueId || item.songId || `${item.title}-${item.artist}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
@@ -703,7 +718,7 @@ export default function OverlayPage() {
                                 const theme = getKaraFunThemeStyles();
                                 return (
                                     <motion.div
-                                        key={song.title + i}
+                                        key={song.id}
                                         initial={{ opacity: 0, y: -20 }}
                                         animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: i * 0.07, ease: 'easeOut' } }}
                                         exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
