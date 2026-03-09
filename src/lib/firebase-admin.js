@@ -8,15 +8,29 @@ export function getAdminDb() {
 
             let privateKey = process.env.FIREBASE_PRIVATE_KEY;
             if (privateKey) {
-                // Remove accidentally copied surrounding quotes from the JSON file
-                if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-                    privateKey = privateKey.slice(1, -1);
-                } else if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
-                    privateKey = privateKey.slice(1, -1);
-                }
+                try {
+                    // Try parsing if it was accidentally pasted as a raw JSON string `"{...}"`
+                    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                        privateKey = JSON.parse(privateKey);
+                    }
+                } catch (e) { }
 
-                // Replace the literal string "\n" with actual newline characters
-                privateKey = privateKey.replace(/\\n/g, '\n');
+                // Ensure it's a real string with real newlines, stripped of carriage returns
+                privateKey = privateKey.replace(/\\n/g, '\n').replace(/\r/g, '').trim();
+
+                // Advanced Foolproof PEM Reconstructor (fixes bad spacing/wrapping from Vercel UI)
+                const header = "-----BEGIN PRIVATE KEY-----";
+                const footer = "-----END PRIVATE KEY-----";
+                if (privateKey.includes(header) && privateKey.includes(footer)) {
+                    // Extract just the base64 part, strip all spaces and newlines
+                    let base64Body = privateKey
+                        .substring(privateKey.indexOf(header) + header.length, privateKey.indexOf(footer))
+                        .replace(/\s+/g, ""); // Remove all whitespace
+
+                    // Re-wrap the base64 perfectly to 64 characters per line
+                    const wrappedBody = base64Body.match(/.{1,64}/g).join('\n');
+                    privateKey = `${header}\n${wrappedBody}\n${footer}\n`;
+                }
             }
 
             console.log("Initializing Firebase Admin with Project ID:", projectId ? "Found" : "Missing");
