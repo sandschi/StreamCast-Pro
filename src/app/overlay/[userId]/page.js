@@ -292,8 +292,8 @@ export default function OverlayPage() {
 
         // 1. If playback stops or nothing is playing, hide immediately
         if (!isPlaying || !karafunNowPlaying) {
-            setShowNowPlaying(false);
-            return;
+            const timer = setTimeout(() => setShowNowPlaying(false), 0);
+            return () => clearTimeout(timer);
         }
 
         // 2. Trigger on:
