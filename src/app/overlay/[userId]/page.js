@@ -35,6 +35,8 @@ export default function OverlayPage() {
     const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
     const [karafunPlayState, setKarafunPlayState] = useState('stop');
     const [showNowPlaying, setShowNowPlaying] = useState(false);
+    // Track the last song title+state that triggered the popup so we only fire on genuine song starts
+    const lastTriggeredSongRef = useRef(null);
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -119,6 +121,31 @@ export default function OverlayPage() {
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
     }, [userId, processedIds]);
+
+    // Listen for manual "show now playing" triggers written via the API
+    useEffect(() => {
+        if (!userId) return;
+        const triggerRef = doc(db, 'users', userId, 'overlay_triggers', 'now_playing');
+        let hideTimeout = null;
+        const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
+            if (snap.exists()) {
+                // Manual trigger: show the popup and reset the song key guard so
+                // the next automatic KaraFun start still fires as expected
+                lastTriggeredSongRef.current = null;
+                setShowNowPlaying(true);
+                if (hideTimeout) clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+            } else {
+                // Document deleted → hide-now-playing called
+                if (hideTimeout) clearTimeout(hideTimeout);
+                setShowNowPlaying(false);
+            }
+        });
+        return () => {
+            unsubscribeTrigger();
+            if (hideTimeout) clearTimeout(hideTimeout);
+        };
+    }, [userId]);
 
     const processNextMessage = useCallback(async () => {
         setIsProcessing(true);
@@ -237,25 +264,35 @@ export default function OverlayPage() {
         };
     }, [settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled, settings.karafunPartyId]);
 
-    // Trigger Now Playing animation when a new song starts
+    // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
+    // We key on the song title changing OR the state transitioning into 'playing'.
+    // Queue operations (volume, pitch, reorder) that fire a status event but don't
+    // change the song title are intentionally ignored.
     useEffect(() => {
-        if (settings.karafunOverlayNowPlayingEnabled && karafunPlayState === 'playing' && karafunNowPlaying) {
-            // Use setTimeout to avoid synchronous setState inside an effect (lint fix)
+        if (!settings.karafunOverlayNowPlayingEnabled || !karafunNowPlaying) return;
+
+        const songKey = karafunNowPlaying.title;
+        const isPlaying = karafunPlayState === 'playing';
+
+        // Only show popup when the song is playing AND it's a different song from the last trigger
+        if (isPlaying && songKey !== lastTriggeredSongRef.current) {
+            lastTriggeredSongRef.current = songKey;
+
             const popupTimer = setTimeout(() => {
                 setShowNowPlaying(true);
             }, 0);
-
-            const timer = setTimeout(() => {
-                setShowNowPlaying(false);
-            }, 10000); // Show for 10 seconds
-            return () => {
-                clearTimeout(popupTimer);
-                clearTimeout(timer);
-            };
-        } else {
             const hideTimer = setTimeout(() => {
                 setShowNowPlaying(false);
-            }, 0);
+            }, 10000);
+            return () => {
+                clearTimeout(popupTimer);
+                clearTimeout(hideTimer);
+            };
+        }
+
+        // If playback stops, hide immediately
+        if (!isPlaying) {
+            const hideTimer = setTimeout(() => setShowNowPlaying(false), 0);
             return () => clearTimeout(hideTimer);
         }
     }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
