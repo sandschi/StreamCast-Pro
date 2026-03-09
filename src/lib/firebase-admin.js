@@ -5,7 +5,19 @@ export function getAdminDb() {
         try {
             const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
             const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-            const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+            let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+            if (privateKey) {
+                // Remove accidentally copied surrounding quotes from the JSON file
+                if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+                    privateKey = privateKey.slice(1, -1);
+                } else if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+                    privateKey = privateKey.slice(1, -1);
+                }
+
+                // Replace the literal string "\n" with actual newline characters
+                privateKey = privateKey.replace(/\\n/g, '\n');
+            }
 
             console.log("Initializing Firebase Admin with Project ID:", projectId ? "Found" : "Missing");
 
