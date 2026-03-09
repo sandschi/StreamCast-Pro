@@ -133,13 +133,22 @@ export default function OverlayPage() {
             if (snap.exists()) {
                 const data = snap.data();
                 const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+                const now = Date.now();
+                const isStale = (now - triggerTime) > 10000;
 
-                // Only show if the trigger is NEWER than our last handled trigger
+                // Update ref immediately to prevent replaying this specific trigger doc later
                 if (triggerTime > lastManualTriggerRef.current) {
+                    const wasStaleOnLoad = lastManualTriggerRef.current === 0 && isStale;
                     lastManualTriggerRef.current = triggerTime;
-                    setShowNowPlaying(true);
-                    if (hideTimeout) clearTimeout(hideTimeout);
-                    hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+
+                    // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
+                    if (!isStale) {
+                        setShowNowPlaying(true);
+                        if (hideTimeout) clearTimeout(hideTimeout);
+                        hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                    } else if (wasStaleOnLoad) {
+                        console.log("[Trigger] Ignoring stale manual trigger on page load");
+                    }
                 }
             } else {
                 if (hideTimeout) clearTimeout(hideTimeout);
@@ -242,6 +251,7 @@ export default function OverlayPage() {
                 return;
             }
             const transformed = items.map(item => ({
+                id: item.queueId || item.songId || `${item.title}-${item.artist}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
@@ -708,7 +718,7 @@ export default function OverlayPage() {
                                 const theme = getKaraFunThemeStyles();
                                 return (
                                     <motion.div
-                                        key={song.title + i}
+                                        key={song.id}
                                         initial={{ opacity: 0, y: -20 }}
                                         animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: i * 0.07, ease: 'easeOut' } }}
                                         exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
