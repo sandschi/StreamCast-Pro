@@ -175,7 +175,7 @@ export async function GET(request, { params }) {
 
         const isNotFound = error?.code === 'not-found' || error?.message?.includes('No document to update');
         const status = isNotFound ? 404 : 500;
-        const errorMsg = isNotFound ? "Settings configuration not found" : "Internal server error";
+        const errorMsg = isNotFound ? "Settings configuration not found" : `Internal server error: ${error instanceof Error ? error.message : String(error)}`;
 
         if (posthogClient) {
             try {
