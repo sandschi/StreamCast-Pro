@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { getPostHogClient } from '@/lib/posthog-server';
+import { getPostHogClient, captureEvent } from '@/lib/posthog-server';
 
 export async function GET(request, { params }) {
     const posthogClient = getPostHogClient();
@@ -11,27 +11,14 @@ export async function GET(request, { params }) {
         const action = searchParams.get('action');
         const token = searchParams.get('token');
 
-        if (posthogClient) {
-            posthogClient.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_overlay_request_started',
-                properties: {
-                    action: action,
-                    userId: userId,
-                }
-            });
-        }
+        await captureEvent(posthogClient, userId, 'api_overlay_request_started', {
+            action: action,
+            userId: userId,
+        });
 
         if (!userId || !token || !action) {
             const errorMsg = "Missing required parameters";
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_overlay_error',
-                    properties: { error: errorMsg, status: 400, action: action, userId: userId }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 400, action: action, userId: userId }, true);
             return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
@@ -43,14 +30,7 @@ export async function GET(request, { params }) {
 
         if (!privateConfigSnap.exists) {
             const errorMsg = "Authentication configuration not found";
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_overlay_error',
-                    properties: { error: errorMsg, status: 404, action: action, userId: userId }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 404, action: action, userId: userId }, true);
             return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
         }
 
@@ -59,14 +39,7 @@ export async function GET(request, { params }) {
         // Ensure the token matches the stored token securely
         if (!privateConfigData.apiToken) {
             const errorMsg = "Unauthorized or invalid token";
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_overlay_error',
-                    properties: { error: errorMsg, status: 401, action: action, userId: userId }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 401, action: action, userId: userId }, true);
             return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
@@ -75,14 +48,7 @@ export async function GET(request, { params }) {
 
         if (storedTokenBuffer.length !== providedTokenBuffer.length || !crypto.timingSafeEqual(storedTokenBuffer, providedTokenBuffer)) {
             const errorMsg = "Unauthorized or invalid token";
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_overlay_error',
-                    properties: { error: errorMsg, status: 401, action: action, userId: userId }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 401, action: action, userId: userId }, true);
             return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
@@ -129,37 +95,16 @@ export async function GET(request, { params }) {
                 // Hide message deletes the current active message document
                 const msgRef = adminDb.collection('users').doc(userId).collection('active_message').doc('current');
                 await msgRef.delete();
-                if (posthogClient) {
-                    posthogClient.capture({
-                        distinctId: userId || 'anonymous',
-                        event: 'api_overlay_success',
-                        properties: { action: action, userId: userId, message_hidden: true }
-                    });
-                    await posthogClient.flush();
-                }
+                await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, userId: userId, message_hidden: true }, true);
                 return NextResponse.json({ success: true, action: action, message_hidden: true });
             }
             default:
                 const errorMsg = "Invalid action";
-                if (posthogClient) {
-                    posthogClient.capture({
-                        distinctId: userId || 'anonymous',
-                        event: 'api_overlay_error',
-                        properties: { error: errorMsg, status: 400, action: action, userId: userId }
-                    });
-                    await posthogClient.flush();
-                }
+                await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 400, action: action, userId: userId }, true);
                 return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
-        if (posthogClient) {
-            posthogClient.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_overlay_success',
-                properties: { action: action, state: newState, userId: userId }
-            });
-            await posthogClient.flush();
-        }
+        await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, state: newState, userId: userId }, true);
         return NextResponse.json({ success: true, action: action, state: newState });
 
     } catch (error) {
@@ -180,23 +125,12 @@ export async function GET(request, { params }) {
             console.error(`Firebase Private Key Debug Data | Len=${pk.length}, Quotes=${hasQuotes}, LitN=${literalNCount}, RealN=${realNCount}, Header=${hasHeader}`);
         }
 
-        if (posthogClient) {
-            try {
-                posthogClient.capture({
-                    distinctId: 'anonymous', // we might not have userId if it failed early
-                    event: 'api_overlay_error',
-                    properties: {
-                        error: errorMsg,
-                        status: status,
-                        exception: error instanceof Error ? error.message : String(error),
-                        stack: error instanceof Error ? error.stack : undefined
-                    }
-                });
-                await posthogClient.flush();
-            } catch (posthogError) {
-                console.error("Failed to send error to PostHog:", posthogError);
-            }
-        }
+        await captureEvent(posthogClient, 'anonymous', 'api_overlay_error', {
+            error: errorMsg,
+            status: status,
+            exception: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+        }, true);
 
         if (isNotFound) {
             return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });

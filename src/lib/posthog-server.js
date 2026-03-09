@@ -23,3 +23,19 @@ export function getPostHogClient() {
         return null;
     }
 }
+
+export async function captureEvent(client, distinctId, event, properties, shouldFlush = false) {
+    if (!client) return;
+    try {
+        client.capture({
+            distinctId: distinctId || 'anonymous',
+            event,
+            properties
+        });
+        if (shouldFlush) {
+            await client.flush();
+        }
+    } catch (telemetryError) {
+        console.error(`PostHog telemetry failed for event: ${event}`, telemetryError);
+    }
+}

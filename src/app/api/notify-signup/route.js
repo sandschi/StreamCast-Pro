@@ -1,19 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getPostHogClient } from '@/lib/posthog-server';
+import { getPostHogClient, captureEvent } from '@/lib/posthog-server';
 
 const DISCORD_USER_ID = "520983375885107200";
-
-async function captureEvent(client, distinctId, event, properties, shouldFlush = false) {
-    if (!client) return;
-    client.capture({
-        distinctId: distinctId || 'anonymous',
-        event,
-        properties
-    });
-    if (shouldFlush) {
-        await client.flush();
-    }
-}
 
 export async function POST(request) {
     const posthogClient = getPostHogClient();
@@ -124,6 +112,6 @@ export async function POST(request) {
             stack: error instanceof Error ? error.stack : undefined
         }, true);
 
-        return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
+        return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
     }
 }
