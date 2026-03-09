@@ -1,106 +1,140 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, deleteDoc, runTransaction } from 'firebase/firestore';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { getPostHogClient, captureEvent } from '@/lib/posthog-server';
 
-export async function GET() {
-    return NextResponse.json({ success: false, error: "Method Not Allowed. Please use POST with a Bearer token." }, { status: 405 });
-}
-
-export async function POST(request, { params }) {
+export async function GET(request, { params }) {
+    const posthogClient = getPostHogClient();
     try {
         const { userId } = await params;
         const { searchParams } = new URL(request.url);
         const action = searchParams.get('action');
+        const token = searchParams.get('token');
 
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return NextResponse.json({ success: false, error: "Missing or invalid Authorization header" }, { status: 401 });
-        }
-
-        const token = authHeader.split(' ')[1];
+        await captureEvent(posthogClient, userId, 'api_overlay_request_started', {
+            action: action,
+            userId: userId,
+        });
 
         if (!userId || !token || !action) {
-            return NextResponse.json({ success: false, error: "Missing required parameters" }, { status: 400 });
+            const errorMsg = "Missing required parameters";
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 400, action: action, userId: userId }, true);
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
-        // 1. Verify Token against User's Private Config
-        const privateConfigRef = doc(db, 'users', userId, 'private', 'config');
-        const privateConfigSnap = await getDoc(privateConfigRef);
+        const adminDb = await getAdminDb();
 
-        if (!privateConfigSnap.exists()) {
-            return NextResponse.json({ success: false, error: "Authentication configuration not found" }, { status: 404 });
+        // 1. Verify Token against User's Private Config
+        const privateConfigRef = adminDb.collection('users').doc(userId).collection('private').doc('config');
+        const privateConfigSnap = await privateConfigRef.get();
+
+        if (!privateConfigSnap.exists) {
+            const errorMsg = "Authentication configuration not found";
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 404, action: action, userId: userId }, true);
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
         }
 
         const privateConfigData = privateConfigSnap.data();
 
         // Ensure the token matches the stored token securely
         if (!privateConfigData.apiToken) {
-            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
+            const errorMsg = "Unauthorized or invalid token";
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 401, action: action, userId: userId }, true);
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
         const storedTokenBuffer = Buffer.from(privateConfigData.apiToken);
         const providedTokenBuffer = Buffer.from(token);
 
         if (storedTokenBuffer.length !== providedTokenBuffer.length || !crypto.timingSafeEqual(storedTokenBuffer, providedTokenBuffer)) {
-            return NextResponse.json({ success: false, error: "Unauthorized or invalid token" }, { status: 401 });
+            const errorMsg = "Unauthorized or invalid token";
+            await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 401, action: action, userId: userId }, true);
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
         }
 
         // 2. Perform Requested Action
-        const configRef = doc(db, 'users', userId, 'settings', 'config');
+        const configRef = adminDb.collection('users').doc(userId).collection('settings').doc('config');
 
         // 2. Perform Requested Action
         let newState = null;
 
         switch (action) {
             case 'toggle-karafun-queue':
-                await runTransaction(db, async (transaction) => {
+                await adminDb.runTransaction(async (transaction) => {
                     const sfDoc = await transaction.get(configRef);
-                    if (!sfDoc.exists()) throw new Error("Document does not exist!");
+                    if (!sfDoc.exists) throw new Error("No document to update");
                     newState = !sfDoc.data().karafunOverlayQueueEnabled;
                     transaction.update(configRef, { karafunOverlayQueueEnabled: newState });
                 });
                 break;
             case 'karafun-queue-on':
                 newState = true;
-                await updateDoc(configRef, { karafunOverlayQueueEnabled: true });
+                await configRef.update({ karafunOverlayQueueEnabled: true });
                 break;
             case 'karafun-queue-off':
                 newState = false;
-                await updateDoc(configRef, { karafunOverlayQueueEnabled: false });
+                await configRef.update({ karafunOverlayQueueEnabled: false });
                 break;
             case 'toggle-now-playing':
-                await runTransaction(db, async (transaction) => {
+                await adminDb.runTransaction(async (transaction) => {
                     const sfDoc = await transaction.get(configRef);
-                    if (!sfDoc.exists()) throw new Error("Document does not exist!");
+                    if (!sfDoc.exists) throw new Error("No document to update");
                     newState = !sfDoc.data().karafunOverlayNowPlayingEnabled;
                     transaction.update(configRef, { karafunOverlayNowPlayingEnabled: newState });
                 });
                 break;
             case 'now-playing-on':
                 newState = true;
-                await updateDoc(configRef, { karafunOverlayNowPlayingEnabled: true });
+                await configRef.update({ karafunOverlayNowPlayingEnabled: true });
                 break;
             case 'now-playing-off':
                 newState = false;
-                await updateDoc(configRef, { karafunOverlayNowPlayingEnabled: false });
+                await configRef.update({ karafunOverlayNowPlayingEnabled: false });
                 break;
-            case 'hide-message':
+            case 'hide-message': {
                 // Hide message deletes the current active message document
-                const msgRef = doc(db, 'users', userId, 'active_message', 'current');
-                await deleteDoc(msgRef);
+                const msgRef = adminDb.collection('users').doc(userId).collection('active_message').doc('current');
+                await msgRef.delete();
+                await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, userId: userId, message_hidden: true }, true);
                 return NextResponse.json({ success: true, action: action, message_hidden: true });
+            }
             default:
-                return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+                const errorMsg = "Invalid action";
+                await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 400, action: action, userId: userId }, true);
+                return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
+        await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, state: newState, userId: userId }, true);
         return NextResponse.json({ success: true, action: action, state: newState });
 
     } catch (error) {
         console.error("Error in overlay API:", error);
-        if (error.code === 'not-found' || error.message?.includes('No document to update')) {
-            return NextResponse.json({ success: false, error: "Settings configuration not found" }, { status: 404 });
+
+        const isNotFound = error?.code === 'not-found' || error?.message?.includes('No document to update');
+        const status = isNotFound ? 404 : 500;
+        let errorMsg = isNotFound ? "Settings configuration not found" : "Internal server error";
+
+        const rawErrorMsg = error instanceof Error ? error.message : String(error);
+
+        if (rawErrorMsg.includes('DECODER') || rawErrorMsg.includes('metadata')) {
+            const pk = process.env.FIREBASE_PRIVATE_KEY || "";
+            const hasQuotes = pk.startsWith('"') || pk.startsWith("'");
+            const literalNCount = (pk.match(/\\n/g) || []).length;
+            const realNCount = (pk.match(/\n/g) || []).length;
+            const hasHeader = pk.includes('BEGIN PRIVATE KEY');
+            console.error(`Firebase Private Key Debug Data | Len=${pk.length}, Quotes=${hasQuotes}, LitN=${literalNCount}, RealN=${realNCount}, Header=${hasHeader}`);
         }
-        return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+
+        await captureEvent(posthogClient, 'anonymous', 'api_overlay_error', {
+            error: errorMsg,
+            status: status,
+            exception: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+        }, true);
+
+        if (isNotFound) {
+            return NextResponse.json({ success: false, error: errorMsg }, { status: 404 });
+        }
+        return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
     }
 }

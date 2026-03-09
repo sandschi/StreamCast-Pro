@@ -46,3 +46,4 @@ functions/.env
 .firebase
 firebase-debug.log
 firebase-debug.*.log
+server.log
