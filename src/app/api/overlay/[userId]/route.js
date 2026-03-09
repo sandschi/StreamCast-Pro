@@ -98,6 +98,20 @@ export async function GET(request, { params }) {
                 await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, userId: userId, message_hidden: true }, true);
                 return NextResponse.json({ success: true, action: action, message_hidden: true });
             }
+            case 'show-now-playing': {
+                // Manually trigger the Now Playing popup by writing a trigger document
+                const triggerRef = adminDb.collection('users').doc(userId).collection('overlay_triggers').doc('now_playing');
+                await triggerRef.set({ triggeredAt: new Date().toISOString() });
+                await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, userId: userId }, true);
+                return NextResponse.json({ success: true, action: action });
+            }
+            case 'hide-now-playing': {
+                // Manually dismiss the Now Playing popup
+                const triggerRef = adminDb.collection('users').doc(userId).collection('overlay_triggers').doc('now_playing');
+                await triggerRef.delete();
+                await captureEvent(posthogClient, userId, 'api_overlay_success', { action: action, userId: userId }, true);
+                return NextResponse.json({ success: true, action: action });
+            }
             default:
                 const errorMsg = "Invalid action";
                 await captureEvent(posthogClient, userId, 'api_overlay_error', { error: errorMsg, status: 400, action: action, userId: userId }, true);

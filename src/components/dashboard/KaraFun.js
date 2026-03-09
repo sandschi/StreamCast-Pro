@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save, Monitor, Type, Move } from 'lucide-react';
+import { Music, RefreshCw, AlertCircle, Play, ListMusic, User, Save, Monitor, Type, Move, Eye, EyeOff } from 'lucide-react';
 
 const FONTS = [
     'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
     'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'
 ];
 import { db } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
 
 export default function KaraFun({ targetUid, userSettings }) {
@@ -54,6 +54,26 @@ export default function KaraFun({ targetUid, userSettings }) {
             await updateDoc(configRef, { [field]: value });
         } catch (err) {
             console.error(`Error saving ${field}:`, err);
+        }
+    };
+
+    const handleShowNowPlaying = async () => {
+        if (!targetUid) return;
+        try {
+            const triggerRef = doc(db, 'users', targetUid, 'overlay_triggers', 'now_playing');
+            await setDoc(triggerRef, { triggeredAt: new Date().toISOString() });
+        } catch (err) {
+            console.error('Error triggering Now Playing:', err);
+        }
+    };
+
+    const handleHideNowPlaying = async () => {
+        if (!targetUid) return;
+        try {
+            const triggerRef = doc(db, 'users', targetUid, 'overlay_triggers', 'now_playing');
+            await deleteDoc(triggerRef);
+        } catch (err) {
+            console.error('Error hiding Now Playing:', err);
         }
     };
 
@@ -244,9 +264,27 @@ export default function KaraFun({ targetUid, userSettings }) {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Now Playing */}
                     <div className="space-y-4">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2">
-                            <Play size={12} className="text-green-500" /> Now Playing
-                        </h4>
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2">
+                                <Play size={12} className="text-green-500" /> Now Playing
+                            </h4>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleShowNowPlaying}
+                                    title="Manually trigger the Now Playing popup on the overlay"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-xs font-bold transition-all active:scale-95"
+                                >
+                                    <Eye size={13} /> Show
+                                </button>
+                                <button
+                                    onClick={handleHideNowPlaying}
+                                    title="Dismiss the Now Playing popup immediately"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition-all active:scale-95"
+                                >
+                                    <EyeOff size={13} /> Dismiss
+                                </button>
+                            </div>
+                        </div>
 
                         {queueData.currentSong ? (
                             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl relative overflow-hidden group">

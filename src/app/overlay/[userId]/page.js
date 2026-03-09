@@ -35,6 +35,11 @@ export default function OverlayPage() {
     const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
     const [karafunPlayState, setKarafunPlayState] = useState('stop');
     const [showNowPlaying, setShowNowPlaying] = useState(false);
+    // Track the last song title+state that triggered the popup so we only fire on genuine song starts
+    const lastTriggeredSongRef = useRef(null);
+    const lastPlayStateRef = useRef(null);
+    const lastManualTriggerRef = useRef(0); // Store timestamp of last manual trigger
+    const hideTimerRef = useRef(null); // Consolidated Ref for auto-hiding the "Now Playing" popup
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -119,6 +124,42 @@ export default function OverlayPage() {
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
     }, [userId, processedIds]);
+
+    // Listen for manual "show now playing" triggers written via the API
+    useEffect(() => {
+        if (!userId) return;
+        const triggerRef = doc(db, 'users', userId, 'overlay_triggers', 'now_playing');
+        const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+                const now = Date.now();
+                const isStale = (now - triggerTime) > 10000;
+
+                // Update ref immediately to prevent replaying this specific trigger doc later
+                if (triggerTime > lastManualTriggerRef.current) {
+                    const wasStaleOnLoad = lastManualTriggerRef.current === 0 && isStale;
+                    lastManualTriggerRef.current = triggerTime;
+
+                    // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
+                    if (!isStale) {
+                        const timer = setTimeout(() => setShowNowPlaying(true), 0);
+                        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 5000);
+                    } else if (wasStaleOnLoad) {
+                        console.log("[Trigger] Ignoring stale manual trigger on page load");
+                    }
+                }
+            } else {
+                if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+                setShowNowPlaying(false);
+            }
+        });
+        return () => {
+            unsubscribeTrigger();
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+        };
+    }, [userId]);
 
     const processNextMessage = useCallback(async () => {
         setIsProcessing(true);
@@ -209,7 +250,8 @@ export default function OverlayPage() {
                 setKarafunQueue([]);
                 return;
             }
-            const transformed = items.map(item => ({
+            const transformed = items.map((item, idx) => ({
+                id: item.queueId || item.songId || `${item.title}-${item.artist}-${idx}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
@@ -237,28 +279,46 @@ export default function OverlayPage() {
         };
     }, [settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled, settings.karafunPartyId]);
 
-    // Trigger Now Playing animation when a new song starts
+    // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
     useEffect(() => {
-        if (settings.karafunOverlayNowPlayingEnabled && karafunPlayState === 'playing' && karafunNowPlaying) {
-            // Use setTimeout to avoid synchronous setState inside an effect (lint fix)
-            const popupTimer = setTimeout(() => {
-                setShowNowPlaying(true);
-            }, 0);
+        if (!settings.karafunOverlayNowPlayingEnabled) return;
 
-            const timer = setTimeout(() => {
-                setShowNowPlaying(false);
-            }, 10000); // Show for 10 seconds
-            return () => {
-                clearTimeout(popupTimer);
-                clearTimeout(timer);
-            };
-        } else {
-            const hideTimer = setTimeout(() => {
-                setShowNowPlaying(false);
-            }, 0);
-            return () => clearTimeout(hideTimer);
+        const songKey = karafunNowPlaying ? `${karafunNowPlaying.title}-${karafunNowPlaying.artist}`.trim().toLowerCase() : '';
+        const isPlaying = karafunPlayState === 'playing';
+        const prevWasPlaying = lastPlayStateRef.current === 'playing';
+
+        // Update play state ref immediately to track transitions correctly in the next run
+        lastPlayStateRef.current = karafunPlayState;
+
+        // 1. If playback stops or nothing is playing, hide immediately
+        if (!isPlaying || !karafunNowPlaying) {
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 0);
+            return;
         }
-    }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
+
+        // 2. Trigger on:
+        // - Title/Artist change while playing
+        // - Playback RESUMED from a non-playing state (stop/infoscreen)
+        const hasSongChanged = songKey !== lastTriggeredSongRef.current;
+        const hasBecomePlaying = isPlaying && !prevWasPlaying;
+
+        if (hasSongChanged || hasBecomePlaying) {
+            console.log(`[NowPlaying] Triggered: ${songKey} (Changed: ${hasSongChanged}, Resumed: ${hasBecomePlaying})`);
+            lastTriggeredSongRef.current = songKey;
+
+            // Clear any existing hide timer
+            if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+
+            // Pop showing with a small delay to avoid cascading render lint error
+            const timer = setTimeout(() => setShowNowPlaying(true), 0);
+
+            // Arm the shared hide timer
+            hideTimerRef.current = setTimeout(() => {
+                setShowNowPlaying(false);
+            }, 5000);
+        }
+    }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled, hideTimerRef]);
 
     const getKaraFunThemeStyles = () => {
         const theme = settings.karafunOverlayTheme || 'classic';
@@ -298,29 +358,29 @@ export default function OverlayPage() {
             case 'future':
                 return {
                     ...baseStyles,
-                    card: "bg-[#0b1622]/85 backdrop-blur-md border border-[#1271ff]/40 p-4 shadow-[0_0_30px_rgba(18,113,255,0.2)]",
+                    card: "bg-[#0b1622]/90 backdrop-blur-md border border-[#1271ff]/40 p-4 shadow-[0_0_30px_rgba(18,113,255,0.2)]",
                     highlight: "bg-[#1271ff]/20 border border-[#1271ff]",
                     textPrimary: "font-black text-white",
-                    textSecondary: "text-[#1271ff] text-sm",
-                    textTertiary: "text-blue-300/60 text-xs",
+                    textSecondary: "text-[#7db8ff] text-sm",
+                    textTertiary: "text-blue-200/80 text-xs",
                 };
             case 'glass':
                 return {
                     ...baseStyles,
-                    card: "bg-black/40 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
+                    card: "bg-black/60 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
                     highlight: "bg-white/10 border-white/40",
                     textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-300 text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-zinc-100 text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
             case 'neon':
                 return {
                     ...baseStyles,
-                    card: "bg-black/80 border border-white/10 p-4 shadow-[0_0_15px_#9146FF] rounded-xl",
+                    card: "bg-black/85 border border-white/10 p-4 shadow-[0_0_15px_#9146FF] rounded-xl",
                     highlight: "bg-[#9146FF] shadow-[0_0_10px_#9146FF]",
                     textPrimary: "font-black text-white",
-                    textSecondary: "text-[#d7b8ff] text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-[#e8d4ff] text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
             case 'minimal':
                 return {
@@ -328,8 +388,8 @@ export default function OverlayPage() {
                     card: "bg-black/90 p-4 rounded-lg",
                     highlight: "border-l-4 border-white pl-4",
                     textPrimary: "font-medium text-white",
-                    textSecondary: "text-zinc-400 text-sm",
-                    textTertiary: "text-zinc-500 text-xs",
+                    textSecondary: "text-zinc-200 text-sm",
+                    textTertiary: "text-zinc-300 text-xs",
                 };
             case 'bold':
                 return {
@@ -344,11 +404,11 @@ export default function OverlayPage() {
             default:
                 return {
                     ...baseStyles,
-                    card: "bg-black/60 backdrop-blur-md border border-white/5 p-4 rounded-xl",
+                    card: "bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl",
                     highlight: "bg-white/10",
                     textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-300 text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-zinc-100 text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
         }
     };
@@ -634,38 +694,52 @@ export default function OverlayPage() {
             </AnimatePresence>
 
             {/* KaraFun Overlays */}
-            {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
-                <div
-                    className={getKaraFunThemeStyles().queueContainer}
-                    style={{
-                        left: `${settings.karafunQueuePosX ?? 5}%`,
-                        top: `${settings.karafunQueuePosY ?? 5}%`,
-                        transform: `translate(${(settings.karafunQueuePosX ?? 5) > 50 ? '-100%' : '0%'}, ${(settings.karafunQueuePosY ?? 5) > 50 ? '-100%' : '0%'})`,
-                        fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
-                        color: settings.karafunTextColor || undefined
-                    }}
-                >
-                    <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-500 z-0`}>
-                        <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
-                    </div>
-                    {karafunQueue.map((song, i) => {
-                        const isNext = i === 0;
-                        const theme = getKaraFunThemeStyles();
-                        return (
-                            <div key={i} className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}>
-                                {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
-                                <div className={theme.textPrimary}>{song.title}</div>
-                                <div className={theme.textSecondary}>{song.artist}</div>
-                                {song.singer && (
-                                    <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md w-max ${theme.textTertiary} bg-white/5`}>
-                                        <User size={12} /> {song.singer}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+            <AnimatePresence>
+                {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                    <motion.div
+                        key="karafun-queue"
+                        initial={{ opacity: 0, x: -60 }}
+                        animate={{ opacity: 1, x: 0, transition: { duration: 0.5, ease: 'easeOut' } }}
+                        exit={{ opacity: 0, x: -60, transition: { duration: 0.4, ease: 'easeIn' } }}
+                        className={getKaraFunThemeStyles().queueContainer}
+                        style={{
+                            left: `${settings.karafunQueuePosX ?? 5}%`,
+                            top: `${settings.karafunQueuePosY ?? 5}%`,
+                            transform: `translate(${(settings.karafunQueuePosX ?? 5) > 50 ? '-100%' : '0%'}, ${(settings.karafunQueuePosY ?? 5) > 50 ? '-100%' : '0%'})`,
+                            fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
+                            color: settings.karafunTextColor || undefined
+                        }}
+                    >
+                        <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-200 z-0 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>
+                            <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
+                        </div>
+                        <AnimatePresence>
+                            {karafunQueue.map((song, i) => {
+                                const isNext = i === 0;
+                                const theme = getKaraFunThemeStyles();
+                                return (
+                                    <motion.div
+                                        key={song.id}
+                                        initial={{ opacity: 0, y: -20 }}
+                                        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: i * 0.07, ease: 'easeOut' } }}
+                                        exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
+                                        className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}
+                                    >
+                                        {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
+                                        <div className={`${theme.textPrimary} drop-shadow-[0_1px_4px_rgba(0,0,0,1)]`}>{song.title}</div>
+                                        <div className={`${theme.textSecondary} drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>{song.artist}</div>
+                                        {song.singer && (
+                                            <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md w-max ${theme.textTertiary} bg-white/10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]`}>
+                                                <User size={12} /> {song.singer}
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                );
+                            })}
+                        </AnimatePresence>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <AnimatePresence>
                 {settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
@@ -686,13 +760,13 @@ export default function OverlayPage() {
                             Now Playing
                         </div>
                         <div className={`${getKaraFunThemeStyles().card} !pb-6 !pt-8 !px-8 min-w-[400px] text-center flex flex-col items-center gap-2`}>
-                            <h2 className={`${getKaraFunThemeStyles().textPrimary} text-4xl mb-1`}>{karafunNowPlaying.title}</h2>
-                            <p className={`${getKaraFunThemeStyles().textSecondary} text-xl`}>{karafunNowPlaying.artist}</p>
+                            <h2 className={`${getKaraFunThemeStyles().textPrimary} text-4xl mb-1 drop-shadow-[0_2px_6px_rgba(0,0,0,1)]`}>{karafunNowPlaying.title}</h2>
+                            <p className={`${getKaraFunThemeStyles().textSecondary} text-xl drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]`}>{karafunNowPlaying.artist}</p>
                             {karafunNowPlaying.singer && (
-                                <div className="mt-4 bg-white/10 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
+                                <div className="mt-4 bg-white/15 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
                                     <User size={18} className="text-pink-400" />
-                                    <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white`}>
-                                        Sung by <span className="text-pink-400">{karafunNowPlaying.singer}</span>
+                                    <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>
+                                        Sung by <span className="text-pink-300 font-black">{karafunNowPlaying.singer}</span>
                                     </span>
                                 </div>
                             )}
