@@ -250,8 +250,8 @@ export default function OverlayPage() {
                 setKarafunQueue([]);
                 return;
             }
-            const transformed = items.map(item => ({
-                id: item.queueId || item.songId || `${item.title}-${item.artist}`,
+            const transformed = items.map((item, idx) => ({
+                id: item.queueId || item.songId || `${item.title}-${item.artist}-${idx}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
@@ -281,24 +281,24 @@ export default function OverlayPage() {
 
     // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
     useEffect(() => {
-        if (!settings.karafunOverlayNowPlayingEnabled || !karafunNowPlaying) return;
+        if (!settings.karafunOverlayNowPlayingEnabled) return;
 
-        const songKey = `${karafunNowPlaying.title}-${karafunNowPlaying.artist}`.trim().toLowerCase();
+        const songKey = karafunNowPlaying ? `${karafunNowPlaying.title}-${karafunNowPlaying.artist}`.trim().toLowerCase() : '';
         const isPlaying = karafunPlayState === 'playing';
         const prevWasPlaying = lastPlayStateRef.current === 'playing';
+
+        // Update play state ref immediately to track transitions correctly in the next run
         lastPlayStateRef.current = karafunPlayState;
 
-        // Skip logic if we're not currently in a 'playing' state
-        if (!isPlaying) {
-            // If playback stops, we can hide immediately, but we keep the lastTriggeredSong
-            // intact so if it resumes it doesn't trigger again unless it's a new song.
-            const hideTimer = setTimeout(() => setShowNowPlaying(false), 0);
-            return () => clearTimeout(hideTimer);
+        // 1. If playback stops or nothing is playing, hide immediately
+        if (!isPlaying || !karafunNowPlaying) {
+            setShowNowPlaying(false);
+            return;
         }
 
-        // Trigger on:
-        // 1. Title/Artist change while playing
-        // 2. Playback RESUMED from a non-playing state (stop/infoscreen)
+        // 2. Trigger on:
+        // - Title/Artist change while playing
+        // - Playback RESUMED from a non-playing state (stop/infoscreen)
         const hasSongChanged = songKey !== lastTriggeredSongRef.current;
         const hasBecomePlaying = isPlaying && !prevWasPlaying;
 
@@ -312,6 +312,7 @@ export default function OverlayPage() {
             const hideTimer = setTimeout(() => {
                 setShowNowPlaying(false);
             }, 10000);
+
             return () => {
                 clearTimeout(popupTimer);
                 clearTimeout(hideTimer);
