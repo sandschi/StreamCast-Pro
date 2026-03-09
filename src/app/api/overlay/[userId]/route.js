@@ -175,7 +175,16 @@ export async function GET(request, { params }) {
 
         const isNotFound = error?.code === 'not-found' || error?.message?.includes('No document to update');
         const status = isNotFound ? 404 : 500;
-        const errorMsg = isNotFound ? "Settings configuration not found" : `Internal server error: ${error instanceof Error ? error.message : String(error)}`;
+        let errorMsg = isNotFound ? "Settings configuration not found" : `Internal server error: ${error instanceof Error ? error.message : String(error)}`;
+
+        if (errorMsg.includes('DECODER') || errorMsg.includes('metadata')) {
+            const pk = process.env.FIREBASE_PRIVATE_KEY || "";
+            const hasQuotes = pk.startsWith('"') || pk.startsWith("'");
+            const literalNCount = (pk.match(/\\n/g) || []).length;
+            const realNCount = (pk.match(/\n/g) || []).length;
+            const hasHeader = pk.includes('BEGIN PRIVATE KEY');
+            errorMsg += ` | KEY-DEBUG: Len=${pk.length}, Quotes=${hasQuotes}, LitN=${literalNCount}, RealN=${realNCount}, Header=${hasHeader}`;
+        }
 
         if (posthogClient) {
             try {
