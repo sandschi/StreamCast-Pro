@@ -13,15 +13,12 @@ try {
     console.warn("PostHog initialization failed:", e);
 }
 
-export async function GET() {
-    return NextResponse.json({ success: false, error: "Method Not Allowed. Please use POST with a Bearer token." }, { status: 405 });
-}
-
-export async function POST(request, { params }) {
+export async function GET(request, { params }) {
     try {
         const { userId } = await params;
         const { searchParams } = new URL(request.url);
         const action = searchParams.get('action');
+        const token = searchParams.get('token');
 
         if (posthogClient) {
             posthogClient.capture({
@@ -33,22 +30,6 @@ export async function POST(request, { params }) {
                 }
             });
         }
-
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            const errorMsg = "Missing or invalid Authorization header";
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_overlay_error',
-                    properties: { error: errorMsg, status: 401, action: action, userId: userId }
-                });
-                await posthogClient.flush();
-            }
-            return NextResponse.json({ success: false, error: errorMsg }, { status: 401 });
-        }
-
-        const token = authHeader.split(' ')[1];
 
         if (!userId || !token || !action) {
             const errorMsg = "Missing required parameters";
