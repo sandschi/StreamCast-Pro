@@ -14,9 +14,16 @@ export function PostHogProvider({ children }) {
                 capture_pageview: false // Disable automatic pageview capture, as we use manual capture below
             })
 
+            const originalConsole = {
+                warn: console.warn,
+                error: console.error
+            };
+
             // Override console methods to capture logs
             const wrapConsole = (method) => {
-                const original = console[method]
+                if (console[method].__isWrapped) return;
+
+                const original = originalConsole[method];
                 console[method] = (...args) => {
                     const message = args.map(arg => {
                         try {
@@ -31,15 +38,14 @@ export function PostHogProvider({ children }) {
                     }
                     original.apply(console, args)
                 }
+                console[method].__isWrapped = true;
             }
 
-            wrapConsole('log')
             wrapConsole('warn')
             wrapConsole('error')
-            wrapConsole('info')
 
             // Global error handler
-            window.addEventListener('error', (event) => {
+            const handleWindowError = (event) => {
                 if (posthog) {
                     posthog.capture('$exception', {
                         message: event.message,
@@ -49,17 +55,27 @@ export function PostHogProvider({ children }) {
                         error: event.error ? event.error.stack : null
                     })
                 }
-            })
+            };
+            window.addEventListener('error', handleWindowError);
 
             // Unhandled promise rejection
-            window.addEventListener('unhandledrejection', (event) => {
+            const handleUnhandledRejection = (event) => {
                 if (posthog) {
                     posthog.capture('$exception', {
                         message: event.reason ? (event.reason.message || String(event.reason)) : 'Unhandled Promise Rejection',
                         error: event.reason && event.reason.stack ? event.reason.stack : null
                     })
                 }
-            })
+            };
+            window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+            // Cleanup function to avoid memory leaks and double-wrapping in StrictMode
+            return () => {
+                console.warn = originalConsole.warn;
+                console.error = originalConsole.error;
+                window.removeEventListener('error', handleWindowError);
+                window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+            };
         }
     }, [])
 

@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server';
-import { PostHog } from 'posthog-node';
+import { getPostHogClient } from '@/lib/posthog-server';
 
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "https://discord.com/api/webhooks/1471625368908595382/7c7Gut2JK8ZOTuxId4AFvtNBPuEuIP7FEVEOBCQXEG2ZZ6KRYS1PgY8tDTNDFdG-rHDN";
 const DISCORD_USER_ID = "520983375885107200";
 
-let posthogClient = null;
-try {
-    posthogClient = new PostHog(
-        process.env.NEXT_PUBLIC_POSTHOG_KEY || 'phc_placeholder',
-        { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com', flushAt: 1, flushInterval: 0 }
-    );
-} catch (e) {
-    console.warn("PostHog initialization failed:", e);
-}
-
 export async function POST(request) {
+    const posthogClient = getPostHogClient();
+
+    const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+    if (!DISCORD_WEBHOOK_URL) {
+        console.error("CRITICAL: Notification service not configured. Missing DISCORD_WEBHOOK_URL");
+        return NextResponse.json({ success: false, error: "Notification service not configured" }, { status: 503 });
+    }
+
     try {
         const { userId, userData } = await request.json();
 

@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { PostHog } from 'posthog-node';
-
-let posthogClient = null;
-try {
-    posthogClient = new PostHog(
-        process.env.NEXT_PUBLIC_POSTHOG_KEY || 'phc_placeholder',
-        { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com', flushAt: 1, flushInterval: 0 }
-    );
-} catch (e) {
-    console.warn("PostHog initialization failed:", e);
-}
+import { getPostHogClient } from '@/lib/posthog-server';
 
 export async function GET(request, { params }) {
+    const posthogClient = getPostHogClient();
     try {
         const { userId } = await params;
         const { searchParams } = new URL(request.url);
@@ -44,7 +35,7 @@ export async function GET(request, { params }) {
             return NextResponse.json({ success: false, error: errorMsg }, { status: 400 });
         }
 
-        const adminDb = getAdminDb();
+        const adminDb = await getAdminDb();
 
         // 1. Verify Token against User's Private Config
         const privateConfigRef = adminDb.collection('users').doc(userId).collection('private').doc('config');
@@ -134,7 +125,7 @@ export async function GET(request, { params }) {
                 newState = false;
                 await configRef.update({ karafunOverlayNowPlayingEnabled: false });
                 break;
-            case 'hide-message':
+            case 'hide-message': {
                 // Hide message deletes the current active message document
                 const msgRef = adminDb.collection('users').doc(userId).collection('active_message').doc('current');
                 await msgRef.delete();
@@ -147,6 +138,7 @@ export async function GET(request, { params }) {
                     await posthogClient.flush();
                 }
                 return NextResponse.json({ success: true, action: action, message_hidden: true });
+            }
             default:
                 const errorMsg = "Invalid action";
                 if (posthogClient) {
@@ -183,7 +175,7 @@ export async function GET(request, { params }) {
             const literalNCount = (pk.match(/\\n/g) || []).length;
             const realNCount = (pk.match(/\n/g) || []).length;
             const hasHeader = pk.includes('BEGIN PRIVATE KEY');
-            errorMsg += ` | KEY-DEBUG: Len=${pk.length}, Quotes=${hasQuotes}, LitN=${literalNCount}, RealN=${realNCount}, Header=${hasHeader}`;
+            console.error(`Firebase Private Key Debug Data | Len=${pk.length}, Quotes=${hasQuotes}, LitN=${literalNCount}, RealN=${realNCount}, Header=${hasHeader}`);
         }
 
         if (posthogClient) {

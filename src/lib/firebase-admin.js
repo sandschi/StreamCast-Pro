@@ -1,7 +1,21 @@
 import admin from 'firebase-admin';
 
-export function getAdminDb() {
-    if (!admin.apps.length) {
+let initPromise = null;
+
+export async function getAdminDb() {
+    // 1. If already initialized, return immediately
+    if (admin.apps.length) {
+        return admin.firestore();
+    }
+
+    // 2. If initialization is currently in progress, wait for it
+    if (initPromise) {
+        await initPromise;
+        return admin.firestore();
+    }
+
+    // 3. Otherwise, claim the initialization lock
+    initPromise = (async () => {
         try {
             const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
             const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -18,7 +32,7 @@ export function getAdminDb() {
                 // Ensure it's a real string with real newlines, stripped of carriage returns
                 privateKey = privateKey.replace(/\\n/g, '\n').replace(/\r/g, '').trim();
 
-                // Advanced Foolproof PEM Reconstructor (fixes bad spacing/wrapping from Vercel UI)
+                // Advanced Foolproof PEM Reconstructor
                 const header = "-----BEGIN PRIVATE KEY-----";
                 const footer = "-----END PRIVATE KEY-----";
                 if (privateKey.includes(header) && privateKey.includes(footer)) {
@@ -27,9 +41,12 @@ export function getAdminDb() {
                         .substring(privateKey.indexOf(header) + header.length, privateKey.indexOf(footer))
                         .replace(/\s+/g, ""); // Remove all whitespace
 
-                    // Re-wrap the base64 perfectly to 64 characters per line
-                    const wrappedBody = base64Body.match(/.{1,64}/g).join('\n');
-                    privateKey = `${header}\n${wrappedBody}\n${footer}\n`;
+                    if (base64Body.length > 0) {
+                        // Re-wrap the base64 perfectly to 64 characters per line safely
+                        const matches = base64Body.match(/.{1,64}/g);
+                        const wrappedBody = matches ? matches.join('\n') : "";
+                        privateKey = `${header}\n${wrappedBody}\n${footer}\n`;
+                    }
                 }
             }
 
@@ -45,8 +62,10 @@ export function getAdminDb() {
                     }),
                 });
             } else {
+                const isBuildTime = process.env.IS_BUILD_TIME === 'true' || process.env.NEXT_PHASE === 'phase-build' || process.env.npm_lifecycle_event === 'build';
+
                 // If it's Vercel build time, it's fine. If it's runtime, throw an error!
-                if (process.env.npm_lifecycle_event === 'build') {
+                if (isBuildTime) {
                     console.warn("FIREBASE_PROJECT_ID not found. Admin SDK will initialize with default behavior. (Expected during build)");
                     admin.initializeApp();
                 } else {
@@ -58,7 +77,12 @@ export function getAdminDb() {
         } catch (error) {
             console.error('Firebase admin initialization error', error.stack);
             throw error;
+        } finally {
+            // Drop the lock once complete so future failures can retry
+            initPromise = null;
         }
-    }
+    })();
+
+    await initPromise;
     return admin.firestore();
 }
