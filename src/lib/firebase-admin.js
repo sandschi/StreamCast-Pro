@@ -69,20 +69,27 @@ export async function getAdminDb() {
                     console.warn("FIREBASE_PROJECT_ID not found. Admin SDK will initialize with default behavior. (Expected during build)");
                     admin.initializeApp();
                 } else {
-                    console.warn("WARNING: Incomplete Firebase Admin credentials during runtime! Admin SDK may fail on database calls.");
-                    console.warn(`ProjectID: ${!!projectId}, ClientEmail: ${!!clientEmail}, PrivateKey: ${!!privateKey}`);
-                    admin.initializeApp();
+                    const missingVars = [];
+                    if (!projectId) missingVars.push('FIREBASE_PROJECT_ID');
+                    if (!clientEmail) missingVars.push('FIREBASE_CLIENT_EMAIL');
+                    if (!privateKey) missingVars.push('FIREBASE_PRIVATE_KEY');
+                    throw new Error(`Incomplete Firebase Admin credentials during runtime! Missing: ${missingVars.join(', ')}`);
                 }
             }
         } catch (error) {
             console.error('Firebase admin initialization error', error.stack);
             throw error;
-        } finally {
-            // Drop the lock once complete so future failures can retry
-            initPromise = null;
         }
     })();
 
-    await initPromise;
+    const init = initPromise;
+    try {
+        await init;
+    } finally {
+        if (initPromise === init) {
+            initPromise = null;
+        }
+    }
+
     return admin.firestore();
 }

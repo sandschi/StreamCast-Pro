@@ -96,7 +96,7 @@ export async function GET(request, { params }) {
             case 'toggle-karafun-queue':
                 await adminDb.runTransaction(async (transaction) => {
                     const sfDoc = await transaction.get(configRef);
-                    if (!sfDoc.exists) throw new Error("Document does not exist!");
+                    if (!sfDoc.exists) throw new Error("No document to update");
                     newState = !sfDoc.data().karafunOverlayQueueEnabled;
                     transaction.update(configRef, { karafunOverlayQueueEnabled: newState });
                 });
@@ -112,7 +112,7 @@ export async function GET(request, { params }) {
             case 'toggle-now-playing':
                 await adminDb.runTransaction(async (transaction) => {
                     const sfDoc = await transaction.get(configRef);
-                    if (!sfDoc.exists) throw new Error("Document does not exist!");
+                    if (!sfDoc.exists) throw new Error("No document to update");
                     newState = !sfDoc.data().karafunOverlayNowPlayingEnabled;
                     transaction.update(configRef, { karafunOverlayNowPlayingEnabled: newState });
                 });
@@ -167,9 +167,11 @@ export async function GET(request, { params }) {
 
         const isNotFound = error?.code === 'not-found' || error?.message?.includes('No document to update');
         const status = isNotFound ? 404 : 500;
-        let errorMsg = isNotFound ? "Settings configuration not found" : `Internal server error: ${error instanceof Error ? error.message : String(error)}`;
+        let errorMsg = isNotFound ? "Settings configuration not found" : "Internal server error";
 
-        if (errorMsg.includes('DECODER') || errorMsg.includes('metadata')) {
+        const rawErrorMsg = error instanceof Error ? error.message : String(error);
+
+        if (rawErrorMsg.includes('DECODER') || rawErrorMsg.includes('metadata')) {
             const pk = process.env.FIREBASE_PRIVATE_KEY || "";
             const hasQuotes = pk.startsWith('"') || pk.startsWith("'");
             const literalNCount = (pk.match(/\\n/g) || []).length;

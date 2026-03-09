@@ -3,6 +3,18 @@ import { getPostHogClient } from '@/lib/posthog-server';
 
 const DISCORD_USER_ID = "520983375885107200";
 
+async function captureEvent(client, distinctId, event, properties, shouldFlush = false) {
+    if (!client) return;
+    client.capture({
+        distinctId: distinctId || 'anonymous',
+        event,
+        properties
+    });
+    if (shouldFlush) {
+        await client.flush();
+    }
+}
+
 export async function POST(request) {
     const posthogClient = getPostHogClient();
 
@@ -22,28 +34,15 @@ export async function POST(request) {
         const status = userData.status || "waiting";
         const timestamp = userData.lastLogin || new Date().toISOString();
 
-        if (posthogClient) {
-            posthogClient.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_signup_notification_started',
-                properties: {
-                    userId: userId,
-                    status: status,
-                    twitchUsername: twitchUsername
-                }
-            });
-        }
+        captureEvent(posthogClient, userId, 'api_signup_notification_started', {
+            userId: userId,
+            status: status,
+            twitchUsername: twitchUsername
+        });
 
         // Skip notification if user is already approved (e.g., sandschi)
         if (status === "approved") {
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_signup_notification_skipped',
-                    properties: { userId: userId, reason: "auto-approved" }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_signup_notification_skipped', { userId: userId, reason: "auto-approved" }, true);
             return NextResponse.json({ success: true, skipped: true, reason: "auto-approved" });
         }
 
@@ -105,46 +104,25 @@ export async function POST(request) {
             const errorText = await response.text();
             console.error("Discord webhook failed:", response.status, errorText);
 
-            if (posthogClient) {
-                posthogClient.capture({
-                    distinctId: userId || 'anonymous',
-                    event: 'api_signup_notification_error',
-                    properties: {
-                        error: "Discord webhook failed",
-                        status: response.status,
-                        details: errorText,
-                        userId: userId
-                    }
-                });
-                await posthogClient.flush();
-            }
+            await captureEvent(posthogClient, userId, 'api_signup_notification_error', {
+                error: "Discord webhook failed",
+                status: response.status,
+                details: errorText,
+                userId: userId
+            }, true);
             return NextResponse.json({ success: false, error: "Discord webhook failed" }, { status: 500 });
         }
 
-        if (posthogClient) {
-            posthogClient.capture({
-                distinctId: userId || 'anonymous',
-                event: 'api_signup_notification_success',
-                properties: { userId: userId }
-            });
-            await posthogClient.flush();
-        }
+        await captureEvent(posthogClient, userId, 'api_signup_notification_success', { userId: userId }, true);
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("Error sending Discord notification:", error);
 
-        if (posthogClient) {
-            posthogClient.capture({
-                distinctId: 'anonymous',
-                event: 'api_signup_notification_error',
-                properties: {
-                    error: "Internal server error",
-                    exception: error instanceof Error ? error.message : String(error),
-                    stack: error instanceof Error ? error.stack : undefined
-                }
-            });
-            await posthogClient.flush();
-        }
+        await captureEvent(posthogClient, 'anonymous', 'api_signup_notification_error', {
+            error: "Internal server error",
+            exception: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+        }, true);
 
         return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
     }
