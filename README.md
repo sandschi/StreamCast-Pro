@@ -1,6 +1,6 @@
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/sandschi/StreamCast-Pro?utm_source=oss&utm_medium=github&utm_campaign=sandschi%2FStreamCast-Pro&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![Node.js CI](https://github.com/sandschi/StreamCast-Pro/actions/workflows/node.js.yml/badge.svg)](https://github.com/sandschi/StreamCast-Pro/actions/workflows/node.js.yml)
-[![Uptime](https://kuma.sandschi.xyz/api/badge/19/status?style=for-the-badge)](https://kuma.sandschi.xyz/status/streamcastpro)
+[![Uptime](https://kuma.sandschi.xyz/api/badge/19/status?style=for-the-badge)](https://overlay.sandschi.xyz/)
 
 # StreamCast Pro
 
