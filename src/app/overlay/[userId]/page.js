@@ -38,6 +38,7 @@ export default function OverlayPage() {
     // Track the last song title+state that triggered the popup so we only fire on genuine song starts
     const lastTriggeredSongRef = useRef(null);
     const lastPlayStateRef = useRef(null);
+    const lastManualTriggerRef = useRef(0); // Store timestamp of last manual trigger
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -130,12 +131,16 @@ export default function OverlayPage() {
         let hideTimeout = null;
         const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
             if (snap.exists()) {
-                // Manual override: show the popup immediately. 
-                // We DON'T reset lastTriggeredSongRef here to avoid the automatic trigger 
-                // refiring on the next socket update while the song is still the same.
-                setShowNowPlaying(true);
-                if (hideTimeout) clearTimeout(hideTimeout);
-                hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                const data = snap.data();
+                const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+
+                // Only show if the trigger is NEWER than our last handled trigger
+                if (triggerTime > lastManualTriggerRef.current) {
+                    lastManualTriggerRef.current = triggerTime;
+                    setShowNowPlaying(true);
+                    if (hideTimeout) clearTimeout(hideTimeout);
+                    hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
+                }
             } else {
                 if (hideTimeout) clearTimeout(hideTimeout);
                 setShowNowPlaying(false);
