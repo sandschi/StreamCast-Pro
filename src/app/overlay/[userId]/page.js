@@ -37,6 +37,7 @@ export default function OverlayPage() {
     const [showNowPlaying, setShowNowPlaying] = useState(false);
     // Track the last song title+state that triggered the popup so we only fire on genuine song starts
     const lastTriggeredSongRef = useRef(null);
+    const lastPlayStateRef = useRef(null);
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -129,14 +130,13 @@ export default function OverlayPage() {
         let hideTimeout = null;
         const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
             if (snap.exists()) {
-                // Manual trigger: show the popup and reset the song key guard so
-                // the next automatic KaraFun start still fires as expected
-                lastTriggeredSongRef.current = null;
+                // Manual override: show the popup immediately. 
+                // We DON'T reset lastTriggeredSongRef here to avoid the automatic trigger 
+                // refiring on the next socket update while the song is still the same.
                 setShowNowPlaying(true);
                 if (hideTimeout) clearTimeout(hideTimeout);
                 hideTimeout = setTimeout(() => setShowNowPlaying(false), 10000);
             } else {
-                // Document deleted → hide-now-playing called
                 if (hideTimeout) clearTimeout(hideTimeout);
                 setShowNowPlaying(false);
             }
@@ -265,17 +265,30 @@ export default function OverlayPage() {
     }, [settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled, settings.karafunPartyId]);
 
     // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
-    // We key on the song title changing OR the state transitioning into 'playing'.
-    // Queue operations (volume, pitch, reorder) that fire a status event but don't
-    // change the song title are intentionally ignored.
     useEffect(() => {
         if (!settings.karafunOverlayNowPlayingEnabled || !karafunNowPlaying) return;
 
-        const songKey = karafunNowPlaying.title;
+        const songKey = `${karafunNowPlaying.title}-${karafunNowPlaying.artist}`.trim().toLowerCase();
         const isPlaying = karafunPlayState === 'playing';
+        const prevWasPlaying = lastPlayStateRef.current === 'playing';
+        lastPlayStateRef.current = karafunPlayState;
 
-        // Only show popup when the song is playing AND it's a different song from the last trigger
-        if (isPlaying && songKey !== lastTriggeredSongRef.current) {
+        // Skip logic if we're not currently in a 'playing' state
+        if (!isPlaying) {
+            // If playback stops, we can hide immediately, but we keep the lastTriggeredSong
+            // intact so if it resumes it doesn't trigger again unless it's a new song.
+            const hideTimer = setTimeout(() => setShowNowPlaying(false), 0);
+            return () => clearTimeout(hideTimer);
+        }
+
+        // Trigger on:
+        // 1. Title/Artist change while playing
+        // 2. Playback RESUMED from a non-playing state (stop/infoscreen)
+        const hasSongChanged = songKey !== lastTriggeredSongRef.current;
+        const hasBecomePlaying = isPlaying && !prevWasPlaying;
+
+        if (hasSongChanged || hasBecomePlaying) {
+            console.log(`[NowPlaying] Triggered: ${songKey} (Changed: ${hasSongChanged}, Resumed: ${hasBecomePlaying})`);
             lastTriggeredSongRef.current = songKey;
 
             const popupTimer = setTimeout(() => {
@@ -288,12 +301,6 @@ export default function OverlayPage() {
                 clearTimeout(popupTimer);
                 clearTimeout(hideTimer);
             };
-        }
-
-        // If playback stops, hide immediately
-        if (!isPlaying) {
-            const hideTimer = setTimeout(() => setShowNowPlaying(false), 0);
-            return () => clearTimeout(hideTimer);
         }
     }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled]);
 
