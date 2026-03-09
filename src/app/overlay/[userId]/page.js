@@ -298,29 +298,29 @@ export default function OverlayPage() {
             case 'future':
                 return {
                     ...baseStyles,
-                    card: "bg-[#0b1622]/85 backdrop-blur-md border border-[#1271ff]/40 p-4 shadow-[0_0_30px_rgba(18,113,255,0.2)]",
+                    card: "bg-[#0b1622]/90 backdrop-blur-md border border-[#1271ff]/40 p-4 shadow-[0_0_30px_rgba(18,113,255,0.2)]",
                     highlight: "bg-[#1271ff]/20 border border-[#1271ff]",
                     textPrimary: "font-black text-white",
-                    textSecondary: "text-[#1271ff] text-sm",
-                    textTertiary: "text-blue-300/60 text-xs",
+                    textSecondary: "text-[#7db8ff] text-sm",
+                    textTertiary: "text-blue-200/80 text-xs",
                 };
             case 'glass':
                 return {
                     ...baseStyles,
-                    card: "bg-black/40 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
+                    card: "bg-black/60 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
                     highlight: "bg-white/10 border-white/40",
                     textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-300 text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-zinc-100 text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
             case 'neon':
                 return {
                     ...baseStyles,
-                    card: "bg-black/80 border border-white/10 p-4 shadow-[0_0_15px_#9146FF] rounded-xl",
+                    card: "bg-black/85 border border-white/10 p-4 shadow-[0_0_15px_#9146FF] rounded-xl",
                     highlight: "bg-[#9146FF] shadow-[0_0_10px_#9146FF]",
                     textPrimary: "font-black text-white",
-                    textSecondary: "text-[#d7b8ff] text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-[#e8d4ff] text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
             case 'minimal':
                 return {
@@ -328,8 +328,8 @@ export default function OverlayPage() {
                     card: "bg-black/90 p-4 rounded-lg",
                     highlight: "border-l-4 border-white pl-4",
                     textPrimary: "font-medium text-white",
-                    textSecondary: "text-zinc-400 text-sm",
-                    textTertiary: "text-zinc-500 text-xs",
+                    textSecondary: "text-zinc-200 text-sm",
+                    textTertiary: "text-zinc-300 text-xs",
                 };
             case 'bold':
                 return {
@@ -344,11 +344,11 @@ export default function OverlayPage() {
             default:
                 return {
                     ...baseStyles,
-                    card: "bg-black/60 backdrop-blur-md border border-white/5 p-4 rounded-xl",
+                    card: "bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl",
                     highlight: "bg-white/10",
                     textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-300 text-sm",
-                    textTertiary: "text-zinc-400 text-xs",
+                    textSecondary: "text-zinc-100 text-sm",
+                    textTertiary: "text-zinc-200 text-xs",
                 };
         }
     };
@@ -634,38 +634,52 @@ export default function OverlayPage() {
             </AnimatePresence>
 
             {/* KaraFun Overlays */}
-            {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
-                <div
-                    className={getKaraFunThemeStyles().queueContainer}
-                    style={{
-                        left: `${settings.karafunQueuePosX ?? 5}%`,
-                        top: `${settings.karafunQueuePosY ?? 5}%`,
-                        transform: `translate(${(settings.karafunQueuePosX ?? 5) > 50 ? '-100%' : '0%'}, ${(settings.karafunQueuePosY ?? 5) > 50 ? '-100%' : '0%'})`,
-                        fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
-                        color: settings.karafunTextColor || undefined
-                    }}
-                >
-                    <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-500 z-0`}>
-                        <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
-                    </div>
-                    {karafunQueue.map((song, i) => {
-                        const isNext = i === 0;
-                        const theme = getKaraFunThemeStyles();
-                        return (
-                            <div key={i} className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}>
-                                {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
-                                <div className={theme.textPrimary}>{song.title}</div>
-                                <div className={theme.textSecondary}>{song.artist}</div>
-                                {song.singer && (
-                                    <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md w-max ${theme.textTertiary} bg-white/5`}>
-                                        <User size={12} /> {song.singer}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+            <AnimatePresence>
+                {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                    <motion.div
+                        key="karafun-queue"
+                        initial={{ opacity: 0, x: -60 }}
+                        animate={{ opacity: 1, x: 0, transition: { duration: 0.5, ease: 'easeOut' } }}
+                        exit={{ opacity: 0, x: -60, transition: { duration: 0.4, ease: 'easeIn' } }}
+                        className={getKaraFunThemeStyles().queueContainer}
+                        style={{
+                            left: `${settings.karafunQueuePosX ?? 5}%`,
+                            top: `${settings.karafunQueuePosY ?? 5}%`,
+                            transform: `translate(${(settings.karafunQueuePosX ?? 5) > 50 ? '-100%' : '0%'}, ${(settings.karafunQueuePosY ?? 5) > 50 ? '-100%' : '0%'})`,
+                            fontFamily: settings.karafunFontFamily ? `'${settings.karafunFontFamily}', sans-serif` : 'inherit',
+                            color: settings.karafunTextColor || undefined
+                        }}
+                    >
+                        <div className={`${getKaraFunThemeStyles().card} rounded-t-2xl font-black text-xs uppercase tracking-widest text-zinc-200 z-0 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>
+                            <ListMusic className="inline-block w-4 h-4 mr-2" /> Song Queue
+                        </div>
+                        <AnimatePresence>
+                            {karafunQueue.map((song, i) => {
+                                const isNext = i === 0;
+                                const theme = getKaraFunThemeStyles();
+                                return (
+                                    <motion.div
+                                        key={song.title + i}
+                                        initial={{ opacity: 0, y: -20 }}
+                                        animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: i * 0.07, ease: 'easeOut' } }}
+                                        exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
+                                        className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}
+                                    >
+                                        {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
+                                        <div className={`${theme.textPrimary} drop-shadow-[0_1px_4px_rgba(0,0,0,1)]`}>{song.title}</div>
+                                        <div className={`${theme.textSecondary} drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>{song.artist}</div>
+                                        {song.singer && (
+                                            <div className={`mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md w-max ${theme.textTertiary} bg-white/10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]`}>
+                                                <User size={12} /> {song.singer}
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                );
+                            })}
+                        </AnimatePresence>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <AnimatePresence>
                 {settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
@@ -686,13 +700,13 @@ export default function OverlayPage() {
                             Now Playing
                         </div>
                         <div className={`${getKaraFunThemeStyles().card} !pb-6 !pt-8 !px-8 min-w-[400px] text-center flex flex-col items-center gap-2`}>
-                            <h2 className={`${getKaraFunThemeStyles().textPrimary} text-4xl mb-1`}>{karafunNowPlaying.title}</h2>
-                            <p className={`${getKaraFunThemeStyles().textSecondary} text-xl`}>{karafunNowPlaying.artist}</p>
+                            <h2 className={`${getKaraFunThemeStyles().textPrimary} text-4xl mb-1 drop-shadow-[0_2px_6px_rgba(0,0,0,1)]`}>{karafunNowPlaying.title}</h2>
+                            <p className={`${getKaraFunThemeStyles().textSecondary} text-xl drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]`}>{karafunNowPlaying.artist}</p>
                             {karafunNowPlaying.singer && (
-                                <div className="mt-4 bg-white/10 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
+                                <div className="mt-4 bg-white/15 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
                                     <User size={18} className="text-pink-400" />
-                                    <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white`}>
-                                        Sung by <span className="text-pink-400">{karafunNowPlaying.singer}</span>
+                                    <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>
+                                        Sung by <span className="text-pink-300 font-black">{karafunNowPlaying.singer}</span>
                                     </span>
                                 </div>
                             )}
