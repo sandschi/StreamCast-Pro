@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Link as LinkIcon, Play } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -224,6 +224,24 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                                 onClick={() => copyApiCommand('now-playing-off')}
                                 copied={copyState === 'api-now-playing-off'}
                             />
+                            <div className="border-t border-zinc-800 pt-3 mt-1 space-y-3">
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">One-shot Triggers</p>
+                                <EndpointButton
+                                    label="Show Now Playing"
+                                    description="Immediately displays the Now Playing popup for 10 seconds, regardless of KaraFun state."
+                                    icon={<Play size={18} className="text-green-400" />}
+                                    onClick={() => copyApiCommand('show-now-playing')}
+                                    copied={copyState === 'api-show-now-playing'}
+                                />
+                                <EndpointButton
+                                    label="Dismiss Now Playing"
+                                    description="Immediately hides the manually triggered Now Playing popup."
+                                    icon={<EyeOff size={18} className="text-rose-400" />}
+                                    onClick={() => copyApiCommand('hide-now-playing')}
+                                    copied={copyState === 'api-hide-now-playing'}
+                                    isDestructive
+                                />
+                            </div>
                         </div>
                     </div>
 
