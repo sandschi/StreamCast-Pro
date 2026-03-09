@@ -143,9 +143,9 @@ export default function OverlayPage() {
 
                     // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
                     if (!isStale) {
-                        setShowNowPlaying(true);
+                        const timer = setTimeout(() => setShowNowPlaying(true), 0);
                         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 10000);
+                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 5000);
                     } else if (wasStaleOnLoad) {
                         console.log("[Trigger] Ignoring stale manual trigger on page load");
                     }
@@ -310,13 +310,13 @@ export default function OverlayPage() {
             // Clear any existing hide timer
             if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
 
-            // Pop showing immediately
-            setShowNowPlaying(true);
+            // Pop showing with a small delay to avoid cascading render lint error
+            const timer = setTimeout(() => setShowNowPlaying(true), 0);
 
             // Arm the shared hide timer
             hideTimerRef.current = setTimeout(() => {
                 setShowNowPlaying(false);
-            }, 10000);
+            }, 5000);
         }
     }, [karafunNowPlaying, karafunPlayState, settings.karafunOverlayNowPlayingEnabled, hideTimerRef]);
 
