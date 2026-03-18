@@ -168,7 +168,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         <h4 className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
                             <Sparkles size={12} /> Live Preview
                         </h4>
-                        <div className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full">
+                        <div className="text-[10px] bg-primary-500/20 text-primary-300 px-1.5 py-0.5 rounded-full">
                             Interactive
                         </div>
                     </div>
@@ -284,7 +284,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
+                        className="flex items-center gap-2 px-6 py-2 bg-primary-600 hover:bg-primary-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-primary-900/20 active:scale-95 text-white"
                     >
                         <Save size={18} />
                         {saving ? 'Saving...' : 'Save'}
@@ -295,7 +295,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
             {/* Header Title (Standard Flow) */}
             <div className="mb-8 p-1">
                 <h3 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
-                    <SettingsIcon size={24} className="text-purple-500" />
+                    <SettingsIcon size={24} className="text-primary-500" />
                     Overlay Customization
                 </h3>
                 <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
@@ -315,7 +315,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             placeholder="Twitch Channel Name"
                             value={twitchUsername}
                             onChange={(e) => setTwitchUsername(e.target.value)}
-                            className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
+                            className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-primary-600 transition-all font-medium"
                         />
                     </section>
 
@@ -340,13 +340,13 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                     key={style.id}
                                     onClick={() => updateSetting('bubbleStyle', style.id)}
                                     className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${settings.bubbleStyle === style.id
-                                        ? 'bg-purple-600/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                                        ? 'bg-primary-600/10 border-primary-500 text-primary-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
                                         : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
                                         }`}
                                 >
                                     <div className={`w-8 h-4 rounded-sm relative overflow-hidden ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
                                         style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
-                                            style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
+                                            style.id === 'neon' ? 'bg-zinc-950 border border-primary-500 shadow-[0_0_5px_purple]' :
                                                 style.id === 'minimal' ? 'border-none bg-transparent' :
                                                     style.id === 'cyberpunk' ? 'bg-zinc-900 border-l-2 border-l-[#ff003c] border-r-2 border-r-[#00f0ff]' :
                                                         style.id === 'comic' ? 'bg-white border-2 border-black after:content-[""] after:absolute after:inset-0 after:bg-[radial-gradient(#000_15%,transparent_16%)] after:bg-[length:3px_3px]' :
@@ -397,18 +397,18 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                     max="60"
                                     value={settings.displayDuration}
                                     onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
-                                    className="w-full accent-purple-600"
+                                    className="w-full accent-primary-600"
                                 />
                                 <p className="text-[10px] text-zinc-600 italic">How long the message stays on screen (in seconds).</p>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Message Text Size <span>{settings.fontSize}px</span></label>
-                                <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Username Size <span>{settings.nameSize}px</span></label>
-                                <input type="range" min="8" max="40" value={settings.nameSize} onChange={(e) => updateSetting('nameSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="8" max="40" value={settings.nameSize} onChange={(e) => updateSetting('nameSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                             </div>
                         </div>
                     </section>
@@ -425,7 +425,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('showAvatar', !settings.showAvatar)}
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.showAvatar ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.showAvatar ? 'bg-primary-600' : 'bg-zinc-700'}`}
                             >
                                 <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.showAvatar ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
                             </button>
@@ -433,7 +433,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         {settings.showAvatar && (
                             <div className="space-y-2 pl-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Avatar Diameter <span>{settings.avatarSize}px</span></label>
-                                <input type="range" min="20" max="120" value={settings.avatarSize} onChange={(e) => updateSetting('avatarSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="20" max="120" value={settings.avatarSize} onChange={(e) => updateSetting('avatarSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                                 <p className="text-[10px] text-zinc-600 italic">Tip: Setting this close to text size creates a modern inline look.</p>
                             </div>
                         )}
@@ -446,12 +446,12 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         </h4>
                         <div className="space-y-4 bg-zinc-800/20 p-6 rounded-2xl border border-white/5">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-purple-500">{settings.posX}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posX} onChange={(e) => updateSetting('posX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+                                <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-primary-500">{settings.posX}%</span></label>
+                                <input type="range" min="0" max="100" value={settings.posX} onChange={(e) => updateSetting('posX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Vertical (Y) <span className="ml-2 text-purple-500">{settings.posY}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posY} onChange={(e) => updateSetting('posY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+                                <label className="text-xs font-bold text-zinc-400 uppercase block">Vertical (Y) <span className="ml-2 text-primary-500">{settings.posY}%</span></label>
+                                <input type="range" min="0" max="100" value={settings.posY} onChange={(e) => updateSetting('posY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
                             </div>
                         </div>
                     </section>
@@ -468,7 +468,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('soundEnabled', !settings.soundEnabled)}
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.soundEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.soundEnabled ? 'bg-primary-600' : 'bg-zinc-700'}`}
                             >
                                 <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.soundEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
                             </button>
@@ -487,7 +487,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                             audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
                                             audio.play().catch(e => console.error(e));
                                         }}
-                                        className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-600/50 transition-all"
+                                        className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-primary-600/50 transition-all"
                                     >
                                         <option value="pop">Pop</option>
                                         <option value="ding">Ding</option>
@@ -520,7 +520,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                             audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
                                             audio.play().catch(e => console.error(e));
                                         }}
-                                        className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                        className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
                                     />
                                 </div>
                             </div>
@@ -544,7 +544,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                 role="switch"
                                 aria-checked={settings.karafunEnabled}
                                 aria-label="Enable KaraFun Integration"
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-primary-600' : 'bg-zinc-700'}`}
                             >
                                 <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
                             </button>

@@ -200,7 +200,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                     {/* KaraFun Now Playing Controls */}
                     <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-5">
                         <h5 className="font-bold text-white flex items-center gap-2 text-lg">
-                            <span className="w-2 h-2 rounded-full bg-purple-500" /> Now Playing Popup
+                            <span className="w-2 h-2 rounded-full bg-primary-500" /> Now Playing Popup
                         </h5>
                         <div className="space-y-3">
                             <EndpointButton

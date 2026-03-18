@@ -16,8 +16,8 @@ export const metadata = {
   title: "StreamCast by Sandschi",
   description: "Advanced broadcast tools for Streamers",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 

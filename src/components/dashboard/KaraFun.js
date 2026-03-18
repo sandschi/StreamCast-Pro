@@ -190,8 +190,8 @@ export default function KaraFun({ targetUid, userSettings }) {
             {/* ID CONFIGURATION SECTION */}
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4 flex-shrink-0">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="bg-purple-500/20 p-2 rounded-lg">
-                        <Music className="text-purple-400" size={18} />
+                    <div className="bg-primary-500/20 p-2 rounded-lg">
+                        <Music className="text-primary-400" size={18} />
                     </div>
                     <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Party Configuration</h4>
                 </div>
@@ -202,12 +202,12 @@ export default function KaraFun({ targetUid, userSettings }) {
                         placeholder="Enter KaraFun Party ID (e.g. 727383)"
                         value={tempPartyId}
                         onChange={(e) => setTempPartyId(e.target.value)}
-                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
+                        className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-primary-600 transition-all font-medium"
                     />
                     <button
                         onClick={handleSavePartyId}
                         disabled={isSavingId || tempPartyId === partyId}
-                        className="px-6 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:hover:bg-purple-600 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                        className="px-6 py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:hover:bg-primary-600 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
                     >
                         <Save size={18} />
                         {isSavingId ? 'Saving...' : 'Save ID'}
@@ -224,8 +224,8 @@ export default function KaraFun({ targetUid, userSettings }) {
             {partyId && (
                 <div className="flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
                     <div className="flex items-center gap-3">
-                        <div className="bg-indigo-500/20 p-2 rounded-lg">
-                            <Music className="text-indigo-400" size={20} />
+                        <div className="bg-primary-500/20 p-2 rounded-lg">
+                            <Music className="text-primary-400" size={20} />
                         </div>
                         <div>
                             <h3 className="font-bold text-zinc-100">KaraFun Party: {partyId}</h3>
@@ -256,7 +256,7 @@ export default function KaraFun({ targetUid, userSettings }) {
 
             {loading && !queueData && partyId && (
                 <div className="flex justify-center p-12">
-                    <RefreshCw className="animate-spin text-indigo-500" size={32} />
+                    <RefreshCw className="animate-spin text-primary-500" size={32} />
                 </div>
             )}
 
@@ -288,10 +288,10 @@ export default function KaraFun({ targetUid, userSettings }) {
 
                         {queueData.currentSong ? (
                             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover:bg-indigo-500/20 transition-colors" />
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/10 blur-3xl -mr-16 -mt-16 group-hover:bg-primary-500/20 transition-colors" />
                                 <div className="relative">
                                     <h5 className="text-2xl font-black text-white mb-1">{queueData.currentSong.title}</h5>
-                                    <p className="text-indigo-400 font-bold mb-4">{queueData.currentSong.artist}</p>
+                                    <p className="text-primary-400 font-bold mb-4">{queueData.currentSong.artist}</p>
 
                                     {queueData.currentSong.singer && (
                                         <div className="flex items-center gap-2 bg-zinc-800/50 w-max px-3 py-1.5 rounded-full border border-white/5">
@@ -328,7 +328,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                                             </div>
                                         </div>
                                         {song.singer && (
-                                            <div className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-1 rounded-md border border-indigo-500/20">
+                                            <div className="text-[10px] bg-primary-500/10 text-primary-300 px-2 py-1 rounded-md border border-primary-500/20">
                                                 {song.singer}
                                             </div>
                                         )}
@@ -345,8 +345,8 @@ export default function KaraFun({ targetUid, userSettings }) {
             {/* OVERLAY CONFIGURATION SECTION */}
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4">
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="bg-pink-500/20 p-2 rounded-lg">
-                        <Monitor className="text-pink-400" size={18} />
+                    <div className="bg-primary-500/20 p-2 rounded-lg">
+                        <Monitor className="text-primary-400" size={18} />
                     </div>
                     <h4 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">Overlay Settings</h4>
                 </div>
@@ -360,7 +360,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                                 checked={userSettings?.karafunOverlayQueueEnabled || false}
                                 onChange={(e) => handleToggleSetting('karafunOverlayQueueEnabled', e.target.checked)}
                             />
-                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                         </div>
                         <span className="font-medium text-zinc-300">Show Queue (Next 5 Songs)</span>
                     </label>
@@ -373,7 +373,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                                 checked={userSettings?.karafunOverlayNowPlayingEnabled || false}
                                 onChange={(e) => handleToggleSetting('karafunOverlayNowPlayingEnabled', e.target.checked)}
                             />
-                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                         </div>
                         <span className="font-medium text-zinc-300">Show Now Playing Popup</span>
                     </label>
@@ -381,7 +381,7 @@ export default function KaraFun({ targetUid, userSettings }) {
                     <div className="md:col-span-2 bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-center justify-between">
                         <span className="font-medium text-zinc-300">Overlay Theme</span>
                         <select
-                            className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 outline-none focus:border-pink-500 transition-colors cursor-pointer"
+                            className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 outline-none focus:border-primary-500 transition-colors cursor-pointer"
                             value={userSettings?.karafunOverlayTheme || 'classic'}
                             onChange={(e) => handleToggleSetting('karafunOverlayTheme', e.target.value)}
                         >

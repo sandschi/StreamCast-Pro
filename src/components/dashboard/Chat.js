@@ -14,7 +14,8 @@ import {
     Send,
     CheckCircle2,
     XCircle,
-    HandHelping
+    HandHelping,
+    User
 } from 'lucide-react';
 
 export default function Chat({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
@@ -89,8 +90,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                 const login = tags.username;
                 const displayName = tags['display-name'] || login;
 
-                // 1. Initial Placeholder (Dicebear - guaranteed to work)
-                const placeholder = `https://api.dicebear.com/7.x/identicon/svg?seed=${login}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+                const placeholder = null;
 
                 const newMessage = {
                     id: tags.id || Math.random().toString(36).substr(2, 9),
@@ -261,7 +261,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
                 </h3>
                 <div className="flex items-center gap-2">
-                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${userRole === 'broadcaster' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' :
                         userRole === 'mod' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                             'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
                         }`}>
@@ -272,16 +272,20 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
             {/* Suggestions Pool (Mods/Broadcasters Only) */}
             {userRole !== 'viewer' && suggestions.length > 0 && (
-                <div className="bg-indigo-600/10 border-b border-indigo-500/20 overflow-x-auto scrollbar-hide">
+                <div className="bg-primary-600/10 border-b border-primary-500/20 overflow-x-auto scrollbar-hide">
                     <div className="p-3 flex items-center gap-3 min-w-max">
-                        <div className="flex items-center gap-2 text-indigo-400 font-bold text-[10px] uppercase tracking-widest px-2 border-r border-indigo-500/20">
+                        <div className="flex items-center gap-2 text-primary-400 font-bold text-[10px] uppercase tracking-widest px-2 border-r border-primary-500/20">
                             <HandHelping size={14} /> Suggestions
                         </div>
                         {suggestions.map(sug => (
-                            <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-indigo-500/30 group/sug animate-in zoom-in-95 duration-200">
+                            <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-primary-500/30 group/sug animate-in zoom-in-95 duration-200">
                                 <div className="flex items-center gap-2 max-w-[150px]">
                                     <div className="relative w-4 h-4 shrink-0">
-                                        <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" />
+                                        {sug.avatarUrl ? (
+                                            <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" unoptimized />
+                                        ) : (
+                                            <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center"><User size={10} className="text-zinc-500" /></div>
+                                        )}
                                     </div>
                                     <span className="text-[11px] font-bold truncate" style={{ color: sug.color }}>{sug.username}:</span>
                                     <span className="text-[11px] text-zinc-300 truncate">{sug.fragments[0]?.content}</span>
@@ -304,8 +308,12 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800">
-                                    <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
+                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
+                                    {msg.avatarUrl ? (
+                                        <Image src={msg.avatarUrl} alt="" fill className="object-cover" unoptimized />
+                                    ) : (
+                                        <User size={12} className="text-zinc-500" />
+                                    )}
                                 </div>
                                 <span className="font-bold text-sm tracking-wide" style={{ color: msg.color }}>
                                     {msg.username}
@@ -325,7 +333,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                                 )}
                                 <button
                                     onClick={() => sendToScreen(msg)}
-                                    className={`p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20' : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
+                                    className={`p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-primary-600 hover:bg-primary-500 shadow-primary-600/20' : 'bg-primary-600 hover:bg-primary-500 shadow-primary-600/20'
                                         }`}
                                 >
                                     {userRole === 'viewer' ? (

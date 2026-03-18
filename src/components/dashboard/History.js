@@ -133,8 +133,8 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                 <button
                                     onClick={() => resendToScreen(msg)}
                                     className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 px-3 border ${userRole === 'viewer'
-                                        ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-600/20'
-                                        : 'bg-purple-600/10 text-purple-400 border-purple-500/20 hover:bg-purple-600/20 text-white'
+                                        ? 'bg-primary-600/10 text-primary-400 border-primary-500/20 hover:bg-primary-600/20'
+                                        : 'bg-primary-600/10 text-primary-400 border-primary-500/20 hover:bg-primary-600/20 text-white'
                                         }`}
                                     title={userRole === 'viewer' ? "Suggest Message" : "Show on Overlay"}
                                 >

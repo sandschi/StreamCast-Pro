@@ -645,12 +645,19 @@ export default function OverlayPage() {
                                     }`}
                                     style={{ width: `${effectiveSettings.avatarSize}px`, height: `${effectiveSettings.avatarSize}px` }}
                                 >
-                                    <Image
-                                        src={activeMessage.avatarUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${activeMessage.login || 'twitch'}`}
-                                        alt=""
-                                        fill
-                                        style={{ objectFit: 'cover' }}
-                                    />
+                                    {activeMessage.avatarUrl ? (
+                                        <Image
+                                            src={activeMessage.avatarUrl}
+                                            alt=""
+                                            fill
+                                            style={{ objectFit: 'cover' }}
+                                            unoptimized
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-black/40 flex items-center justify-center text-white/50">
+                                            <User size={effectiveSettings.avatarSize * 0.5} />
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <span
@@ -725,7 +732,7 @@ export default function OverlayPage() {
                                         exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
                                         className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}
                                     >
-                                        {isNext && <span className="absolute -top-3 left-4 bg-pink-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
+                                        {isNext && <span className="absolute -top-3 left-4 bg-primary-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
                                         <div className={`${theme.textPrimary} drop-shadow-[0_1px_4px_rgba(0,0,0,1)]`}>{song.title}</div>
                                         <div className={`${theme.textSecondary} drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>{song.artist}</div>
                                         {song.singer && (
@@ -764,9 +771,9 @@ export default function OverlayPage() {
                             <p className={`${getKaraFunThemeStyles().textSecondary} text-xl drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]`}>{karafunNowPlaying.artist}</p>
                             {karafunNowPlaying.singer && (
                                 <div className="mt-4 bg-white/15 p-3 rounded-xl flex items-center justify-center gap-3 w-full">
-                                    <User size={18} className="text-pink-400" />
+                                    <User size={18} className="text-primary-400" />
                                     <span className={`${getKaraFunThemeStyles().textTertiary} !text-base font-bold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>
-                                        Sung by <span className="text-pink-300 font-black">{karafunNowPlaying.singer}</span>
+                                        Sung by <span className="text-primary-300 font-black">{karafunNowPlaying.singer}</span>
                                     </span>
                                 </div>
                             )}

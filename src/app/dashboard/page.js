@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
+import TwitchAvatar from '@/components/TwitchAvatar';
 import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
@@ -40,7 +41,7 @@ import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
 function DashboardContent() {
-    const { user, twitchToken, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
+    const { user, userData, twitchToken, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -231,17 +232,17 @@ function DashboardContent() {
     if (loading) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
 
     if (!user) {
         return (
-            <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-zinc-950 to-zinc-950">
+            <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary-900/20 via-zinc-950 to-zinc-950">
                 <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl text-center space-y-6">
-                    <div className="w-20 h-20 bg-purple-600/20 flex items-center justify-center rounded-2xl mx-auto border border-purple-500/20">
-                        <LayoutDashboard className="w-10 h-10 text-purple-500" />
+                    <div className="w-20 h-20 bg-primary-600/20 flex items-center justify-center rounded-2xl mx-auto border border-primary-500/20">
+                        <LayoutDashboard className="w-10 h-10 text-primary-500" />
                     </div>
                     <div className="space-y-2">
                         <h1 className="text-3xl font-bold text-zinc-100">StreamCast Pro</h1>
@@ -264,8 +265,8 @@ function DashboardContent() {
             {/* Sidebar */}
             <aside className="w-20 md:w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col p-4">
                 <div className="flex items-center gap-3 px-2 mb-10">
-                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 relative overflow-hidden">
-                        <Image src="/logo.png" alt="StreamCast Logo" fill style={{ objectFit: 'cover' }} priority sizes="40px" />
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-primary-500/20 shrink-0 relative overflow-hidden">
+                        <Image src="/logo.svg" alt="StreamCast Logo" fill style={{ objectFit: 'cover' }} priority sizes="40px" />
                     </div>
                     <span className="hidden md:block font-bold text-xl tracking-tight">STREAMCAST</span>
                 </div>
@@ -275,7 +276,7 @@ function DashboardContent() {
                         <>
                             <button
                                 onClick={() => setActiveTab('chat')}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                             >
                                 <MessageSquare size={20} />
                                 <span className="font-medium">Live Chat</span>
@@ -284,7 +285,7 @@ function DashboardContent() {
                             {isModAuthorized && (
                                 <button
                                     onClick={() => setActiveTab('history')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                 >
                                     <HistoryIcon size={20} />
                                     <span className="font-medium">History</span>
@@ -294,7 +295,7 @@ function DashboardContent() {
                             {isModAuthorized && (
                                 <button
                                     onClick={() => setActiveTab('users')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                 >
                                     <Users size={20} />
                                     <span className="font-medium">Users</span>
@@ -304,7 +305,7 @@ function DashboardContent() {
                             {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                 >
                                     <Music size={20} />
                                     <span className="font-medium">KaraFun</span>
@@ -315,14 +316,14 @@ function DashboardContent() {
                                 <>
                                     <button
                                         onClick={() => setActiveTab('settings')}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                     >
                                         <SettingsIcon size={20} />
                                         <span className="font-medium">Settings</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('api')}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'api' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'api' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                                     >
                                         <Terminal size={20} />
                                         <span className="font-medium">API controls</span>
@@ -335,7 +336,7 @@ function DashboardContent() {
                     {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
                         <button
                             onClick={() => setActiveTab('broadcasters')}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                         >
                             <Shield size={20} />
                             <span className="font-medium">Broadcasters</span>
@@ -385,17 +386,13 @@ function DashboardContent() {
                     </button>
 
                     <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 px-2">
-                        <div className="relative w-9 h-9 shrink-0">
-                            {user.photoURL ? (
-                                <Image src={user.photoURL} alt="Profile" fill style={{ objectFit: 'cover' }} className="rounded-full border border-zinc-700 bg-zinc-800" sizes="36px" />
-                            ) : (
-                                <div className="w-full h-full rounded-full border border-zinc-700 bg-zinc-800" />
-                            )}
-                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full" />
+                        <div className="relative w-9 h-9 shrink-0 flex items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800">
+                            <TwitchAvatar photoURL={userData?.photoURL || user?.photoURL} username={userData?.twitchUsername || user.displayName} alt="Profile" iconSize={16} />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full z-10" />
                         </div>
                         <div className="hidden md:block overflow-hidden">
-                            <p className="text-[11px] font-bold truncate text-zinc-100">{user.displayName}</p>
-                            <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-indigo-400' :
+                            <p className="text-[11px] font-bold truncate text-zinc-100">{userData?.twitchUsername || user?.displayName}</p>
+                            <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-primary-400' :
                                 userRole === 'mod' ? 'text-emerald-400' :
                                     userRole === 'denied' ? 'text-red-400' :
                                         'text-zinc-500'
@@ -434,12 +431,12 @@ function DashboardContent() {
 
                         <div className="flex items-center gap-2">
                             {isMasterAdmin && (
-                                <div className="px-3 py-1 bg-purple-600/10 border border-purple-500/20 rounded-full flex items-center gap-2">
-                                    <Shield size={12} className="text-purple-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-400">Master Admin</span>
+                                <div className="px-3 py-1 bg-primary-600/10 border border-primary-500/20 rounded-full flex items-center gap-2">
+                                    <Shield size={12} className="text-primary-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary-400">Master Admin</span>
                                 </div>
                             )}
-                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' :
                                 userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                                     userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                                         'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
@@ -460,7 +457,7 @@ function DashboardContent() {
                     {/* Verifying Moderator Permissions UI */}
                     {isModeratorMode && verifyingMod && !isMasterAdmin && (
                         <div className="flex flex-col items-center justify-center p-20 space-y-4">
-                            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+                            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mb-4"></div>
                             <h2 className="text-xl font-bold">Verifying Security...</h2>
                             <p className="text-zinc-500">Performing deep identity handshake with Twitch.</p>
                         </div>
@@ -468,13 +465,13 @@ function DashboardContent() {
 
                     {/* Suggestion Mode Header Strip (Viewers only) */}
                     {userRole === 'viewer' && !verifyingMod && !isMasterAdmin && (
-                        <div className="mb-4 bg-indigo-600/10 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-700">
+                        <div className="mb-4 bg-primary-600/10 border border-primary-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-700">
                             <div className="flex items-center gap-3">
-                                <div className="p-1.5 bg-indigo-500/20 rounded-lg">
-                                    <Users size={16} className="text-indigo-400" />
+                                <div className="p-1.5 bg-primary-500/20 rounded-lg">
+                                    <Users size={16} className="text-primary-400" />
                                 </div>
-                                <p className="text-xs text-indigo-100/80">
-                                    <span className="font-bold text-indigo-400">Suggestion Mode</span> – Your messages will be sent to the moderation pool for review.
+                                <p className="text-xs text-primary-100/80">
+                                    <span className="font-bold text-primary-400">Suggestion Mode</span> – Your messages will be sent to the moderation pool for review.
                                 </p>
                             </div>
                         </div>
@@ -546,7 +543,7 @@ export default function DashboardPage() {
     return (
         <Suspense fallback={
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
             </div>
         }>
             <DashboardContent />
@@ -559,7 +556,7 @@ function TabButton({ active, onClick, icon, label }) {
         <button
             onClick={onClick}
             className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${active
-                ? 'bg-purple-600/10 text-purple-500 border border-purple-500/20'
+                ? 'bg-primary-600/10 text-primary-500 border border-primary-500/20'
                 : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent'
                 }`}
         >

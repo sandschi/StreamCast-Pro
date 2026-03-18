@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
+import TwitchAvatar from '@/components/TwitchAvatar';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
-import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send, User } from 'lucide-react';
 
 export default function Broadcasters() {
     const [broadcasters, setBroadcasters] = useState([]);
@@ -71,7 +72,7 @@ export default function Broadcasters() {
         <div className="space-y-6">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-600/20 rounded-lg text-indigo-400">
+                    <div className="p-2 bg-primary-600/20 rounded-lg text-primary-400">
                         <ShieldCheck size={24} />
                     </div>
                     <div>
@@ -83,7 +84,7 @@ export default function Broadcasters() {
                     <button
                         onClick={testWebhook}
                         disabled={testingWebhook}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-lg transition-all shadow-lg flex items-center gap-2 text-sm"
+                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-lg transition-all shadow-lg flex items-center gap-2 text-sm"
                     >
                         <Send size={16} className={testingWebhook ? 'animate-pulse' : ''} />
                         {testingWebhook ? 'Sending...' : 'Test Webhook'}
@@ -99,13 +100,8 @@ export default function Broadcasters() {
                 {broadcasters.map((u) => (
                     <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between group hover:border-zinc-700 transition-all">
                         <div className="flex items-center gap-4">
-                            <div className="relative w-12 h-12">
-                                <Image
-                                    src={u.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${u.id}`}
-                                    alt={`${u.displayName || 'Broadcaster'}'s avatar (Live on Twitch)`}
-                                    fill
-                                    className="rounded-full border-2 border-zinc-800 shadow-xl object-cover"
-                                />
+                            <div className="relative w-12 h-12 flex items-center justify-center rounded-full border-2 border-zinc-800 shadow-xl overflow-hidden shrink-0 bg-zinc-900">
+                                <TwitchAvatar photoURL={u.photoURL} username={u.twitchUsername} alt={`${u.displayName || 'Broadcaster'}'s avatar`} iconSize={20} />
                             </div>
                             <div>
                                 <p className="font-bold text-zinc-100 flex items-center gap-2">
