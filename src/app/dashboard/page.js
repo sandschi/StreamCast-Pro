@@ -276,39 +276,39 @@ function DashboardContent() {
                         <>
                             <button
                                 onClick={() => setActiveTab('chat')}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'chat' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                className={`nav-item ${activeTab === 'chat' ? 'nav-item-active' : ''}`}
                             >
-                                <MessageSquare size={20} />
-                                <span className="font-medium">Live Chat</span>
+                                <MessageSquare size={18} />
+                                <span>Live Chat</span>
                             </button>
 
                             {isModAuthorized && (
                                 <button
                                     onClick={() => setActiveTab('history')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`nav-item ${activeTab === 'history' ? 'nav-item-active' : ''}`}
                                 >
-                                    <HistoryIcon size={20} />
-                                    <span className="font-medium">History</span>
+                                    <HistoryIcon size={18} />
+                                    <span>History</span>
                                 </button>
                             )}
 
                             {isModAuthorized && (
                                 <button
                                     onClick={() => setActiveTab('users')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'users' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`nav-item ${activeTab === 'users' ? 'nav-item-active' : ''}`}
                                 >
-                                    <Users size={20} />
-                                    <span className="font-medium">Users</span>
+                                    <Users size={18} />
+                                    <span>Users</span>
                                 </button>
                             )}
 
                             {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
                                 <button
                                     onClick={() => setActiveTab('karafun')}
-                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'karafun' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                    className={`nav-item ${activeTab === 'karafun' ? 'nav-item-active' : ''}`}
                                 >
-                                    <Music size={20} />
-                                    <span className="font-medium">KaraFun</span>
+                                    <Music size={18} />
+                                    <span>KaraFun</span>
                                 </button>
                             )}
 
@@ -316,17 +316,17 @@ function DashboardContent() {
                                 <>
                                     <button
                                         onClick={() => setActiveTab('settings')}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                        className={`nav-item ${activeTab === 'settings' ? 'nav-item-active' : ''}`}
                                     >
-                                        <SettingsIcon size={20} />
-                                        <span className="font-medium">Settings</span>
+                                        <SettingsIcon size={18} />
+                                        <span>Settings</span>
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('api')}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'api' ? 'bg-primary-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                                        className={`nav-item ${activeTab === 'api' ? 'nav-item-active' : ''}`}
                                     >
-                                        <Terminal size={20} />
-                                        <span className="font-medium">API controls</span>
+                                        <Terminal size={18} />
+                                        <span>API controls</span>
                                     </button>
                                 </>
                             )}
@@ -336,10 +336,10 @@ function DashboardContent() {
                     {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
                         <button
                             onClick={() => setActiveTab('broadcasters')}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'broadcasters' ? 'bg-primary-600 text-white shadow-lg shadow-primary-900/40' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                            className={`nav-item ${activeTab === 'broadcasters' ? 'nav-item-active' : ''}`}
                         >
-                            <Shield size={20} />
-                            <span className="font-medium">Broadcasters</span>
+                            <Shield size={18} />
+                            <span>Broadcasters</span>
                         </button>
                     )}
 
@@ -436,17 +436,16 @@ function DashboardContent() {
                                     <span className="text-[10px] font-black uppercase tracking-widest text-primary-400">Master Admin</span>
                                 </div>
                             )}
-                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-bold transition-all shadow-sm ${userRole === 'broadcaster' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' :
+                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-black transition-all ${userRole === 'broadcaster' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' :
                                 userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                    userRole === 'denied' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                        'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                                    'bg-zinc-900/50 text-zinc-400 border-zinc-800'
                                 }`}>
                                 {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
                                 {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
                                 {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
                                 {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
-                                <span className="uppercase tracking-widest whitespace-nowrap">
-                                    {verifyingMod ? 'Verifying Mode...' : `${userRole} Mode`}
+                                <span className="uppercase tracking-[0.2em] whitespace-nowrap">
+                                    {verifyingMod ? 'Verifying...' : `${userRole}`}
                                 </span>
                             </div>
                         </div>

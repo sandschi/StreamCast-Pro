@@ -367,11 +367,13 @@ export default function OverlayPage() {
             case 'glass':
                 return {
                     ...baseStyles,
-                    card: "bg-black/60 backdrop-blur-xl border border-white/20 p-4 rounded-[20px]",
-                    highlight: "bg-white/10 border-white/40",
-                    textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-100 text-sm",
-                    textTertiary: "text-zinc-200 text-xs",
+                    // Premium Dark Glass Card
+                    card: "bg-[#0a0a0a]/60 backdrop-blur-2xl border border-[#27272a]/40 p-5 rounded-[24px] shadow-2xl",
+                    // The "Awesome Button" design (Solid Neon Green Pill)
+                    highlight: "bg-[#07fc03] text-black border-none shadow-[0_0_20px_rgba(7,252,3,0.4)]",
+                    textPrimary: "font-black tracking-tight text-white",
+                    textSecondary: "text-zinc-300 text-sm font-medium",
+                    textTertiary: "text-zinc-400 text-xs font-bold uppercase tracking-wider",
                 };
             case 'neon':
                 return {
@@ -404,11 +406,11 @@ export default function OverlayPage() {
             default:
                 return {
                     ...baseStyles,
-                    card: "bg-black/80 backdrop-blur-md border border-white/10 p-4 rounded-xl",
-                    highlight: "bg-white/10",
-                    textPrimary: "font-bold text-white",
-                    textSecondary: "text-zinc-100 text-sm",
-                    textTertiary: "text-zinc-200 text-xs",
+                    card: "bg-[#18181b]/80 backdrop-blur-xl border border-[#27272a]/30 p-5 rounded-[20px] shadow-xl",
+                    highlight: "bg-[#07fc03]/10 border border-[#07fc03]/30",
+                    textPrimary: "font-bold text-white tracking-tight",
+                    textSecondary: "text-zinc-300 text-sm",
+                    textTertiary: "text-zinc-400 text-xs font-semibold",
                 };
         }
     };
@@ -538,16 +540,25 @@ export default function OverlayPage() {
                 return {
                     header: {
                         ...commonHeaderStyles,
-                        backgroundColor: `${headerBgColor}B3`, // 70% opacity
-                        backdropFilter: 'blur(10px)',
-                        border: `1px solid ${headerBgColor}80`,
-                        borderBottom: 'none',
+                        backgroundColor: '#07fc03',
+                        color: '#000',
+                        fontWeight: '900',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        borderRadius: '9999px',
+                        padding: '6px 20px',
+                        boxShadow: '0 0 15px rgba(7,252,3,0.4)',
+                        marginBottom: '-8px',
+                        zIndex: 20
                     },
                     body: {
                         ...commonBodyStyles,
-                        backgroundColor: 'rgba(0,0,0,0.4)',
-                        backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255,255,255,0.2)',
+                        backgroundColor: 'rgba(10, 10, 10, 0.7)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(39, 39, 42, 0.4)',
+                        borderRadius: '24px',
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                        zIndex: 10
                     }
                 };
             case 'neon':
@@ -597,14 +608,18 @@ export default function OverlayPage() {
                 return {
                     header: {
                         ...commonHeaderStyles,
-                        backgroundColor: headerBgColor,
-                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                        backgroundColor: '#18181b', // Solid Zinc-900 for classic
+                        border: '1px solid rgba(39, 39, 42, 0.5)',
+                        borderBottom: 'none',
+                        zIndex: 20
                     },
                     body: {
                         ...commonBodyStyles,
-                        backgroundColor: 'rgba(0,0,0,0.6)',
-                        backdropFilter: 'blur(12px)',
-                        border: '1px solid rgba(255,255,255,0.05)',
+                        backgroundColor: 'rgba(10, 10, 10, 0.6)',
+                        backdropFilter: 'blur(16px)',
+                        border: '1px solid rgba(39, 39, 42, 0.3)',
+                        borderRadius: '16px',
+                        zIndex: 10
                     }
                 };
         }
@@ -732,7 +747,7 @@ export default function OverlayPage() {
                                         exit={{ opacity: 0, y: -10, transition: { duration: 0.25 } }}
                                         className={`${theme.card} relative z-10 flex flex-col gap-1 transition-all ${isNext ? theme.highlight : ''}`}
                                     >
-                                        {isNext && <span className="absolute -top-3 left-4 bg-primary-500 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">Next Up</span>}
+                                        {isNext && <span className="absolute -top-3 left-4 bg-primary-500 text-black text-[10px] font-black uppercase px-3 py-1 rounded-full shadow-[0_0_10px_rgba(7,252,3,0.5)] z-20">Next Up</span>}
                                         <div className={`${theme.textPrimary} drop-shadow-[0_1px_4px_rgba(0,0,0,1)]`}>{song.title}</div>
                                         <div className={`${theme.textSecondary} drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]`}>{song.artist}</div>
                                         {song.singer && (
@@ -763,7 +778,7 @@ export default function OverlayPage() {
                             color: settings.karafunTextColor || undefined
                         }}
                     >
-                        <div className="bg-green-500 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-[0_0_10px_#22c55e] mb-[-12px] relative z-10">
+                        <div className="bg-primary-500 text-black text-[11px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(7,252,3,0.6)] mb-[-14px] relative z-20">
                             Now Playing
                         </div>
                         <div className={`${getKaraFunThemeStyles().card} !pb-6 !pt-8 !px-8 min-w-[400px] text-center flex flex-col items-center gap-2`}>

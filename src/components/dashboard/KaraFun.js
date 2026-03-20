@@ -186,7 +186,7 @@ export default function KaraFun({ targetUid, userSettings }) {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2 scrollbar-hide">
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2">
             {/* ID CONFIGURATION SECTION */}
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-4 flex-shrink-0">
                 <div className="flex items-center gap-3 mb-2">
@@ -207,10 +207,10 @@ export default function KaraFun({ targetUid, userSettings }) {
                     <button
                         onClick={handleSavePartyId}
                         disabled={isSavingId || tempPartyId === partyId}
-                        className="px-6 py-3 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:hover:bg-primary-600 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                        className="px-8 py-3 bg-primary-500 hover:bg-primary-400 disabled:opacity-50 rounded-full font-black uppercase text-xs tracking-widest text-black shadow-[0_0_15px_rgba(7,252,3,0.3)] transition-all active:scale-95"
                     >
-                        <Save size={18} />
-                        {isSavingId ? 'Saving...' : 'Save ID'}
+                        <Save size={16} />
+                        {isSavingId ? 'Saving...' : 'Save Party ID'}
                     </button>
                 </div>
                 {!partyId && (
@@ -272,14 +272,14 @@ export default function KaraFun({ targetUid, userSettings }) {
                                 <button
                                     onClick={handleShowNowPlaying}
                                     title="Manually trigger the Now Playing popup on the overlay"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-xs font-bold transition-all active:scale-95"
+                                    className="btn-awesome"
                                 >
                                     <Eye size={13} /> Show
                                 </button>
                                 <button
                                     onClick={handleHideNowPlaying}
                                     title="Dismiss the Now Playing popup immediately"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition-all active:scale-95"
+                                    className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700"
                                 >
                                     <EyeOff size={13} /> Dismiss
                                 </button>
@@ -352,31 +352,27 @@ export default function KaraFun({ targetUid, userSettings }) {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <label className="flex items-center gap-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
-                        <div className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={userSettings?.karafunOverlayQueueEnabled || false}
-                                onChange={(e) => handleToggleSetting('karafunOverlayQueueEnabled', e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                        </div>
-                        <span className="font-medium text-zinc-300">Show Queue (Next 5 Songs)</span>
-                    </label>
+                    <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
+                        <span className="font-medium text-zinc-300 text-sm">Show Queue Overlay</span>
+                        <button
+                            onClick={() => handleToggleSetting('karafunOverlayQueueEnabled', !userSettings?.karafunOverlayQueueEnabled)}
+                            className="toggle-switch shrink-0"
+                            data-state={userSettings?.karafunOverlayQueueEnabled ? 'checked' : 'unchecked'}
+                        >
+                            <div className="toggle-thumb" />
+                        </button>
+                    </div>
 
-                    <label className="flex items-center gap-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
-                        <div className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={userSettings?.karafunOverlayNowPlayingEnabled || false}
-                                onChange={(e) => handleToggleSetting('karafunOverlayNowPlayingEnabled', e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                        </div>
-                        <span className="font-medium text-zinc-300">Show Now Playing Popup</span>
-                    </label>
+                    <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
+                        <span className="font-medium text-zinc-300 text-sm">Now Playing Popup</span>
+                        <button
+                            onClick={() => handleToggleSetting('karafunOverlayNowPlayingEnabled', !userSettings?.karafunOverlayNowPlayingEnabled)}
+                            className="toggle-switch shrink-0"
+                            data-state={userSettings?.karafunOverlayNowPlayingEnabled ? 'checked' : 'unchecked'}
+                        >
+                            <div className="toggle-thumb" />
+                        </button>
+                    </div>
 
                     <div className="md:col-span-2 bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-center justify-between">
                         <span className="font-medium text-zinc-300">Overlay Theme</span>

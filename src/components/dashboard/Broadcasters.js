@@ -84,7 +84,7 @@ export default function Broadcasters() {
                     <button
                         onClick={testWebhook}
                         disabled={testingWebhook}
-                        className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-lg transition-all shadow-lg flex items-center gap-2 text-sm"
+                        className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700 active:scale-95"
                     >
                         <Send size={16} className={testingWebhook ? 'animate-pulse' : ''} />
                         {testingWebhook ? 'Sending...' : 'Test Webhook'}
@@ -117,9 +117,9 @@ export default function Broadcasters() {
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setStatus(u.id, 'approved')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'approved'
-                                    ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
-                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'approved'
+                                    ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(7,252,3,0.4)]'
+                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <CheckCircle size={14} /> Approve
@@ -127,9 +127,9 @@ export default function Broadcasters() {
 
                             <button
                                 onClick={() => setStatus(u.id, 'denied')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'denied'
-                                    ? 'bg-red-600 text-white shadow-lg shadow-red-900/20'
-                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'denied'
+                                    ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <XCircle size={14} /> Deny
@@ -137,9 +137,9 @@ export default function Broadcasters() {
 
                             <button
                                 onClick={() => setStatus(u.id, 'waiting')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter transition-all flex items-center gap-2 ${u.status === 'waiting'
-                                    ? 'bg-yellow-600 text-white shadow-lg shadow-yellow-900/20'
-                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'waiting'
+                                    ? 'bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]'
+                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
                                     }`}
                             >
                                 <Clock size={14} /> Waiting

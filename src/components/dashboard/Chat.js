@@ -243,7 +243,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
                     <button
                         onClick={hideOverlay}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-all shadow-xl animate-in fade-in slide-in-from-top-4"
+                        className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700"
                     >
                         <XCircle size={14} />
                         Hide Overlay
@@ -272,7 +272,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
             {/* Suggestions Pool (Mods/Broadcasters Only) */}
             {userRole !== 'viewer' && suggestions.length > 0 && (
-                <div className="bg-primary-600/10 border-b border-primary-500/20 overflow-x-auto scrollbar-hide">
+                <div className="bg-primary-600/10 border-b border-primary-500/20 overflow-x-auto">
                     <div className="p-3 flex items-center gap-3 min-w-max">
                         <div className="flex items-center gap-2 text-primary-400 font-bold text-[10px] uppercase tracking-widest px-2 border-r border-primary-500/20">
                             <HandHelping size={14} /> Suggestions
@@ -303,7 +303,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     </div>
                 </div>
             )}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {displayMessages.map((msg) => (
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
@@ -323,28 +323,27 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {(userRole === 'broadcaster' || userRole === 'mod') && (
-                                    <button
-                                        onClick={() => sendToScreen(msg, true)}
-                                        className="p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20"
-                                        title="Show Permanently (∞)"
-                                    >
-                                        <span className="text-[10px] font-bold">Send ∞</span>
-                                    </button>
+                                        <button
+                                            onClick={() => sendToScreen(msg, true)}
+                                            className="px-3 py-1.5 rounded-full text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all scale-95 hover:scale-100 shadow-md"
+                                            title="Show Permanently (∞)"
+                                        >
+                                            <span className="text-[10px] font-black uppercase tracking-tighter">Send ∞</span>
+                                        </button>
                                 )}
                                 <button
                                     onClick={() => sendToScreen(msg)}
-                                    className={`p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-primary-600 hover:bg-primary-500 shadow-primary-600/20' : 'bg-primary-600 hover:bg-primary-500 shadow-primary-600/20'
-                                        }`}
+                                    className="btn-awesome !px-4 !py-1.5"
                                 >
                                     {userRole === 'viewer' ? (
                                         <>
                                             <Send size={12} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Suggest</span>
+                                            <span>Suggest</span>
                                         </>
                                     ) : (
                                         <>
                                             <ScreenShare size={12} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Show</span>
+                                            <span>Show</span>
                                         </>
                                     )}
                                 </button>

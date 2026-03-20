@@ -68,7 +68,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
 
     if (!privateConfig?.apiToken) {
         return (
-            <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2 scrollbar-hide">
+            <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2">
                 <div className="bg-zinc-900 border border-zinc-800 p-12 rounded-3xl space-y-6 text-center shadow-2xl">
                     <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
                         <Terminal size={40} className="text-emerald-500" />
@@ -91,7 +91,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                     <button
                         onClick={handleGenerateToken}
                         disabled={generatingToken}
-                        className="mt-4 px-8 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:hover:bg-emerald-600 rounded-xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-emerald-900/20 text-white mx-auto"
+                        className="btn-awesome mx-auto"
                     >
                         <Key size={20} />
                         {generatingToken ? 'Generating Token...' : 'Generate New API Token'}
@@ -105,7 +105,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2 scrollbar-hide">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl pb-32 flex-1 overflow-y-auto pr-2">
 
             {/* API Authorization Header Section */}
             <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl shadow-xl space-y-6 relative overflow-hidden group">
@@ -125,11 +125,11 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
                     <button
                         onClick={handleGenerateToken}
                         disabled={generatingToken}
-                        className="shrink-0 flex items-center gap-2 px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl font-bold transition-all border border-red-500/20 shadow-sm text-sm"
+                        className="shrink-0 flex items-center gap-2 px-6 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-full font-black uppercase text-[10px] tracking-widest transition-all border border-red-500/20 shadow-sm"
                         title="Invalidates the current token. All previously configured external tools will need to be updated with the new links."
                     >
-                        <RefreshCw size={18} className={generatingToken ? 'animate-spin' : ''} />
-                        {generatingToken ? 'Revoking...' : 'Revoke & Rotate Token'}
+                        <RefreshCw size={14} className={generatingToken ? 'animate-spin' : ''} />
+                        {generatingToken ? 'Revoking...' : 'Revoke & Rotate'}
                     </button>
                 </div>
 
