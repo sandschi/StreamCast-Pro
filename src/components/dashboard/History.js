@@ -116,9 +116,16 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                         <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
                                     </div>
                                 )}
-                                <span className="font-bold text-xs" style={{ color: msg.color }}>
-                                    {msg.username}
-                                </span>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-xs leading-none" style={{ color: msg.color }}>
+                                        {msg.username}
+                                    </span>
+                                    {msg.timestamp && (
+                                        <span className="text-[9px] text-zinc-600 mt-0.5">
+                                            {new Date(msg.timestamp.seconds * 1000).toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {(userRole === 'broadcaster' || userRole === 'mod') && (

@@ -315,10 +315,15 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                                         <User size={12} className="text-zinc-500" />
                                     )}
                                 </div>
-                                <span className="font-bold text-sm tracking-wide" style={{ color: msg.color }}>
-                                    {msg.username}
-                                    {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
-                                </span>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sm tracking-wide leading-none" style={{ color: msg.color }}>
+                                        {msg.username}
+                                        {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 mt-0.5">
+                                        {msg.timestamp?.toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {msg.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

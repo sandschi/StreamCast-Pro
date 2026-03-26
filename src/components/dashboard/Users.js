@@ -138,24 +138,26 @@ export default function Users({ targetUid, user }) {
                             </button>
                         </div>
 
+                        <div className="grid grid-cols-3 gap-2">
                             <button
                                 onClick={() => setRole(u.id, 'viewer')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'viewer' ? 'bg-zinc-100 text-zinc-900 border-zinc-100' : 'bg-zinc-800/50 text-zinc-500 border-zinc-800 hover:border-zinc-700'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'viewer' ? 'bg-zinc-100 text-zinc-900 border-zinc-100' : 'bg-zinc-800/50 text-zinc-500 border-zinc-800 hover:border-zinc-700'}`}
                             >
                                 Viewer
                             </button>
                             <button
                                 onClick={() => setRole(u.id, 'mod')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'mod' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-primary-500/30'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'mod' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-primary-500/30'}`}
                             >
                                 Mod
                             </button>
                             <button
                                 onClick={() => setRole(u.id, 'denied')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'denied' ? 'bg-red-500 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-red-500/30'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'denied' ? 'bg-red-500 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-red-500/30'}`}
                             >
                                 Denied
                             </button>
+                        </div>
 
                         {u.lastSeen && (
                             <div className="mt-4 flex items-center gap-1 text-[10px] text-zinc-600">
