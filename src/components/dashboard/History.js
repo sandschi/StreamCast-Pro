@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 // NEW: Icons for Suggestion
-import { History as HistoryIcon, RefreshCw, Send, ScreenShare, XCircle } from 'lucide-react';
-import { addDoc, serverTimestamp } from 'firebase/firestore';
+import { History as HistoryIcon, RefreshCw, Send, ScreenShare, XCircle, Clock } from 'lucide-react';
+import { formatTimestamp } from '../../lib/utils';
 
 export default function History({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
     const { user } = useAuth();
@@ -116,14 +116,15 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                         <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
                                     </div>
                                 )}
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-xs leading-none" style={{ color: msg.color }}>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs" style={{ color: msg.color }}>
                                         {msg.username}
                                     </span>
                                     {msg.timestamp && (
-                                        <span className="text-[9px] text-zinc-600 mt-0.5">
-                                            {new Date(msg.timestamp.seconds * 1000).toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-300 tabular-nums">
+                                            <span className="text-zinc-600">•</span>
+                                            {formatTimestamp(msg.timestamp)}
+                                        </div>
                                     )}
                                 </div>
                             </div>

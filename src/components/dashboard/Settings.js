@@ -16,7 +16,8 @@ import {
     Sparkles,
     Send,
     Volume2,
-    Music
+    Music,
+    XCircle
 } from 'lucide-react';
 
 const FONTS = [

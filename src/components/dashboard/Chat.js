@@ -7,6 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { formatTimestamp } from '../../lib/utils';
+import TwitchAvatar from '../TwitchAvatar';
 // NEW: Icons for suggestions
 import {
     ScreenShare,
@@ -308,21 +310,24 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
-                                    {msg.avatarUrl ? (
-                                        <Image src={msg.avatarUrl} alt="" fill className="object-cover" unoptimized />
-                                    ) : (
-                                        <User size={12} className="text-zinc-500" />
-                                    )}
+                                <div className="flex-shrink-0 relative w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-zinc-900 flex items-center justify-center">
+                                    <TwitchAvatar 
+                                        username={msg.username} 
+                                        photoURL={msg.avatarUrl} 
+                                        alt={msg.username}
+                                        iconSize={40}
+                                    />
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-sm tracking-wide leading-none" style={{ color: msg.color }}>
-                                        {msg.username}
-                                        {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 mt-0.5">
-                                        {msg.timestamp?.toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {msg.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-zinc-100 truncate">
+                                            {msg.username}
+                                            {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
+                                        </span>
+                                        <span className="text-xs text-zinc-400 whitespace-nowrap tabular-nums font-medium">
+                                            • {formatTimestamp(msg.timestamp)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
