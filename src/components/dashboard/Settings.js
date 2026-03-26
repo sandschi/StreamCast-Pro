@@ -115,8 +115,8 @@ export default function Settings({ targetUid, isModeratorMode }) {
         if (!user) return;
         setSaving(true);
         try {
-            await updateDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), settings);
-            await updateDoc(doc(db, 'users', effectiveUid), { twitchUsername: twitchUsername.toLowerCase().trim() });
+            await setDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), settings, { merge: true });
+            await setDoc(doc(db, 'users', effectiveUid), { twitchUsername: twitchUsername.toLowerCase().trim() }, { merge: true });
         } catch (e) {
             console.error(e);
             alert('Error saving. Check Firestore connection.');

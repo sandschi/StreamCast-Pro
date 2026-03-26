@@ -38,7 +38,7 @@ export default function KaraFun({ targetUid, userSettings }) {
         setIsSavingId(true);
         try {
             const configRef = doc(db, 'users', targetUid, 'settings', 'config');
-            await updateDoc(configRef, { karafunPartyId: tempPartyId });
+            await setDoc(configRef, { karafunPartyId: tempPartyId }, { merge: true });
         } catch (err) {
             console.error("Error saving Party ID:", err);
             setError("Failed to save Party ID. Check permissions.");
@@ -51,7 +51,7 @@ export default function KaraFun({ targetUid, userSettings }) {
         if (!targetUid) return;
         try {
             const configRef = doc(db, 'users', targetUid, 'settings', 'config');
-            await updateDoc(configRef, { [field]: value });
+            await setDoc(configRef, { [field]: value }, { merge: true });
         } catch (err) {
             console.error(`Error saving ${field}:`, err);
         }
