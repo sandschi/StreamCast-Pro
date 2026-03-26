@@ -11,6 +11,8 @@ export default function TwitchAvatar({ photoURL, username, alt = "", iconSize = 
 
     useEffect(() => {
         // Validation: Twitch usernames are alphanumeric + underscores, 4-25 chars
+        const isValidUsername = username && /^[a-zA-Z0-9_]{4,25}$/.test(username);
+
         // If we already have a direct photo URL or no username or it's already cached, skip fetch entirely
         if (photoURL || !isValidUsername || avatarCache[username]) {
             return;
