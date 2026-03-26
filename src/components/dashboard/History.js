@@ -116,13 +116,13 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                         <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
                                     </div>
                                 )}
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-xs leading-none" style={{ color: msg.color }}>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs" style={{ color: msg.color }}>
                                         {msg.username}
                                     </span>
                                     {msg.timestamp && (
-                                        <div className="flex items-center gap-2 text-[10px] font-medium text-zinc-500 uppercase tracking-wider tabular-nums">
-                                            <Clock className="w-3 h-3 text-primary-500/50" />
+                                        <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-300 tabular-nums">
+                                            <span className="text-zinc-600">•</span>
                                             {formatTimestamp(msg.timestamp)}
                                         </div>
                                     )}
