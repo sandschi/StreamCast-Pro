@@ -1,16 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'static-cdn.jtvnw.net',
-        pathname: '/jtv_user_pictures/**',
+        pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'static-cdn.jtvnw.net',
-        pathname: '/user-default-pictures-uv/**',
+        hostname: 'avatars.twitch.tv',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.jtvnw.net',
+        pathname: '/**',
       },
       {
         protocol: 'https',

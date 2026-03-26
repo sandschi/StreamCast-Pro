@@ -14,7 +14,8 @@ import {
     Send,
     CheckCircle2,
     XCircle,
-    HandHelping
+    HandHelping,
+    User
 } from 'lucide-react';
 
 export default function Chat({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
@@ -89,8 +90,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                 const login = tags.username;
                 const displayName = tags['display-name'] || login;
 
-                // 1. Initial Placeholder (Dicebear - guaranteed to work)
-                const placeholder = `https://api.dicebear.com/7.x/identicon/svg?seed=${login}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+                const placeholder = null;
 
                 const newMessage = {
                     id: tags.id || Math.random().toString(36).substr(2, 9),
@@ -243,7 +243,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
                     <button
                         onClick={hideOverlay}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-all shadow-xl animate-in fade-in slide-in-from-top-4"
+                        className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700"
                     >
                         <XCircle size={14} />
                         Hide Overlay
@@ -261,7 +261,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
                 </h3>
                 <div className="flex items-center gap-2">
-                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${userRole === 'broadcaster' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${userRole === 'broadcaster' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' :
                         userRole === 'mod' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                             'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
                         }`}>
@@ -272,16 +272,20 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
             {/* Suggestions Pool (Mods/Broadcasters Only) */}
             {userRole !== 'viewer' && suggestions.length > 0 && (
-                <div className="bg-indigo-600/10 border-b border-indigo-500/20 overflow-x-auto scrollbar-hide">
+                <div className="bg-primary-600/10 border-b border-primary-500/20 overflow-x-auto">
                     <div className="p-3 flex items-center gap-3 min-w-max">
-                        <div className="flex items-center gap-2 text-indigo-400 font-bold text-[10px] uppercase tracking-widest px-2 border-r border-indigo-500/20">
+                        <div className="flex items-center gap-2 text-primary-400 font-bold text-[10px] uppercase tracking-widest px-2 border-r border-primary-500/20">
                             <HandHelping size={14} /> Suggestions
                         </div>
                         {suggestions.map(sug => (
-                            <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-indigo-500/30 group/sug animate-in zoom-in-95 duration-200">
+                            <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-primary-500/30 group/sug animate-in zoom-in-95 duration-200">
                                 <div className="flex items-center gap-2 max-w-[150px]">
                                     <div className="relative w-4 h-4 shrink-0">
-                                        <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" />
+                                        {sug.avatarUrl ? (
+                                            <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" unoptimized />
+                                        ) : (
+                                            <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center"><User size={10} className="text-zinc-500" /></div>
+                                        )}
                                     </div>
                                     <span className="text-[11px] font-bold truncate" style={{ color: sug.color }}>{sug.username}:</span>
                                     <span className="text-[11px] text-zinc-300 truncate">{sug.fragments[0]?.content}</span>
@@ -299,44 +303,52 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     </div>
                 </div>
             )}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {displayMessages.map((msg) => (
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800">
-                                    <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
+                                <div className="relative w-5 h-5 shrink-0 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
+                                    {msg.avatarUrl ? (
+                                        <Image src={msg.avatarUrl} alt="" fill className="object-cover" unoptimized />
+                                    ) : (
+                                        <User size={12} className="text-zinc-500" />
+                                    )}
                                 </div>
-                                <span className="font-bold text-sm tracking-wide" style={{ color: msg.color }}>
-                                    {msg.username}
-                                    {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
-                                </span>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sm tracking-wide leading-none" style={{ color: msg.color }}>
+                                        {msg.username}
+                                        {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 mt-0.5">
+                                        {msg.timestamp?.toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {msg.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {(userRole === 'broadcaster' || userRole === 'mod') && (
-                                    <button
-                                        onClick={() => sendToScreen(msg, true)}
-                                        className="p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20"
-                                        title="Show Permanently (∞)"
-                                    >
-                                        <span className="text-[10px] font-bold">Send ∞</span>
-                                    </button>
+                                        <button
+                                            onClick={() => sendToScreen(msg, true)}
+                                            className="px-3 py-1.5 rounded-full text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all scale-95 hover:scale-100 shadow-md"
+                                            title="Show Permanently (∞)"
+                                        >
+                                            <span className="text-[10px] font-black uppercase tracking-tighter">Send ∞</span>
+                                        </button>
                                 )}
                                 <button
                                     onClick={() => sendToScreen(msg)}
-                                    className={`p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg flex items-center gap-1.5 px-3 ${userRole === 'viewer' ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20' : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
-                                        }`}
+                                    className="btn-awesome !px-4 !py-1.5"
                                 >
                                     {userRole === 'viewer' ? (
                                         <>
                                             <Send size={12} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Suggest</span>
+                                            <span>Suggest</span>
                                         </>
                                     ) : (
                                         <>
                                             <ScreenShare size={12} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">Show</span>
+                                            <span>Show</span>
                                         </>
                                     )}
                                 </button>

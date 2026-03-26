@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
+import TwitchAvatar from '@/components/TwitchAvatar';
 import { db } from '@/lib/firebase';
 import {
     collection,
@@ -87,7 +88,7 @@ export default function Users({ targetUid, user }) {
             id,
             displayName: pData?.displayName || permData?.displayName || id,
             twitchUsername: pData?.twitchUsername || permData?.twitchUsername || null,
-            photoURL: pData?.photoURL || permData?.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${id}`,
+            photoURL: pData?.photoURL || permData?.photoURL || null,
             role: permData?.role || 'viewer',
             isOnline: !!pData,
             lastSeen: pData?.lastSeen
@@ -102,8 +103,8 @@ export default function Users({ targetUid, user }) {
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <div className="relative w-12 h-12 overflow-hidden rounded-full border-2 border-zinc-800 bg-zinc-800">
-                                        <Image src={u.photoURL} alt="" fill className="object-cover" />
+                                    <div className="relative w-12 h-12 overflow-hidden rounded-full border-2 border-zinc-800 bg-zinc-800 flex items-center justify-center">
+                                        <TwitchAvatar photoURL={u.photoURL} username={u.twitchUsername} iconSize={20} />
                                     </div>
                                     {u.isOnline && (
                                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-zinc-900 rounded-full" />
@@ -119,10 +120,10 @@ export default function Users({ targetUid, user }) {
                                         </div>
                                     )}
                                     <div className="flex items-center gap-1 mt-1 text-[10px] font-medium uppercase tracking-wider">
-                                        {u.role === 'mod' && <Shield size={10} className="text-indigo-400" />}
+                                        {u.role === 'mod' && <Shield size={10} className="text-primary-400" />}
                                         {u.role === 'viewer' && <User size={10} className="text-zinc-500" />}
                                         {u.role === 'denied' && <ShieldAlert size={10} className="text-red-400" />}
-                                        <span className={u.role === 'mod' ? 'text-indigo-400' : u.role === 'viewer' ? 'text-zinc-500' : u.role === 'denied' ? 'text-red-400' : ''}>
+                                        <span className={u.role === 'mod' ? 'text-primary-400' : u.role === 'viewer' ? 'text-zinc-500' : u.role === 'denied' ? 'text-red-400' : ''}>
                                             {u.role}
                                         </span>
                                     </div>
@@ -140,19 +141,19 @@ export default function Users({ targetUid, user }) {
                         <div className="grid grid-cols-3 gap-2">
                             <button
                                 onClick={() => setRole(u.id, 'viewer')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-tighter transition-all border ${u.role === 'viewer' ? 'bg-zinc-100 text-zinc-900 border-zinc-100' : 'text-zinc-400 border-zinc-800 hover:border-zinc-600'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'viewer' ? 'bg-zinc-100 text-zinc-900 border-zinc-100' : 'bg-zinc-800/50 text-zinc-500 border-zinc-800 hover:border-zinc-700'}`}
                             >
                                 Viewer
                             </button>
                             <button
                                 onClick={() => setRole(u.id, 'mod')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-tighter transition-all border ${u.role === 'mod' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/20' : 'text-zinc-400 border-zinc-800 hover:border-indigo-500/50'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'mod' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-primary-500/30'}`}
                             >
                                 Mod
                             </button>
                             <button
                                 onClick={() => setRole(u.id, 'denied')}
-                                className={`py-2 px-1 rounded-xl text-[10px] font-bold uppercase tracking-tighter transition-all border ${u.role === 'denied' ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-600/20' : 'text-zinc-400 border-zinc-800 hover:border-red-500/50'}`}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all border ${u.role === 'denied' ? 'bg-red-500 text-white border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-transparent text-zinc-500 border-zinc-800 hover:border-red-500/30'}`}
                             >
                                 Denied
                             </button>

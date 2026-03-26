@@ -91,7 +91,7 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
                     <button
                         onClick={hideOverlay}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-500/90 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-all shadow-xl animate-in fade-in slide-in-from-top-4"
+                        className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700"
                     >
                         <XCircle size={14} />
                         Hide Overlay
@@ -106,7 +106,7 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                 </h3>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {history.map((msg) => (
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-lg border border-zinc-800/50 hover:bg-zinc-800/40 transition-all">
                         <div className="flex justify-between items-center">
@@ -116,32 +116,33 @@ export default function History({ targetUid, isModeratorMode, isModAuthorized, u
                                         <Image src={msg.avatarUrl} alt="" fill className="object-cover" />
                                     </div>
                                 )}
-                                <span className="font-bold text-xs" style={{ color: msg.color }}>
-                                    {msg.username}
-                                </span>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-xs leading-none" style={{ color: msg.color }}>
+                                        {msg.username}
+                                    </span>
+                                    {msg.timestamp && (
+                                        <span className="text-[9px] text-zinc-600 mt-0.5">
+                                            {new Date(msg.timestamp.seconds * 1000).toLocaleDateString([], { month: '2-digit', day: '2-digit' })} • {new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {(userRole === 'broadcaster' || userRole === 'mod') && (
-                                    <button
-                                        onClick={() => resendToScreen(msg, true)}
-                                        className="p-1.5 rounded-lg text-white transition-all scale-90 hover:scale-100 shadow-lg bg-zinc-700 hover:bg-zinc-600 shadow-zinc-900/20"
-                                        title="Show Permanently (∞)"
-                                    >
-                                        <span className="text-[10px] font-bold">Send ∞</span>
-                                    </button>
+                                        <button
+                                            onClick={() => resendToScreen(msg, true)}
+                                            className="px-3 py-1.5 rounded-full text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-all scale-95 hover:scale-100 shadow-md"
+                                            title="Show Permanently (∞)"
+                                        >
+                                            <span className="text-[10px] font-black uppercase tracking-tighter">Send ∞</span>
+                                        </button>
                                 )}
                                 <button
                                     onClick={() => resendToScreen(msg)}
-                                    className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 px-3 border ${userRole === 'viewer'
-                                        ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-600/20'
-                                        : 'bg-purple-600/10 text-purple-400 border-purple-500/20 hover:bg-purple-600/20 text-white'
-                                        }`}
-                                    title={userRole === 'viewer' ? "Suggest Message" : "Show on Overlay"}
+                                    className="btn-awesome !px-4 !py-1.5"
                                 >
                                     {userRole === 'viewer' ? <Send size={12} /> : <ScreenShare size={12} />}
-                                    <span className="text-[10px] font-bold uppercase tracking-wider">
-                                        {userRole === 'viewer' ? 'Suggest' : 'Show'}
-                                    </span>
+                                    <span>{userRole === 'viewer' ? 'Suggest' : 'Show'}</span>
                                 </button>
                             </div>
                         </div>

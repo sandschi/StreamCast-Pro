@@ -157,19 +157,17 @@ export default function Settings({ targetUid, isModeratorMode }) {
     };
 
     return (
-        <div className="relative flex flex-col h-full overflow-hidden">
-            {/* Floating Controls - Fixed position to ensure they always stay on screen */}
-            {/* Fixed Control Center: Preview + Actions */}
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-3 w-full max-w-md pointer-events-none">
+        <div className="relative flex flex-col h-full">
 
-                {/* 1. Live Preview (Pointer Events Auto) */}
-                <div className="pointer-events-auto bg-zinc-900/90 backdrop-blur-xl p-3 rounded-2xl border border-zinc-700/50 shadow-2xl animate-in slide-in-from-top-4 duration-500 w-full max-w-[320px]">
+            {/* Centered Fixed Live Preview */}
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[95%] max-w-[500px] pointer-events-none">
+                <div className="pointer-events-auto bg-zinc-900/90 backdrop-blur-xl p-3 rounded-2xl border border-zinc-700/50 shadow-2xl animate-in slide-in-from-top-4 duration-500 w-full">
                     <div className="flex justify-between items-center mb-2 px-1">
                         <h4 className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-2">
                             <Sparkles size={12} /> Live Preview
                         </h4>
-                        <div className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full">
-                            Interactive
+                        <div className="text-[10px] bg-primary-500 text-black font-black uppercase px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(7,252,3,0.3)]">
+                            Live Preview
                         </div>
                     </div>
 
@@ -177,16 +175,8 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         className="relative w-full aspect-[2.5/1] bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-inner flex items-center justify-center p-4 bg-[radial-gradient(#333_1px,transparent_1px)] [background-size:16px_16px]"
                         style={{ fontFamily: `'${settings.fontFamily}', sans-serif` }}
                     >
-                        {/* Preview Message Bubble (Centered in preview box, scaling down if needed) */}
                         <div className="scale-90 origin-center flex items-center justify-center">
-                            <div
-                                className="flex items-start gap-3 w-max max-w-full"
-                                style={{
-                                    // For the preview BOX, we just center it nicely. The "settings.posX/Y" affects the REAL overlay.
-                                    // Here we just show what it LOOKS like.
-                                }}
-                            >
-                                {/* Avatar */}
+                            <div className="flex items-start gap-3 w-max max-w-full">
                                 {settings.showAvatar && (
                                     <div
                                         className="relative overflow-hidden rounded-full border-2 border-white/10 shadow-lg shrink-0"
@@ -196,20 +186,15 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                         }}
                                     >
                                         <Image
-                                            src="https://static-cdn.jtvnw.net/jtv_user_pictures/asmongold-profile_image-f7ddabea70191630-70x70.png"
-                                            alt=""
+                                            src={user?.photoURL || "https://static-cdn.jtvnw.net/user-default-pictures-uv/cdd517fe-def4-11e9-948e-784f43822e80-profile_image-300x300.png"}
+                                            alt="Preview Avatar"
                                             fill
                                             style={{ objectFit: 'cover' }}
                                         />
                                     </div>
                                 )}
 
-                                {/* Message Content */}
-                                <div
-                                    className="flex flex-col gap-1 shadow-2xl"
-                                    style={{ borderRadius: `${settings.borderRadius}px` }}
-                                >
-                                    {/* Username */}
+                                <div className="flex flex-col gap-1 shadow-2xl" style={{ borderRadius: `${settings.borderRadius}px` }}>
                                     <div
                                         className="px-3 py-1 font-bold truncate"
                                         style={{
@@ -220,10 +205,9 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                             borderBottom: settings.bubbleStyle === 'classic' ? '1px solid rgba(255,255,255,0.1)' : 'none'
                                         }}
                                     >
-                                        PreviewUser
+                                        {user?.displayName || 'PreviewUser'}
                                     </div>
 
-                                    {/* Message Text */}
                                     <div
                                         className="px-3 py-2"
                                         style={{
@@ -247,18 +231,29 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* 2. Floating Buttons (Pointer Events Auto) */}
-                <div className="pointer-events-auto flex items-center gap-3 bg-zinc-900/90 p-2 rounded-full border border-zinc-700/50 backdrop-blur-md shadow-2xl transition-all">
+            {/* Inline Header & Actions Row */}
+            <div className="flex flex-col xl:flex-row justify-between items-start gap-8 mb-8 p-1 relative z-10 w-full mt-4 md:mt-0 xl:mt-4">
+                <div>
+                    <h3 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
+                        <SettingsIcon size={24} className="text-primary-500" />
+                        Overlay Customization
+                    </h3>
+                    <p className="text-zinc-500 mt-2 text-sm max-w-sm">Build your perfect aesthetic. Changes preview instantly and apply to all displays.</p>
+                </div>
+
+                {/* Top-Right Action Buttons */}
+                <div className="flex items-center gap-3 bg-zinc-900/90 p-2 rounded-full border border-zinc-700/50 shadow-2xl shrink-0 transition-all">
                     {/* Hide Button (Only for Mods/Owner when Active) */}
                     {activeMessage && (user?.uid === effectiveUid || isModeratorMode) && (
                         <>
                             <button
                                 onClick={hideOverlay}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-200 rounded-full text-xs font-bold transition-all border border-red-500/30 animate-in fade-in zoom-in duration-200"
+                                className="btn-awesome !bg-zinc-800 !text-white !shadow-none hover:!bg-zinc-700 active:scale-95 animate-in fade-in"
                             >
-                                <span className="hidden sm:inline">Hide</span>
-                                <span className="sm:hidden">X</span>
+                                <XCircle size={14} />
+                                Hide Overlay
                             </button>
                             <div className="w-px h-4 bg-zinc-700" />
                         </>
@@ -266,14 +261,14 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     <button
                         onClick={() => sendTestOverlay(false)}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
                     >
                         <Send size={14} />
                         <span className="hidden sm:inline">Test</span>
                     </button>
                     <button
                         onClick={() => sendTestOverlay(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full text-xs font-bold transition-all border border-zinc-600 shadow-sm"
                         title="Send Permanent Message"
                     >
                         <Send size={14} />
@@ -284,24 +279,15 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-purple-900/20 active:scale-95 text-white"
+                        className="btn-awesome min-w-[160px]"
                     >
-                        <Save size={18} />
-                        {saving ? 'Saving...' : 'Save'}
+                        <Save size={16} />
+                        {saving ? 'Saving...' : 'SAVE SETTINGS'}
                     </button>
                 </div>
             </div>
 
-            {/* Header Title (Standard Flow) */}
-            <div className="mb-8 p-1">
-                <h3 className="text-2xl font-bold text-zinc-100 flex items-center gap-3">
-                    <SettingsIcon size={24} className="text-purple-500" />
-                    Overlay Customization
-                </h3>
-                <p className="text-zinc-500 text-sm mt-1 ml-9">Configure your stream overlay appearance and behavior.</p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide mt-36 space-y-12 pb-32">
+            <div className="flex-1 overflow-y-auto pr-2 space-y-12 pb-32">
                 {/* Visual Settings Column */}
                 <div className="space-y-12">
 
@@ -315,7 +301,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             placeholder="Twitch Channel Name"
                             value={twitchUsername}
                             onChange={(e) => setTwitchUsername(e.target.value)}
-                            className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-purple-600 transition-all font-medium"
+                            className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-primary-600 transition-all font-medium"
                         />
                     </section>
 
@@ -340,13 +326,13 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                     key={style.id}
                                     onClick={() => updateSetting('bubbleStyle', style.id)}
                                     className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${settings.bubbleStyle === style.id
-                                        ? 'bg-purple-600/10 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
+                                        ? 'bg-primary-600/10 border-primary-500 text-primary-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
                                         : 'bg-zinc-800/50 border-zinc-700 text-zinc-500 hover:border-zinc-600'
                                         }`}
                                 >
                                     <div className={`w-8 h-4 rounded-sm relative overflow-hidden ${style.id === 'classic' ? 'bg-zinc-700 border border-white/20' :
                                         style.id === 'glass' ? 'bg-white/10 backdrop-blur-sm border border-white/20' :
-                                            style.id === 'neon' ? 'bg-zinc-950 border border-purple-500 shadow-[0_0_5px_purple]' :
+                                            style.id === 'neon' ? 'bg-zinc-950 border border-primary-500 shadow-[0_0_5px_purple]' :
                                                 style.id === 'minimal' ? 'border-none bg-transparent' :
                                                     style.id === 'cyberpunk' ? 'bg-zinc-900 border-l-2 border-l-[#ff003c] border-r-2 border-r-[#00f0ff]' :
                                                         style.id === 'comic' ? 'bg-white border-2 border-black after:content-[""] after:absolute after:inset-0 after:bg-[radial-gradient(#000_15%,transparent_16%)] after:bg-[length:3px_3px]' :
@@ -397,18 +383,18 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                     max="60"
                                     value={settings.displayDuration}
                                     onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
-                                    className="w-full accent-purple-600"
+                                    className="w-full accent-primary-600"
                                 />
                                 <p className="text-[10px] text-zinc-600 italic">How long the message stays on screen (in seconds).</p>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Message Text Size <span>{settings.fontSize}px</span></label>
-                                <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Username Size <span>{settings.nameSize}px</span></label>
-                                <input type="range" min="8" max="40" value={settings.nameSize} onChange={(e) => updateSetting('nameSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="8" max="40" value={settings.nameSize} onChange={(e) => updateSetting('nameSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                             </div>
                         </div>
                     </section>
@@ -425,15 +411,16 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('showAvatar', !settings.showAvatar)}
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.showAvatar ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className="toggle-switch"
+                                data-state={settings.showAvatar ? 'checked' : 'unchecked'}
                             >
-                                <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.showAvatar ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                                <div className="toggle-thumb" />
                             </button>
                         </div>
                         {settings.showAvatar && (
                             <div className="space-y-2 pl-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Avatar Diameter <span>{settings.avatarSize}px</span></label>
-                                <input type="range" min="20" max="120" value={settings.avatarSize} onChange={(e) => updateSetting('avatarSize', parseInt(e.target.value))} className="w-full accent-purple-600" />
+                                <input type="range" min="20" max="120" value={settings.avatarSize} onChange={(e) => updateSetting('avatarSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
                                 <p className="text-[10px] text-zinc-600 italic">Tip: Setting this close to text size creates a modern inline look.</p>
                             </div>
                         )}
@@ -446,12 +433,12 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         </h4>
                         <div className="space-y-4 bg-zinc-800/20 p-6 rounded-2xl border border-white/5">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-purple-500">{settings.posX}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posX} onChange={(e) => updateSetting('posX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+                                <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-primary-500">{settings.posX}%</span></label>
+                                <input type="range" min="0" max="100" value={settings.posX} onChange={(e) => updateSetting('posX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Vertical (Y) <span className="ml-2 text-purple-500">{settings.posY}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posY} onChange={(e) => updateSetting('posY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+                                <label className="text-xs font-bold text-zinc-400 uppercase block">Vertical (Y) <span className="ml-2 text-primary-500">{settings.posY}%</span></label>
+                                <input type="range" min="0" max="100" value={settings.posY} onChange={(e) => updateSetting('posY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
                             </div>
                         </div>
                     </section>
@@ -468,9 +455,10 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('soundEnabled', !settings.soundEnabled)}
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.soundEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className="toggle-switch"
+                                data-state={settings.soundEnabled ? 'checked' : 'unchecked'}
                             >
-                                <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.soundEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                                <div className="toggle-thumb" />
                             </button>
                         </div>
 
@@ -487,7 +475,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                             audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
                                             audio.play().catch(e => console.error(e));
                                         }}
-                                        className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-purple-600/50 transition-all"
+                                        className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-primary-600/50 transition-all"
                                     >
                                         <option value="pop">Pop</option>
                                         <option value="ding">Ding</option>
@@ -520,7 +508,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                                             audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
                                             audio.play().catch(e => console.error(e));
                                         }}
-                                        className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                        className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
                                     />
                                 </div>
                             </div>
@@ -541,12 +529,10 @@ export default function Settings({ targetUid, isModeratorMode }) {
                             </div>
                             <button
                                 onClick={() => updateSetting('karafunEnabled', !settings.karafunEnabled)}
-                                role="switch"
-                                aria-checked={settings.karafunEnabled}
-                                aria-label="Enable KaraFun Integration"
-                                className={`w-14 h-7 rounded-full transition-all relative p-1 ${settings.karafunEnabled ? 'bg-purple-600' : 'bg-zinc-700'}`}
+                                className="toggle-switch"
+                                data-state={settings.karafunEnabled ? 'checked' : 'unchecked'}
                             >
-                                <div className={`w-5 h-5 bg-white rounded-full transition-all flex items-center justify-center ${settings.karafunEnabled ? 'translate-x-[1.75rem]' : 'translate-x-0'}`} />
+                                <div className="toggle-thumb" />
                             </button>
                         </div>
                     </section>

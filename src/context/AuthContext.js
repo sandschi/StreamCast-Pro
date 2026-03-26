@@ -15,7 +15,8 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [twitchToken, setTwitchToken] = useState(null); // Used for live verification
+    const [userData, setUserData] = useState(null);
+    const [twitchToken, setTwitchToken] = useState(null);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -45,12 +46,16 @@ export function AuthProvider({ children }) {
                 }
 
                 setIsMasterAdmin(isSandschi); // Set master admin status
-                await setDoc(userRef, {
-                    photoURL: currentUser.photoURL,
+                const updateData = {
                     twitchId: currentUser.providerData[0].uid,
                     lastLogin: new Date().toISOString(),
                     status: status // Persist approval status
-                }, { merge: true });
+                };
+                if (currentUser.photoURL) {
+                    updateData.photoURL = currentUser.photoURL;
+                }
+
+                await setDoc(userRef, updateData, { merge: true });
 
                 // 2. Resolve Twitch Token (private)
                 const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
@@ -60,10 +65,12 @@ export function AuthProvider({ children }) {
 
                 const userDoc = await getDoc(userRef);
                 console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
+                setUserData(userDoc.data());
                 setUser(currentUser);
             } else {
                 setIsMasterAdmin(false);
                 setUser(null);
+                setUserData(null);
                 setTwitchToken(null);
             }
             setLoading(false);
@@ -85,6 +92,7 @@ export function AuthProvider({ children }) {
             const additionalInfo = getAdditionalUserInfo(result);
             const username = additionalInfo?.profile?.login || additionalInfo?.profile?.preferred_username;
             const isNewUser = additionalInfo?.isNewUser;
+            const extractedPhotoURL = result.user.photoURL || additionalInfo?.profile?.picture || additionalInfo?.profile?.profile_image_url || null;
 
             if (username) {
                 const cleanUsername = username.toLowerCase();
@@ -95,7 +103,7 @@ export function AuthProvider({ children }) {
                 const userData = {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
-                    photoURL: result.user.photoURL,
+                    photoURL: extractedPhotoURL,
                     status: isSandschi ? 'approved' : 'waiting'
                 };
 
@@ -139,7 +147,7 @@ export function AuthProvider({ children }) {
     const logout = () => signOut(auth);
 
     return (
-        <AuthContext.Provider value={{ user, twitchToken, isMasterAdmin, setIsMasterAdmin, loading, loginWithTwitch, logout }}>
+        <AuthContext.Provider value={{ user, userData, twitchToken, isMasterAdmin, setIsMasterAdmin, loading, loginWithTwitch, logout }}>
             {children}
         </AuthContext.Provider>
     );
