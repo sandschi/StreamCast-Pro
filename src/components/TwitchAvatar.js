@@ -7,20 +7,16 @@ import { User } from 'lucide-react';
 const avatarCache = {};
 
 export default function TwitchAvatar({ photoURL, username, alt = "", iconSize = 20 }) {
-    const [finalUrl, setFinalUrl] = useState(photoURL);
-
-    // Sync state if photoURL prop changes directly (e.g. log in)
-    useEffect(() => {
-        if (photoURL) setFinalUrl(photoURL);
-    }, [photoURL]);
+    const [finalUrl, setFinalUrl] = useState(() => photoURL || avatarCache[username] || null);
 
     useEffect(() => {
-        // If we already have a direct photo URL or no username, skip fetch
-        if (photoURL || !username) return;
-
-        // If we cached it previously in this session, use it instantly
-        if (avatarCache[username]) {
-            setFinalUrl(avatarCache[username]);
+        // Validation: Twitch usernames are alphanumeric + underscores, 4-25 chars
+        const isValidUsername = username && /^[a-zA-Z0-9_]{4,25}$/.test(username);
+        
+        // If we already have a direct photo URL, no username, or it's already cached, skip fetch
+        if (photoURL || !isValidUsername || avatarCache[username]) {
+            if (photoURL) setFinalUrl(photoURL);
+            else if (avatarCache[username]) setFinalUrl(avatarCache[username]);
             return;
         }
 
@@ -28,8 +24,9 @@ export default function TwitchAvatar({ photoURL, username, alt = "", iconSize = 
         
         const fetchAvatar = async () => {
             try {
-                // Fetch direct from IVR.fi matching the Chat.js engine perfectly
-                const response = await fetch(`https://api.ivr.fi/v2/twitch/user?login=${username}`);
+                // Encode to prevent breakage with special chars
+                const safeName = encodeURIComponent(username);
+                const response = await fetch(`https://api.ivr.fi/v2/twitch/user?login=${safeName}`);
                 const data = await response.json();
                 const realUrl = data?.[0]?.logo;
                 if (realUrl && isMounted) {

@@ -355,6 +355,10 @@ export default function KaraFun({ targetUid, userSettings }) {
                     <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
                         <span className="font-medium text-zinc-300 text-sm">Show Queue Overlay</span>
                         <button
+                            type="button"
+                            role="switch"
+                            aria-checked={!!userSettings?.karafunOverlayQueueEnabled}
+                            aria-label="Show Queue Overlay"
                             onClick={() => handleToggleSetting('karafunOverlayQueueEnabled', !userSettings?.karafunOverlayQueueEnabled)}
                             className="toggle-switch shrink-0"
                             data-state={userSettings?.karafunOverlayQueueEnabled ? 'checked' : 'unchecked'}
@@ -366,6 +370,10 @@ export default function KaraFun({ targetUid, userSettings }) {
                     <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
                         <span className="font-medium text-zinc-300 text-sm">Now Playing Popup</span>
                         <button
+                            type="button"
+                            role="switch"
+                            aria-checked={!!userSettings?.karafunOverlayNowPlayingEnabled}
+                            aria-label="Now Playing Popup"
                             onClick={() => handleToggleSetting('karafunOverlayNowPlayingEnabled', !userSettings?.karafunOverlayNowPlayingEnabled)}
                             className="toggle-switch shrink-0"
                             data-state={userSettings?.karafunOverlayNowPlayingEnabled ? 'checked' : 'unchecked'}
