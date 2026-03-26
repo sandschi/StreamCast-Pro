@@ -310,7 +310,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <div className="flex-shrink-0">
+                                <div className="flex-shrink-0 relative w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-zinc-900 flex items-center justify-center">
                                     <TwitchAvatar 
                                         username={msg.username} 
                                         photoURL={msg.avatarUrl} 
