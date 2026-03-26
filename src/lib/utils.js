@@ -7,7 +7,7 @@ const timestampFormatter = new Intl.DateTimeFormat('en-US', {
 });
 
 /**
- * Formats a Firebase timestamp or Date object into a standardized string: "MM/DD • HH:MM"
+ * Formats a Firebase timestamp or Date object into a standardized string: "DD.MM. • HH:MM"
  * @param {any} timestamp - Firebase timestamp (with seconds/nanoseconds) or Date object
  * @returns {string} Formatted timestamp string
  */
@@ -32,7 +32,7 @@ export const formatTimestamp = (timestamp) => {
         const hour = parts.find(p => p.type === 'hour').value;
         const minute = parts.find(p => p.type === 'minute').value;
         
-        return `${month}/${day} • ${hour}:${minute}`;
+        return `${day}.${month}. • ${hour}:${minute}`;
     } catch (e) {
         console.error('Error formatting timestamp:', e);
         return '';
