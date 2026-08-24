@@ -27,7 +27,7 @@ async function cleanupHistory() {
   const usersSnapshot = await db.collection('users').get();
   
   for (const userDoc of usersSnapshot.docs) {
-    const historyRef = db.collection('users'). misfortune .doc(userDoc.id).collection('history');
+    const historyRef = db.collection('users').doc(userDoc.id).collection('history');
     const oldMessagesQuery = historyRef.where('timestamp', '<', thirtyDaysAgo);
     
     const snapshot = await oldMessagesQuery.get();

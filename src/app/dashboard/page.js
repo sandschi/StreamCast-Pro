@@ -112,10 +112,7 @@ function DashboardContent() {
 
                     console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName, twitch: data?.twitchUsername });
 
-                    // Update isMasterAdmin state in AuthContext if it's the current user's dashboard
-                    if (user.uid === user.uid) { // This condition is always true, but ensures we only update for the current user
-                        setIsMasterAdmin(isSandschi);
-                    }
+                    setIsMasterAdmin(isSandschi);
 
                     if (!status || (isSandschi && status !== 'approved')) {
                         status = isSandschi ? 'approved' : 'waiting';
@@ -547,20 +544,5 @@ export default function DashboardPage() {
         }>
             <DashboardContent />
         </Suspense>
-    );
-}
-
-function TabButton({ active, onClick, icon, label }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`w-full flex items-center gap-4 p-3 rounded-xl transition-all ${active
-                ? 'bg-primary-600/10 text-primary-500 border border-primary-500/20'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent'
-                }`}
-        >
-            {React.cloneElement(icon, { size: 20 })}
-            <span className="hidden md:block font-medium text-sm">{label}</span>
-        </button>
     );
 }
