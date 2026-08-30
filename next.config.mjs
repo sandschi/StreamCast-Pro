@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Ensures CHANGELOG.md is bundled into the /api/changelog serverless
+  // function on Vercel — it's read at runtime via fs, not imported, so
+  // Next.js's automatic file tracing wouldn't include it otherwise.
+  outputFileTracingIncludes: {
+    '/api/changelog': ['./CHANGELOG.md'],
+  },
   images: {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',

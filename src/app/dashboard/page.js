@@ -37,6 +37,8 @@ import UsersTab from '@/components/dashboard/Users';
 import Broadcasters from '@/components/dashboard/Broadcasters';
 import KaraFunTab from '@/components/dashboard/KaraFun';
 import ApiSettings from '@/components/dashboard/ApiSettings';
+import ChangelogModal from '@/components/dashboard/ChangelogModal';
+import { APP_VERSION } from '@/lib/version';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -63,6 +65,7 @@ function DashboardContent() {
     const [verifyingMod, setVerifyingMod] = useState(true);
     const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
     const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
+    const [showChangelog, setShowChangelog] = useState(false);
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -398,8 +401,17 @@ function DashboardContent() {
                             </p>
                         </div>
                     </div>
+
+                    <button
+                        onClick={() => setShowChangelog(true)}
+                        className="w-full text-center text-[9px] font-bold text-zinc-600 hover:text-zinc-400 transition-colors tracking-wider"
+                    >
+                        v{APP_VERSION}
+                    </button>
                 </div>
             </aside>
+
+            <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
 
             {/* Main Content */}
             <main className="flex-1 p-6 md:p-10 flex flex-col min-h-0">
