@@ -245,6 +245,10 @@ export default function OverlayPage() {
             }, null);
         });
 
+        socket.on('serverUnreacheable', () => {
+            console.warn('KaraFun Sync: Party unreachable', partyId);
+        });
+
         socket.on('queue', (items) => {
             if (!Array.isArray(items)) {
                 setKarafunQueue([]);

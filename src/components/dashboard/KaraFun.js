@@ -118,6 +118,12 @@ export default function KaraFun({ targetUid, userSettings }) {
             setError('Connection error. Retrying...');
         });
 
+        socket.on('serverUnreacheable', () => {
+            console.error('KaraFun Sync: Party unreachable', partyId);
+            setError('Party unreachable. Make sure the KaraFun app is open and connected to this party. You can try restarting the Party in the Settings (Turn Remote Off and On again) or restarting the KaraFun App.');
+            setLoading(false);
+        });
+
         socket.on('disconnect', (reason) => {
             console.log('KaraFun Sync: Disconnected -', reason);
         });
