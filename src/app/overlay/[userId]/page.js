@@ -129,25 +129,29 @@ export default function OverlayPage() {
     useEffect(() => {
         if (!userId) return;
         const triggerRef = doc(db, 'users', userId, 'overlay_triggers', 'now_playing');
+        let hasSeenInitialSnapshot = false;
         const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
+            const isInitialSnapshot = !hasSeenInitialSnapshot;
+            hasSeenInitialSnapshot = true;
+
             if (snap.exists()) {
                 const data = snap.data();
                 const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
-                const now = Date.now();
-                const isStale = (now - triggerTime) > 10000;
 
                 // Update ref immediately to prevent replaying this specific trigger doc later
                 if (triggerTime > lastManualTriggerRef.current) {
-                    const wasStaleOnLoad = lastManualTriggerRef.current === 0 && isStale;
                     lastManualTriggerRef.current = triggerTime;
 
-                    // Only show if it's NOT stale (or if it's the first one we ever seen and it happens to be fresh)
-                    if (!isStale) {
-                        const timer = setTimeout(() => setShowNowPlaying(true), 0);
-                        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 5000);
-                    } else if (wasStaleOnLoad) {
+                    // Only guard against staleness on the very first snapshot after mount
+                    // (a leftover trigger from a previous session). The dashboard and the
+                    // overlay can run on different machines with skewed clocks, so a live
+                    // click here always shows immediately — it's never rejected as "stale".
+                    if (isInitialSnapshot && (Date.now() - triggerTime) > 10000) {
                         console.log("[Trigger] Ignoring stale manual trigger on page load");
+                    } else {
+                        setTimeout(() => setShowNowPlaying(true), 0);
+                        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+                        hideTimerRef.current = setTimeout(() => setShowNowPlaying(false), 10000);
                     }
                 }
             } else {
