@@ -40,6 +40,8 @@ import KaraFunTab from '@/components/dashboard/KaraFun';
 import ApiSettings from '@/components/dashboard/ApiSettings';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import Badge from '@/components/ui/Badge';
+import NavItem from '@/components/ui/NavItem';
+import AccessGate from '@/components/ui/AccessGate';
 import { APP_VERSION } from '@/lib/version';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
@@ -276,73 +278,31 @@ function DashboardContent() {
                 <nav className="flex-1 space-y-2">
                     {hasVerifiedAccess && (
                         <>
-                            <button
-                                onClick={() => setActiveTab('chat')}
-                                className={`nav-item ${activeTab === 'chat' ? 'nav-item-active' : ''}`}
-                            >
-                                <MessageSquare size={18} />
-                                <span>Live Chat</span>
-                            </button>
+                            <NavItem icon={<MessageSquare size={18} />} label="Live Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
 
                             {isModAuthorized && (
-                                <button
-                                    onClick={() => setActiveTab('history')}
-                                    className={`nav-item ${activeTab === 'history' ? 'nav-item-active' : ''}`}
-                                >
-                                    <HistoryIcon size={18} />
-                                    <span>History</span>
-                                </button>
+                                <NavItem icon={<HistoryIcon size={18} />} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
                             )}
 
                             {isModAuthorized && (
-                                <button
-                                    onClick={() => setActiveTab('users')}
-                                    className={`nav-item ${activeTab === 'users' ? 'nav-item-active' : ''}`}
-                                >
-                                    <Users size={18} />
-                                    <span>Users</span>
-                                </button>
+                                <NavItem icon={<Users size={18} />} label="Users" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
                             )}
 
                             {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
-                                <button
-                                    onClick={() => setActiveTab('karafun')}
-                                    className={`nav-item ${activeTab === 'karafun' ? 'nav-item-active' : ''}`}
-                                >
-                                    <Music size={18} />
-                                    <span>KaraFun</span>
-                                </button>
+                                <NavItem icon={<Music size={18} />} label="KaraFun" active={activeTab === 'karafun'} onClick={() => setActiveTab('karafun')} />
                             )}
 
                             {(userRole === 'broadcaster' || isMasterAdmin) && (
                                 <>
-                                    <button
-                                        onClick={() => setActiveTab('settings')}
-                                        className={`nav-item ${activeTab === 'settings' ? 'nav-item-active' : ''}`}
-                                    >
-                                        <SettingsIcon size={18} />
-                                        <span>Settings</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('api')}
-                                        className={`nav-item ${activeTab === 'api' ? 'nav-item-active' : ''}`}
-                                    >
-                                        <Terminal size={18} />
-                                        <span>API controls</span>
-                                    </button>
+                                    <NavItem icon={<SettingsIcon size={18} />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+                                    <NavItem icon={<Terminal size={18} />} label="API controls" active={activeTab === 'api'} onClick={() => setActiveTab('api')} />
                                 </>
                             )}
                         </>
                     )}
 
                     {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
-                        <button
-                            onClick={() => setActiveTab('broadcasters')}
-                            className={`nav-item ${activeTab === 'broadcasters' ? 'nav-item-active' : ''}`}
-                        >
-                            <Shield size={18} />
-                            <span>Broadcasters</span>
-                        </button>
+                        <NavItem icon={<Shield size={18} />} label="Broadcasters" active={activeTab === 'broadcasters'} onClick={() => setActiveTab('broadcasters')} />
                     )}
 
                     {/* Quick Tools Section */}
@@ -485,45 +445,30 @@ function DashboardContent() {
                     )}
 
                     {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'waiting' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-yellow-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto border border-yellow-500/20">
-                                <Clock size={40} className="text-yellow-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Pending</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your application as a broadcaster is currently under review by Sandschi. You will have access once approved.
-                                </p>
-                            </div>
-                        </div>
+                        <AccessGate
+                            state="waiting"
+                            icon={<Clock size={40} className="text-yellow-500" />}
+                            title="Access Pending"
+                            body="Your application as a broadcaster is currently under review by Sandschi. You will have access once approved."
+                        />
                     )}
 
                     {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'denied' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
-                                <ShieldAlert size={40} className="text-red-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="2xl font-bold">Access Denied</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others.
-                                </p>
-                            </div>
-                        </div>
+                        <AccessGate
+                            state="denied"
+                            icon={<ShieldAlert size={40} className="text-red-500" />}
+                            title="Access Denied"
+                            body="Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others."
+                        />
                     )}
 
                     {userRole === 'denied' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
-                                <ShieldAlert size={40} className="text-red-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Denied</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your access to this dashboard has been restricted by the broadcaster.
-                                </p>
-                            </div>
-                        </div>
+                        <AccessGate
+                            state="denied"
+                            icon={<ShieldAlert size={40} className="text-red-500" />}
+                            title="Access Denied"
+                            body="Your access to this dashboard has been restricted by the broadcaster."
+                        />
                     )}
 
                     {/* Dashboard Content - only shown if Verified Access (Approved Broadcaster, Authorized Mod, or Viewer in Suggestion Mode) */}
