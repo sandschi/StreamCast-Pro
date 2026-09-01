@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import Avatar from '@/components/ui/Avatar';
 import { db } from '@/lib/firebase';
 import {
     collection,
@@ -13,9 +12,9 @@ import {
     deleteDoc,
     serverTimestamp
 } from 'firebase/firestore';
-import { Shield, User, ShieldAlert, Trash2, Clock, Users as UsersIcon } from 'lucide-react';
-import RoleSwitch from '@/components/ui/RoleSwitch';
+import { Users as UsersIcon } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
+import UserCard from '@/components/dashboard/UserCard';
 
 export default function Users({ targetUid, user }) {
     const [presence, setPresence] = useState([]);
@@ -101,54 +100,17 @@ export default function Users({ targetUid, user }) {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {userList.map((u) => (
-                    <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition-all group">
-                        <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <Avatar
-                                    size={48}
-                                    iconSize={20}
-                                    photoURL={u.photoURL}
-                                    username={u.twitchUsername}
-                                    ringClassName="border-2 border-zinc-800 bg-zinc-800"
-                                    online={u.isOnline}
-                                />
-                                <div>
-                                    <h4 className="font-bold text-zinc-100 truncate max-w-[120px]" title={u.displayName}>
-                                        {u.displayName}
-                                    </h4>
-                                    {u.twitchUsername && (
-                                        <div className="text-[10px] text-zinc-500 -mt-0.5 lowercase">
-                                            @{u.twitchUsername}
-                                        </div>
-                                    )}
-                                    <div className="flex items-center gap-1 mt-1 text-[10px] font-medium uppercase tracking-wider">
-                                        {u.role === 'mod' && <Shield size={10} className="text-primary-400" />}
-                                        {u.role === 'viewer' && <User size={10} className="text-zinc-500" />}
-                                        {u.role === 'denied' && <ShieldAlert size={10} className="text-red-400" />}
-                                        <span className={u.role === 'mod' ? 'text-primary-400' : u.role === 'viewer' ? 'text-zinc-500' : u.role === 'denied' ? 'text-red-400' : ''}>
-                                            {u.role}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => removePermission(u.id)}
-                                className="opacity-0 group-hover:opacity-100 p-2 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                                title="Reset Permission"
-                            >
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
-
-                        <RoleSwitch value={u.role} onChange={(role) => setRole(u.id, role)} />
-
-                        {u.lastSeen && (
-                            <div className="mt-4 flex items-center gap-1 text-[10px] text-zinc-600">
-                                <Clock size={10} />
-                                <span>Active {new Date(u.lastSeen.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                        )}
-                    </div>
+                    <UserCard
+                        key={u.id}
+                        displayName={u.displayName}
+                        twitchUsername={u.twitchUsername}
+                        photoURL={u.photoURL}
+                        role={u.role}
+                        online={u.isOnline}
+                        lastSeen={u.lastSeen ? new Date(u.lastSeen.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null}
+                        onRoleChange={(role) => setRole(u.id, role)}
+                        onReset={() => removePermission(u.id)}
+                    />
                 ))}
 
                 {userList.length === 0 && (

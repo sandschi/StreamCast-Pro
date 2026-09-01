@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import Avatar from '@/components/ui/Avatar';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
-import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send, User } from 'lucide-react';
+import { Users, Clock, ShieldCheck, Send } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
+import BroadcasterRow from '@/components/dashboard/BroadcasterRow';
 
 export default function Broadcasters() {
     const [broadcasters, setBroadcasters] = useState([]);
@@ -99,60 +99,14 @@ export default function Broadcasters() {
 
             <div className="grid gap-4">
                 {broadcasters.map((u) => (
-                    <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between group hover:border-zinc-700 transition-all">
-                        <div className="flex items-center gap-4">
-                            <Avatar
-                                size={48}
-                                iconSize={20}
-                                photoURL={u.photoURL}
-                                username={u.twitchUsername}
-                                alt={`${u.displayName || 'Broadcaster'}'s avatar`}
-                                ringClassName="border-2 border-zinc-800 bg-zinc-900"
-                                className="shadow-xl"
-                            />
-                            <div>
-                                <p className="font-bold text-zinc-100 flex items-center gap-2">
-                                    {u.displayName}
-                                    {u.status === 'approved' && <CheckCircle size={14} className="text-green-500" />}
-                                    {u.status === 'denied' && <XCircle size={14} className="text-red-500" />}
-                                    {u.status === 'waiting' && <Clock size={14} className="text-yellow-500" />}
-                                </p>
-                                <p className="text-xs text-zinc-500">@{u.twitchUsername}</p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setStatus(u.id, 'approved')}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'approved'
-                                    ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(7,252,3,0.4)]'
-                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
-                                    }`}
-                            >
-                                <CheckCircle size={14} /> Approve
-                            </button>
-
-                            <button
-                                onClick={() => setStatus(u.id, 'denied')}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'denied'
-                                    ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]'
-                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
-                                    }`}
-                            >
-                                <XCircle size={14} /> Deny
-                            </button>
-
-                            <button
-                                onClick={() => setStatus(u.id, 'waiting')}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] transition-all flex items-center gap-2 ${u.status === 'waiting'
-                                    ? 'bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]'
-                                    : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
-                                    }`}
-                            >
-                                <Clock size={14} /> Waiting
-                            </button>
-                        </div>
-                    </div>
+                    <BroadcasterRow
+                        key={u.id}
+                        displayName={u.displayName}
+                        twitchUsername={u.twitchUsername}
+                        photoURL={u.photoURL}
+                        status={u.status}
+                        onStatusChange={(status) => setStatus(u.id, status)}
+                    />
                 ))}
 
                 {broadcasters.length === 0 && (
