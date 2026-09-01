@@ -19,6 +19,7 @@ import {
     Music,
     XCircle
 } from 'lucide-react';
+import SectionLabel from '@/components/ui/SectionLabel';
 
 const FONTS = [
     'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
@@ -294,9 +295,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 1. Identity */}
                     <section className="space-y-4">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <User size={14} /> Twitch Identity
-                        </h4>
+                        <SectionLabel icon={<User size={14} />}>Twitch Identity</SectionLabel>
                         <input
                             type="text"
                             placeholder="Twitch Channel Name"
@@ -308,9 +307,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 2. Overlay Visual Style */}
                     <section className="space-y-4">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Sparkles size={14} /> Overlay Visual Style
-                        </h4>
+                        <SectionLabel icon={<Sparkles size={14} />}>Overlay Visual Style</SectionLabel>
                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                             {[
                                 { id: 'classic', label: 'Classic' },
@@ -349,9 +346,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 3. Typography & Colors */}
                     <section className="space-y-6">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Type size={14} /> Typography & Colors
-                        </h4>
+                        <SectionLabel icon={<Type size={14} />}>Typography & Colors</SectionLabel>
 
                         <div className="grid grid-cols-2 gap-6">
                             <div className="space-y-2">
@@ -402,9 +397,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 4. Avatar Styling */}
                     <section className="space-y-4">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <ImageIcon size={14} /> Avatar Configuration
-                        </h4>
+                        <SectionLabel icon={<ImageIcon size={14} />}>Avatar Configuration</SectionLabel>
                         <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
                             <div className="space-y-1">
                                 <p className="text-sm font-bold text-zinc-200">Enable Profile Pictures</p>
@@ -429,9 +422,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 5. Precision Positioning */}
                     <section className="space-y-6">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Move size={14} /> Precision Positioning (X,Y)
-                        </h4>
+                        <SectionLabel icon={<Move size={14} />}>Precision Positioning (X,Y)</SectionLabel>
                         <div className="space-y-4 bg-zinc-800/20 p-6 rounded-2xl border border-white/5">
                             <div className="space-y-1.5">
                                 <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-primary-500">{settings.posX}%</span></label>
@@ -446,9 +437,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
 
                     {/* 6. Sound Effects */}
                     <section className="space-y-4">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Volume2 size={14} /> Sound Effects
-                        </h4>
+                        <SectionLabel icon={<Volume2 size={14} />}>Sound Effects</SectionLabel>
                         <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
                             <div className="space-y-1">
                                 <p className="text-sm font-bold text-zinc-200">Enable Sound</p>
@@ -520,9 +509,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 {/* KaraFun Integration */}
                 <div className="space-y-10 border-t border-zinc-800 pt-10">
                     <section className="space-y-4">
-                        <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Music size={14} /> KaraFun Integration
-                        </h4>
+                        <SectionLabel icon={<Music size={14} />}>KaraFun Integration</SectionLabel>
                         <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
                             <div className="space-y-1">
                                 <p className="text-sm font-bold text-zinc-200">Enable KaraFun</p>

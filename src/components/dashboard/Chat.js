@@ -9,6 +9,8 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { formatTimestamp } from '../../lib/utils';
 import TwitchAvatar from '../TwitchAvatar';
+import Badge from '@/components/ui/Badge';
+import StatusDot from '@/components/ui/StatusDot';
 // NEW: Icons for suggestions
 import {
     ScreenShare,
@@ -255,20 +257,21 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
 
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center group">
                 <h3 className="text-zinc-100 font-semibold flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full animate-pulse transition-colors duration-500 ${connectionStatus === 'connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' :
-                        connectionStatus === 'connecting' ? 'bg-yellow-500 animate-bounce' :
-                            connectionStatus === 'error' ? 'bg-red-500' : 'bg-zinc-500'
-                        }`} />
+                    <StatusDot state={
+                        connectionStatus === 'connected' ? 'connected' :
+                            connectionStatus === 'connecting' ? 'connecting' :
+                                connectionStatus === 'error' ? 'error' : 'idle'
+                    } />
                     <span className="tracking-tight">Twitch Chat</span>
                     {connectionStatus === 'connected' && <span className="text-[10px] text-zinc-500 font-normal opacity-70">({channelName})</span>}
                 </h3>
                 <div className="flex items-center gap-2">
-                    <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${userRole === 'broadcaster' ? 'bg-primary-500/10 text-primary-400 border-primary-500/20' :
-                        userRole === 'mod' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                            'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
-                        }`}>
+                    <Badge
+                        size="sm"
+                        tone={userRole === 'broadcaster' ? 'accent' : userRole === 'mod' ? 'success' : 'neutral'}
+                    >
                         {userRole}
-                    </div>
+                    </Badge>
                 </div>
             </div>
 
@@ -322,7 +325,7 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="font-bold text-zinc-100 truncate">
                                             {msg.username}
-                                            {msg.isMod && <span className="ml-2 text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full uppercase">MOD</span>}
+                                            {msg.isMod && <Badge tone="success" size="sm" className="ml-2">MOD</Badge>}
                                         </span>
                                         <span className="text-xs text-zinc-400 whitespace-nowrap tabular-nums font-medium">
                                             • {formatTimestamp(msg.timestamp)}

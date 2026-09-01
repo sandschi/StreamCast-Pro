@@ -10,6 +10,7 @@ const FONTS = [
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
+import StatusDot from '@/components/ui/StatusDot';
 
 export default function KaraFun({ targetUid, userSettings }) {
     const [queueData, setQueueData] = useState(null);
@@ -241,7 +242,12 @@ export default function KaraFun({ targetUid, userSettings }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className={`w-2.5 h-2.5 rounded-full ${error ? 'bg-red-500' : lastUpdated ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} title={error ? 'Disconnected' : lastUpdated ? 'Connected' : 'Connecting...'} />
+                        <StatusDot
+                            size={10}
+                            state={error ? 'error' : lastUpdated ? 'connected' : 'connecting'}
+                            className="cursor-default"
+                            title={error ? 'Disconnected' : lastUpdated ? 'Connected' : 'Connecting...'}
+                        />
                         <button
                             onClick={handleReconnect}
                             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"

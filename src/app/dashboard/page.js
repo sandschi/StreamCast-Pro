@@ -39,6 +39,7 @@ import Broadcasters from '@/components/dashboard/Broadcasters';
 import KaraFunTab from '@/components/dashboard/KaraFun';
 import ApiSettings from '@/components/dashboard/ApiSettings';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
+import Badge from '@/components/ui/Badge';
 import { APP_VERSION } from '@/lib/version';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
@@ -441,23 +442,20 @@ function DashboardContent() {
 
                         <div className="flex items-center gap-2">
                             {isMasterAdmin && (
-                                <div className="px-3 py-1 bg-primary-600/10 border border-primary-500/20 rounded-full flex items-center gap-2">
-                                    <Shield size={12} className="text-primary-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary-400">Master Admin</span>
-                                </div>
+                                <Badge tone="accent" size="sm" icon={<Shield size={12} />}>Master Admin</Badge>
                             )}
-                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-black transition-all ${userRole === 'broadcaster' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' :
-                                userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                    'bg-zinc-900/50 text-zinc-400 border-zinc-800'
-                                }`}>
-                                {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
-                                {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
-                                {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
-                                {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
-                                <span className="uppercase tracking-[0.2em] whitespace-nowrap">
-                                    {verifyingMod ? 'Verifying...' : `${userRole}`}
-                                </span>
-                            </div>
+                            <Badge
+                                tone={userRole === 'broadcaster' ? 'accent' : userRole === 'mod' ? 'success' : 'neutral'}
+                                solid={userRole === 'broadcaster'}
+                                icon={
+                                    !verifyingMod && userRole === 'broadcaster' ? <LayoutDashboard size={14} /> :
+                                        !verifyingMod && userRole === 'mod' ? <Shield size={14} /> :
+                                            !verifyingMod && userRole === 'viewer' ? <Users size={14} /> :
+                                                (verifyingMod || userRole === 'denied') ? <ShieldAlert size={14} /> : null
+                                }
+                            >
+                                {verifyingMod ? 'Verifying...' : userRole}
+                            </Badge>
                         </div>
                     </header>
                 )}

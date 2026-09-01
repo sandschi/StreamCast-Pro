@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Link as LinkIcon, Play } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import SectionLabel from '@/components/ui/SectionLabel';
 
 export default function ApiSettings({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole }) {
     const [generatingToken, setGeneratingToken] = useState(false);
@@ -160,9 +161,7 @@ export default function ApiSettings({ targetUid, user, privateConfig, setPrivate
             {/* Generated Endpoints Directory */}
             <div className="space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pl-2 pr-1">
-                    <h4 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                        <LinkIcon size={14} /> Available GET Endpoints
-                    </h4>
+                    <SectionLabel icon={<LinkIcon size={14} />}>Available GET Endpoints</SectionLabel>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
