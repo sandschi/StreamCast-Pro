@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import TwitchAvatar from '@/components/TwitchAvatar';
+import TwitchIcon from '@/components/TwitchIcon';
 import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Chat from '@/components/dashboard/Chat';
@@ -252,7 +253,7 @@ function DashboardContent() {
                         onClick={loginWithTwitch}
                         className="w-full py-4 px-6 bg-[#9146FF] hover:bg-[#7c3aeb] text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-3 active:scale-95"
                     >
-                        <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" /></svg>
+                        <TwitchIcon className="w-6 h-6" />
                         Connect with Twitch
                     </button>
                 </div>

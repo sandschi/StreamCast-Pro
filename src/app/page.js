@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { MessageSquare, Sparkles, Shield, Zap, Users, CheckCircle, Clock, ExternalLink } from 'lucide-react';
+import TwitchIcon from '@/components/TwitchIcon';
 
 export default function Home() {
   const { user, loginWithTwitch, loading } = useAuth();
@@ -153,7 +154,7 @@ export default function Home() {
                 step: '01',
                 title: 'Sign Up with Twitch',
                 description: 'Connect your Twitch account securely using OAuth. No passwords needed.',
-                icon: <svg className="w-12 h-12 fill-current" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" /></svg>
+                icon: <TwitchIcon className="w-12 h-12" />
               },
               {
                 step: '02',
@@ -207,7 +208,7 @@ export default function Home() {
                 onClick={loginWithTwitch}
                 className="px-10 py-5 bg-white text-primary-900 font-black rounded-xl transition-all shadow-2xl hover:shadow-primary-500/50 text-lg inline-flex items-center gap-3"
               >
-                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" /></svg>
+                <TwitchIcon className="w-6 h-6" />
                 Connect with Twitch
               </motion.button>
               <p className="text-sm text-zinc-400">
