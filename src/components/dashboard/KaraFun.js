@@ -11,6 +11,9 @@ import { db } from '@/lib/firebase';
 import { doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
 import StatusDot from '@/components/ui/StatusDot';
+import ToggleSwitch from '@/components/ui/ToggleSwitch';
+import Select from '@/components/ui/Select';
+import RangeSlider from '@/components/ui/RangeSlider';
 
 export default function KaraFun({ targetUid, userSettings }) {
     const [queueData, setQueueData] = useState(null);
@@ -366,50 +369,41 @@ export default function KaraFun({ targetUid, userSettings }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
                         <span className="font-medium text-zinc-300 text-sm">Show Queue Overlay</span>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={!!userSettings?.karafunOverlayQueueEnabled}
-                            aria-label="Show Queue Overlay"
-                            onClick={() => handleToggleSetting('karafunOverlayQueueEnabled', !userSettings?.karafunOverlayQueueEnabled)}
-                            className="toggle-switch shrink-0"
-                            data-state={userSettings?.karafunOverlayQueueEnabled ? 'checked' : 'unchecked'}
-                        >
-                            <div className="toggle-thumb" />
-                        </button>
+                        <ToggleSwitch
+                            ariaLabel="Show Queue Overlay"
+                            checked={!!userSettings?.karafunOverlayQueueEnabled}
+                            onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)}
+                            className="shrink-0"
+                        />
                     </div>
 
                     <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors">
                         <span className="font-medium text-zinc-300 text-sm">Now Playing Popup</span>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={!!userSettings?.karafunOverlayNowPlayingEnabled}
-                            aria-label="Now Playing Popup"
-                            onClick={() => handleToggleSetting('karafunOverlayNowPlayingEnabled', !userSettings?.karafunOverlayNowPlayingEnabled)}
-                            className="toggle-switch shrink-0"
-                            data-state={userSettings?.karafunOverlayNowPlayingEnabled ? 'checked' : 'unchecked'}
-                        >
-                            <div className="toggle-thumb" />
-                        </button>
+                        <ToggleSwitch
+                            ariaLabel="Now Playing Popup"
+                            checked={!!userSettings?.karafunOverlayNowPlayingEnabled}
+                            onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)}
+                            className="shrink-0"
+                        />
                     </div>
 
                     <div className="md:col-span-2 bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-center justify-between">
                         <span className="font-medium text-zinc-300">Overlay Theme</span>
-                        <select
-                            className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-100 outline-none focus:border-primary-500 transition-colors cursor-pointer"
+                        <Select
+                            className="w-auto"
                             value={userSettings?.karafunOverlayTheme || 'classic'}
-                            onChange={(e) => handleToggleSetting('karafunOverlayTheme', e.target.value)}
-                        >
-                            <option value="classic">Classic</option>
-                            <option value="glass">Glass</option>
-                            <option value="neon">Neon</option>
-                            <option value="minimal">Minimal</option>
-                            <option value="cyberpunk">Cyberpunk</option>
-                            <option value="retro">Retro</option>
-                            <option value="comic">Comic</option>
-                            <option value="future">Future</option>
-                        </select>
+                            onChange={(v) => handleToggleSetting('karafunOverlayTheme', v)}
+                            options={[
+                                { value: 'classic', label: 'Classic' },
+                                { value: 'glass', label: 'Glass' },
+                                { value: 'neon', label: 'Neon' },
+                                { value: 'minimal', label: 'Minimal' },
+                                { value: 'cyberpunk', label: 'Cyberpunk' },
+                                { value: 'retro', label: 'Retro' },
+                                { value: 'comic', label: 'Comic' },
+                                { value: 'future', label: 'Future' },
+                            ]}
+                        />
                     </div>
                 </div>
 
@@ -423,16 +417,13 @@ export default function KaraFun({ targetUid, userSettings }) {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2 select-none">
-                            <label className="text-xs font-bold text-zinc-400 uppercase">Font Family</label>
-                            <select
-                                value={userSettings?.karafunFontFamily || 'Inter'}
-                                onChange={(e) => handleToggleSetting('karafunFontFamily', e.target.value)}
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-blue-600/50"
-                            >
-                                {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-                            </select>
-                        </div>
+                        <Select
+                            className="select-none"
+                            label="Font Family"
+                            value={userSettings?.karafunFontFamily || 'Inter'}
+                            options={FONTS}
+                            onChange={(v) => handleToggleSetting('karafunFontFamily', v)}
+                        />
                         <div className="space-y-2 select-none">
                             <label className="text-xs font-bold text-zinc-400 uppercase">Primary Text Color</label>
                             <div className="flex gap-2">
@@ -467,14 +458,8 @@ export default function KaraFun({ targetUid, userSettings }) {
                             <h5 className="text-xs font-bold text-zinc-300 uppercase flex items-center gap-2 mb-2">
                                 <ListMusic size={14} className="text-zinc-500" /> Queue Overlay
                             </h5>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Horizontal (X) <span className="text-green-500">{userSettings?.karafunQueuePosX ?? 5}%</span></label>
-                                <input type="range" min="0" max="100" value={userSettings?.karafunQueuePosX ?? 5} onChange={(e) => handleToggleSetting('karafunQueuePosX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Vertical (Y) <span className="text-green-500">{userSettings?.karafunQueuePosY ?? 5}%</span></label>
-                                <input type="range" min="0" max="100" value={userSettings?.karafunQueuePosY ?? 5} onChange={(e) => handleToggleSetting('karafunQueuePosY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
-                            </div>
+                            <RangeSlider label="Horizontal (X)" value={userSettings?.karafunQueuePosX ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosX', v)} />
+                            <RangeSlider label="Vertical (Y)" value={userSettings?.karafunQueuePosY ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosY', v)} />
                         </div>
 
                         {/* Now Playing Position */}
@@ -482,14 +467,8 @@ export default function KaraFun({ targetUid, userSettings }) {
                             <h5 className="text-xs font-bold text-zinc-300 uppercase flex items-center gap-2 mb-2">
                                 <Play size={14} className="text-zinc-500" /> Now Playing Overlay
                             </h5>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Horizontal (X) <span className="text-green-500">{userSettings?.karafunNowPlayingPosX ?? 50}%</span></label>
-                                <input type="range" min="0" max="100" value={userSettings?.karafunNowPlayingPosX ?? 50} onChange={(e) => handleToggleSetting('karafunNowPlayingPosX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">Vertical (Y) <span className="text-green-500">{userSettings?.karafunNowPlayingPosY ?? 90}%</span></label>
-                                <input type="range" min="0" max="100" value={userSettings?.karafunNowPlayingPosY ?? 90} onChange={(e) => handleToggleSetting('karafunNowPlayingPosY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-green-500 outline-none" />
-                            </div>
+                            <RangeSlider label="Horizontal (X)" value={userSettings?.karafunNowPlayingPosX ?? 50} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosX', v)} />
+                            <RangeSlider label="Vertical (Y)" value={userSettings?.karafunNowPlayingPosY ?? 90} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosY', v)} />
                         </div>
                     </div>
                 </div>

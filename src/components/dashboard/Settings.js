@@ -20,6 +20,10 @@ import {
     XCircle
 } from 'lucide-react';
 import SectionLabel from '@/components/ui/SectionLabel';
+import TextInput from '@/components/ui/TextInput';
+import Select from '@/components/ui/Select';
+import RangeSlider from '@/components/ui/RangeSlider';
+import ToggleSwitch from '@/components/ui/ToggleSwitch';
 
 const FONTS = [
     'Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald',
@@ -296,12 +300,10 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     {/* 1. Identity */}
                     <section className="space-y-4">
                         <SectionLabel icon={<User size={14} />}>Twitch Identity</SectionLabel>
-                        <input
-                            type="text"
+                        <TextInput
                             placeholder="Twitch Channel Name"
                             value={twitchUsername}
-                            onChange={(e) => setTwitchUsername(e.target.value)}
-                            className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-3 text-zinc-100 outline-none focus:ring-2 focus:ring-primary-600 transition-all font-medium"
+                            onChange={setTwitchUsername}
                         />
                     </section>
 
@@ -349,16 +351,7 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         <SectionLabel icon={<Type size={14} />}>Typography & Colors</SectionLabel>
 
                         <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-zinc-400 uppercase">Font Family</label>
-                                <select
-                                    value={settings.fontFamily}
-                                    onChange={(e) => updateSetting('fontFamily', e.target.value)}
-                                    className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none"
-                                >
-                                    {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-                                </select>
-                            </div>
+                            <Select label="Font Family" value={settings.fontFamily} options={FONTS} onChange={(v) => updateSetting('fontFamily', v)} />
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-zinc-400 uppercase">Text Color</label>
                                 <div className="flex gap-2">
@@ -369,53 +362,50 @@ export default function Settings({ targetUid, isModeratorMode }) {
                         </div>
 
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">
-                                    Display Duration <span>{settings.displayDuration}s</span>
-                                </label>
-                                <input
-                                    type="range"
-                                    min="3"
-                                    max="60"
-                                    value={settings.displayDuration}
-                                    onChange={(e) => updateSetting('displayDuration', parseInt(e.target.value))}
-                                    className="w-full accent-primary-600"
-                                />
-                                <p className="text-[10px] text-zinc-600 italic">How long the message stays on screen (in seconds).</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Message Text Size <span>{settings.fontSize}px</span></label>
-                                <input type="range" min="12" max="80" value={settings.fontSize} onChange={(e) => updateSetting('fontSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Username Size <span>{settings.nameSize}px</span></label>
-                                <input type="range" min="8" max="40" value={settings.nameSize} onChange={(e) => updateSetting('nameSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
-                            </div>
+                            <RangeSlider
+                                label="Display Duration"
+                                min={3} max={60}
+                                value={settings.displayDuration}
+                                unit="s"
+                                onChange={(v) => updateSetting('displayDuration', v)}
+                                hint="How long the message stays on screen (in seconds)."
+                            />
+                            <RangeSlider
+                                label="Message Text Size"
+                                min={12} max={80}
+                                value={settings.fontSize}
+                                unit="px"
+                                onChange={(v) => updateSetting('fontSize', v)}
+                            />
+                            <RangeSlider
+                                label="Username Size"
+                                min={8} max={40}
+                                value={settings.nameSize}
+                                unit="px"
+                                onChange={(v) => updateSetting('nameSize', v)}
+                            />
                         </div>
                     </section>
 
                     {/* 4. Avatar Styling */}
                     <section className="space-y-4">
                         <SectionLabel icon={<ImageIcon size={14} />}>Avatar Configuration</SectionLabel>
-                        <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
-                            <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-200">Enable Profile Pictures</p>
-                                <p className="text-xs text-zinc-500 italic">Show the sender&apos;s circular avatar next to their name.</p>
-                            </div>
-                            <button
-                                onClick={() => updateSetting('showAvatar', !settings.showAvatar)}
-                                className="toggle-switch"
-                                data-state={settings.showAvatar ? 'checked' : 'unchecked'}
-                            >
-                                <div className="toggle-thumb" />
-                            </button>
-                        </div>
+                        <ToggleSwitch
+                            label="Enable Profile Pictures"
+                            description="Show the sender's circular avatar next to their name."
+                            checked={settings.showAvatar}
+                            onChange={(v) => updateSetting('showAvatar', v)}
+                        />
                         {settings.showAvatar && (
-                            <div className="space-y-2 pl-2">
-                                <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">Avatar Diameter <span>{settings.avatarSize}px</span></label>
-                                <input type="range" min="20" max="120" value={settings.avatarSize} onChange={(e) => updateSetting('avatarSize', parseInt(e.target.value))} className="w-full accent-primary-600" />
-                                <p className="text-[10px] text-zinc-600 italic">Tip: Setting this close to text size creates a modern inline look.</p>
+                            <div className="pl-2">
+                                <RangeSlider
+                                    label="Avatar Diameter"
+                                    min={20} max={120}
+                                    value={settings.avatarSize}
+                                    unit="px"
+                                    onChange={(v) => updateSetting('avatarSize', v)}
+                                    hint="Tip: Setting this close to text size creates a modern inline look."
+                                />
                             </div>
                         )}
                     </section>
@@ -424,83 +414,59 @@ export default function Settings({ targetUid, isModeratorMode }) {
                     <section className="space-y-6">
                         <SectionLabel icon={<Move size={14} />}>Precision Positioning (X,Y)</SectionLabel>
                         <div className="space-y-4 bg-zinc-800/20 p-6 rounded-2xl border border-white/5">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Horizontal (X) <span className="ml-2 text-primary-500">{settings.posX}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posX} onChange={(e) => updateSetting('posX', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-zinc-400 uppercase block">Vertical (Y) <span className="ml-2 text-primary-500">{settings.posY}%</span></label>
-                                <input type="range" min="0" max="100" value={settings.posY} onChange={(e) => updateSetting('posY', parseInt(e.target.value))} className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600" />
-                            </div>
+                            <RangeSlider label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={(v) => updateSetting('posX', v)} />
+                            <RangeSlider label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={(v) => updateSetting('posY', v)} />
                         </div>
                     </section>
 
                     {/* 6. Sound Effects */}
                     <section className="space-y-4">
                         <SectionLabel icon={<Volume2 size={14} />}>Sound Effects</SectionLabel>
-                        <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
-                            <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-200">Enable Sound</p>
-                                <p className="text-xs text-zinc-500 italic">Play a sound when a message appears.</p>
-                            </div>
-                            <button
-                                onClick={() => updateSetting('soundEnabled', !settings.soundEnabled)}
-                                className="toggle-switch"
-                                data-state={settings.soundEnabled ? 'checked' : 'unchecked'}
-                            >
-                                <div className="toggle-thumb" />
-                            </button>
-                        </div>
+                        <ToggleSwitch
+                            label="Enable Sound"
+                            description="Play a sound when a message appears."
+                            checked={settings.soundEnabled}
+                            onChange={(v) => updateSetting('soundEnabled', v)}
+                        />
 
                         {settings.soundEnabled && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pl-2 animate-in slide-in-from-top-2 duration-300">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-zinc-400 uppercase">Sound Type</label>
-                                    <select
-                                        value={settings.soundType || 'pop'}
-                                        onChange={(e) => {
-                                            updateSetting('soundType', e.target.value);
-                                            // Play preview
-                                            const audio = new Audio(SOUNDS[e.target.value]);
-                                            audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
-                                            audio.play().catch(e => console.error(e));
-                                        }}
-                                        className="w-full bg-zinc-800 border border-zinc-700/50 rounded-xl px-3 py-2.5 text-zinc-200 outline-none focus:ring-2 focus:ring-primary-600/50 transition-all"
-                                    >
-                                        <option value="pop">Pop</option>
-                                        <option value="ding">Ding</option>
-                                        <option value="coin">Coin</option>
-                                        <option value="notify">Notify</option>
-                                        <option value="success">Success</option>
-                                        <option value="chime">Chime (Subtle)</option>
-                                        <option value="bloop">Bloop (Subtle)</option>
-                                        <option value="click">Click (Subtle)</option>
-                                        <option value="tone">Tone (Subtle)</option>
-                                        <option value="note">Note (Subtle)</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-zinc-400 uppercase flex justify-between">
-                                        Volume <span>{Math.round((settings.soundVolume !== undefined ? settings.soundVolume : 0.5) * 100)}%</span>
-                                    </label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={settings.soundVolume !== undefined ? settings.soundVolume : 0.5}
-                                        onChange={(e) => {
-                                            const vol = parseFloat(e.target.value);
-                                            updateSetting('soundVolume', vol);
-                                        }}
-                                        onMouseUp={() => {
-                                            const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
-                                            audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
-                                            audio.play().catch(e => console.error(e));
-                                        }}
-                                        className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                                    />
-                                </div>
+                                <Select
+                                    label="Sound Type"
+                                    value={settings.soundType || 'pop'}
+                                    options={[
+                                        { value: 'pop', label: 'Pop' },
+                                        { value: 'ding', label: 'Ding' },
+                                        { value: 'coin', label: 'Coin' },
+                                        { value: 'notify', label: 'Notify' },
+                                        { value: 'success', label: 'Success' },
+                                        { value: 'chime', label: 'Chime (Subtle)' },
+                                        { value: 'bloop', label: 'Bloop (Subtle)' },
+                                        { value: 'click', label: 'Click (Subtle)' },
+                                        { value: 'tone', label: 'Tone (Subtle)' },
+                                        { value: 'note', label: 'Note (Subtle)' },
+                                    ]}
+                                    onChange={(v) => {
+                                        updateSetting('soundType', v);
+                                        // Play preview
+                                        const audio = new Audio(SOUNDS[v]);
+                                        audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
+                                        audio.play().catch(e => console.error(e));
+                                    }}
+                                />
+                                <RangeSlider
+                                    label="Volume"
+                                    min={0} max={1} step={0.05}
+                                    value={settings.soundVolume !== undefined ? settings.soundVolume : 0.5}
+                                    displayValue={Math.round((settings.soundVolume !== undefined ? settings.soundVolume : 0.5) * 100)}
+                                    unit="%"
+                                    onChange={(v) => updateSetting('soundVolume', v)}
+                                    onMouseUp={() => {
+                                        const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
+                                        audio.volume = (settings.soundVolume !== undefined ? settings.soundVolume : 0.5);
+                                        audio.play().catch(e => console.error(e));
+                                    }}
+                                />
                             </div>
                         )}
                     </section>
@@ -510,19 +476,12 @@ export default function Settings({ targetUid, isModeratorMode }) {
                 <div className="space-y-10 border-t border-zinc-800 pt-10">
                     <section className="space-y-4">
                         <SectionLabel icon={<Music size={14} />}>KaraFun Integration</SectionLabel>
-                        <div className="flex items-center justify-between p-4 bg-zinc-800/20 rounded-2xl border border-white/5">
-                            <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-200">Enable KaraFun</p>
-                                <p className="text-xs text-zinc-500 italic">Show song queue and current song in the sidebar.</p>
-                            </div>
-                            <button
-                                onClick={() => updateSetting('karafunEnabled', !settings.karafunEnabled)}
-                                className="toggle-switch"
-                                data-state={settings.karafunEnabled ? 'checked' : 'unchecked'}
-                            >
-                                <div className="toggle-thumb" />
-                            </button>
-                        </div>
+                        <ToggleSwitch
+                            label="Enable KaraFun"
+                            description="Show song queue and current song in the sidebar."
+                            checked={settings.karafunEnabled}
+                            onChange={(v) => updateSetting('karafunEnabled', v)}
+                        />
                     </section>
                 </div>
             </div>
