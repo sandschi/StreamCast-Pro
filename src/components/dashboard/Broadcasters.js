@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import TwitchAvatar from '@/components/TwitchAvatar';
+import Avatar from '@/components/ui/Avatar';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Users, CheckCircle, XCircle, Clock, ShieldCheck, Send, User } from 'lucide-react';
+import EmptyState from '@/components/ui/EmptyState';
 
 export default function Broadcasters() {
     const [broadcasters, setBroadcasters] = useState([]);
@@ -100,9 +101,15 @@ export default function Broadcasters() {
                 {broadcasters.map((u) => (
                     <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between group hover:border-zinc-700 transition-all">
                         <div className="flex items-center gap-4">
-                            <div className="relative w-12 h-12 flex items-center justify-center rounded-full border-2 border-zinc-800 shadow-xl overflow-hidden shrink-0 bg-zinc-900">
-                                <TwitchAvatar photoURL={u.photoURL} username={u.twitchUsername} alt={`${u.displayName || 'Broadcaster'}'s avatar`} iconSize={20} />
-                            </div>
+                            <Avatar
+                                size={48}
+                                iconSize={20}
+                                photoURL={u.photoURL}
+                                username={u.twitchUsername}
+                                alt={`${u.displayName || 'Broadcaster'}'s avatar`}
+                                ringClassName="border-2 border-zinc-800 bg-zinc-900"
+                                className="shadow-xl"
+                            />
                             <div>
                                 <p className="font-bold text-zinc-100 flex items-center gap-2">
                                     {u.displayName}
@@ -149,10 +156,7 @@ export default function Broadcasters() {
                 ))}
 
                 {broadcasters.length === 0 && (
-                    <div className="text-center py-20 bg-zinc-900/20 rounded-3xl border border-dashed border-zinc-800">
-                        <Users className="mx-auto text-zinc-700 mb-4" size={48} />
-                        <p className="text-zinc-500">No broadcasters found in the system.</p>
-                    </div>
+                    <EmptyState size="lg" icon={<Users size={48} />} title="No broadcasters found in the system." />
                 )}
             </div>
         </div>

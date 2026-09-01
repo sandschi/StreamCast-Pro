@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import TwitchAvatar from '@/components/TwitchAvatar';
+import Avatar from '@/components/ui/Avatar';
 import { db } from '@/lib/firebase';
 import {
     collection,
@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { Shield, User, ShieldAlert, Trash2, Clock, Users as UsersIcon } from 'lucide-react';
 import RoleSwitch from '@/components/ui/RoleSwitch';
+import EmptyState from '@/components/ui/EmptyState';
 
 export default function Users({ targetUid, user }) {
     const [presence, setPresence] = useState([]);
@@ -103,14 +104,14 @@ export default function Users({ targetUid, user }) {
                     <div key={u.id} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5 hover:border-zinc-700 transition-all group">
                         <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
-                                <div className="relative">
-                                    <div className="relative w-12 h-12 overflow-hidden rounded-full border-2 border-zinc-800 bg-zinc-800 flex items-center justify-center">
-                                        <TwitchAvatar photoURL={u.photoURL} username={u.twitchUsername} iconSize={20} />
-                                    </div>
-                                    {u.isOnline && (
-                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-zinc-900 rounded-full" />
-                                    )}
-                                </div>
+                                <Avatar
+                                    size={48}
+                                    iconSize={20}
+                                    photoURL={u.photoURL}
+                                    username={u.twitchUsername}
+                                    ringClassName="border-2 border-zinc-800 bg-zinc-800"
+                                    online={u.isOnline}
+                                />
                                 <div>
                                     <h4 className="font-bold text-zinc-100 truncate max-w-[120px]" title={u.displayName}>
                                         {u.displayName}
@@ -151,11 +152,12 @@ export default function Users({ targetUid, user }) {
                 ))}
 
                 {userList.length === 0 && (
-                    <div className="col-span-full py-12 text-center bg-zinc-900/30 border border-dashed border-zinc-800 rounded-3xl">
-                        <UsersIcon className="mx-auto text-zinc-700 mb-3" size={32} />
-                        <p className="text-zinc-500">No users currently logged in.</p>
-                        <p className="text-zinc-600 text-xs mt-1">Share your moderator link to see users here.</p>
-                    </div>
+                    <EmptyState
+                        className="col-span-full"
+                        icon={<UsersIcon size={32} />}
+                        title="No users currently logged in."
+                        hint="Share your moderator link to see users here."
+                    />
                 )}
             </div>
         </div>

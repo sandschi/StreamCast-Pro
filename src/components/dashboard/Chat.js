@@ -8,9 +8,10 @@ import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { formatTimestamp } from '../../lib/utils';
-import TwitchAvatar from '../TwitchAvatar';
+import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
 import StatusDot from '@/components/ui/StatusDot';
+import SuggestionChip from '@/components/ui/SuggestionChip';
 // NEW: Icons for suggestions
 import {
     ScreenShare,
@@ -283,27 +284,15 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                             <HandHelping size={14} /> Suggestions
                         </div>
                         {suggestions.map(sug => (
-                            <div key={sug.id} className="flex items-center gap-3 bg-zinc-900/80 p-2 rounded-xl border border-primary-500/30 group/sug animate-in zoom-in-95 duration-200">
-                                <div className="flex items-center gap-2 max-w-[150px]">
-                                    <div className="relative w-4 h-4 shrink-0">
-                                        {sug.avatarUrl ? (
-                                            <Image src={sug.avatarUrl} alt="" fill className="rounded-full object-cover" unoptimized />
-                                        ) : (
-                                            <div className="w-full h-full rounded-full bg-zinc-800 flex items-center justify-center"><User size={10} className="text-zinc-500" /></div>
-                                        )}
-                                    </div>
-                                    <span className="text-[11px] font-bold truncate" style={{ color: sug.color }}>{sug.username}:</span>
-                                    <span className="text-[11px] text-zinc-300 truncate">{sug.fragments[0]?.content}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button onClick={() => approveSuggestion(sug)} className="p-1 text-green-500 hover:bg-green-500/10 rounded-lg transition-all" title="Approve">
-                                        <CheckCircle2 size={14} />
-                                    </button>
-                                    <button onClick={() => denySuggestion(sug.id)} className="p-1 text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Deny">
-                                        <XCircle size={14} />
-                                    </button>
-                                </div>
-                            </div>
+                            <SuggestionChip
+                                key={sug.id}
+                                username={sug.username}
+                                avatarUrl={sug.avatarUrl}
+                                color={sug.color}
+                                text={sug.fragments[0]?.content}
+                                onApprove={() => approveSuggestion(sug)}
+                                onDeny={() => denySuggestion(sug.id)}
+                            />
                         ))}
                     </div>
                 </div>
@@ -313,14 +302,14 @@ export default function Chat({ targetUid, isModeratorMode, isModAuthorized, user
                     <div key={msg.id} className="group flex flex-col gap-1 bg-zinc-800/20 p-3 rounded-xl border border-white/5 hover:border-zinc-700 hover:bg-zinc-800/40 transition-all duration-200">
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <div className="flex-shrink-0 relative w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-zinc-900 flex items-center justify-center">
-                                    <TwitchAvatar 
-                                        username={msg.username} 
-                                        photoURL={msg.avatarUrl} 
-                                        alt={msg.username}
-                                        iconSize={40}
-                                    />
-                                </div>
+                                <Avatar
+                                    size={40}
+                                    iconSize={40}
+                                    photoURL={msg.avatarUrl}
+                                    username={msg.username}
+                                    alt={msg.username}
+                                    ringClassName="border border-white/10 bg-zinc-900"
+                                />
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="font-bold text-zinc-100 truncate">

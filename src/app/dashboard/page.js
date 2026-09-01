@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import TwitchAvatar from '@/components/TwitchAvatar';
 import TwitchIcon from '@/components/TwitchIcon';
 import React, { useState, Suspense, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -42,6 +41,7 @@ import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import Badge from '@/components/ui/Badge';
 import NavItem from '@/components/ui/NavItem';
 import AccessGate from '@/components/ui/AccessGate';
+import Avatar from '@/components/ui/Avatar';
 import { APP_VERSION } from '@/lib/version';
 import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
@@ -348,10 +348,15 @@ function DashboardContent() {
                     </button>
 
                     <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 px-2">
-                        <div className="relative w-9 h-9 shrink-0 flex items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800">
-                            <TwitchAvatar photoURL={userData?.photoURL || user?.photoURL} username={userData?.twitchUsername || user.displayName} alt="Profile" iconSize={16} />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full z-10" />
-                        </div>
+                        <Avatar
+                            size={36}
+                            iconSize={16}
+                            photoURL={userData?.photoURL || user?.photoURL}
+                            username={userData?.twitchUsername || user.displayName}
+                            alt="Profile"
+                            online
+                            onlineDotClassName="w-2.5 h-2.5 -bottom-0.5 -right-0.5 border-2 z-10"
+                        />
                         <div className="hidden md:block overflow-hidden">
                             <p className="text-[11px] font-bold truncate text-zinc-100">{userData?.twitchUsername || user?.displayName}</p>
                             <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-primary-400' :
