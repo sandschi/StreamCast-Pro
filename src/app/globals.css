@@ -31,6 +31,205 @@
   }
 }
 
+/* ============================================================
+   Design system tokens — ported from Designsystem/tokens/
+   (see Designsystem/HANDOFF.md, section 1). Not yet consumed by
+   any component or Tailwind utility; existing inline styles and the
+   btn-awesome, toggle-switch, nav-item classes below are untouched.
+   These exist as plain CSS custom properties for later component work.
+   ============================================================ */
+:root {
+  /* --- Neutrals (zinc) — bare names for non-Tailwind consumers --- */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #0a0a0a;
+
+  /* --- Brand green — bare names, same scale as --color-primary-* above --- */
+  --primary-50: #e6ffe6;
+  --primary-100: #b3ffb3;
+  --primary-200: #80ff80;
+  --primary-300: #4dff4d;
+  --primary-400: #1aff1a;
+  --primary-500: #07fc03;
+  --primary-600: #00cc00;
+  --primary-700: #009900;
+  --primary-800: #006600;
+  --primary-900: #003300;
+  --primary-950: #001a00;
+  --primary-ink: #04240a; /* ink for text/icons sitting on --primary-500 */
+
+  /* --- Platform / partner --- */
+  --twitch: #9146ff;
+  --twitch-hover: #7c3aeb;
+
+  /* --- Semantic status (currently literal hex inline in components) --- */
+  --success: #22c55e;
+  --success-alt: #10b981;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* --- Overlay theme accents (overlay/[userId]/page.js) --- */
+  --cyber-cyan: #00f0ff;
+  --cyber-red: #ff003c;
+  --future-blue: #1271ff;
+  --future-panel: #0b1622;
+
+  /* --- Pervtown community mark --- */
+  --pervtown-green: #0c5e04;
+  --pervtown-violet: #6409f3;
+  --pervtown-black: #000000;
+
+  /* --- Semantic aliases --- */
+  --bg-app: var(--zinc-950);
+  --surface-panel: rgba(24, 24, 27, .6);
+  --surface-card: rgba(24, 24, 27, .5);
+  --surface-raised: var(--zinc-900);
+  --surface-inset: rgba(39, 39, 42, .2);
+  --surface-control: var(--zinc-800);
+  --surface-input: var(--zinc-800);
+  --border-subtle: rgba(39, 39, 42, .5);
+  --border-hairline: rgba(255, 255, 255, .05);
+  --border-control: var(--zinc-700);
+  --border-strong: var(--zinc-800);
+  --text-heading: var(--zinc-100);
+  --text-body: var(--zinc-200);
+  --text-muted: var(--zinc-400);
+  --text-faint: var(--zinc-500);
+  --text-ghost: var(--zinc-600);
+  --text-on-primary: #000000;
+  --accent: var(--primary-500);
+  --accent-hover: var(--primary-400);
+  --accent-press: var(--primary-600);
+  --accent-tint: rgba(7, 252, 3, .1);
+  --accent-tint-strong: rgba(7, 252, 3, .2);
+  --accent-border: rgba(7, 252, 3, .3);
+
+  /* --- Effects --- */
+  --blur-sm: blur(4px);
+  --blur-md: blur(12px);
+  --blur-lg: blur(16px);
+  --blur-xl: blur(24px);
+  --blur-2xl: blur(40px);
+  --shadow-glow-primary: 0 10px 30px -5px rgba(7, 252, 3, .6);
+  --shadow-glow-primary-hover: 0 15px 40px -5px rgba(7, 252, 3, .8);
+  --shadow-glow-ring: 0 0 20px rgba(7, 252, 3, .2);
+  --shadow-glow-pill: 0 0 15px rgba(7, 252, 3, .4);
+  --shadow-glow-danger: 0 0 15px rgba(239, 68, 68, .4);
+  --shadow-glow-warning: 0 0 15px rgba(234, 179, 8, .4);
+  --shadow-card: 0 20px 40px rgba(0, 0, 0, .5);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, .6);
+  --shadow-hard: 8px 8px 0 #000;
+  --shadow-hard-sm: 4px 4px 0 #000;
+  --focus-ring: 0 0 0 2px var(--primary-600);
+  --grid-overlay: linear-gradient(rgba(255, 255, 255, .03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .03) 1px, transparent 1px);
+  --grid-overlay-size: 60px 60px;
+  --halo-primary: radial-gradient(ellipse at top, rgba(0, 51, 0, .35), var(--zinc-950) 55%, var(--zinc-950));
+
+  /* --- Typography scale --- */
+  --fs-9: 9px;
+  --fs-10: 10px;
+  --fs-11: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-15: 15px;
+  --fs-base: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 30px;
+  --fs-4xl: 36px;
+  --fs-5xl: 48px;
+  --fs-6xl: 60px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-black: 900;
+  --lh-tight: 1.1;
+  --lh-snug: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.625;
+  --ls-tighter: -.02em;
+  --ls-tight: -.01em;
+  --ls-normal: 0;
+  --ls-wide: .1em;
+  --ls-wider: .15em;
+  --ls-widest: .2em;
+
+  /* Display face — not self-hosted yet, so this falls back to --font-sans
+     until the Press Start 2P asset is added (see HANDOFF.md section 1). */
+  --font-display: "Press Start 2P", var(--font-sans);
+
+  /* Semantic type roles */
+  --type-display: var(--fw-black) var(--fs-5xl) / var(--lh-tight) var(--font-sans);
+  --type-arcade: var(--fw-regular) var(--fs-2xl) / var(--lh-snug) var(--font-display);
+  --type-h2: var(--fw-bold) var(--fs-3xl) / var(--lh-snug) var(--font-sans);
+  --type-h3: var(--fw-bold) var(--fs-xl) / var(--lh-snug) var(--font-sans);
+  --type-body: var(--fw-regular) var(--fs-sm) / var(--lh-relaxed) var(--font-sans);
+  --type-label: var(--fw-bold) var(--fs-xs) / var(--lh-normal) var(--font-sans);
+  --type-eyebrow: var(--fw-black) var(--fs-10) / var(--lh-normal) var(--font-sans);
+  --type-mono: var(--fw-regular) var(--fs-11) / var(--lh-normal) var(--font-mono);
+
+  /* --- Spacing --- */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --pad-card: 20px;
+  --pad-panel: 24px;
+  --pad-inset: 16px;
+  --pad-page: 24px;
+  --pad-page-lg: 40px;
+  --gap-stack: 16px;
+  --gap-section: 48px;
+  --gap-inline: 8px;
+  --sidebar-w: 256px;
+  --sidebar-w-collapsed: 80px;
+  --content-max: 1280px;
+
+  /* --- Radii --- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-pill: 9999px;
+  --radius-control: var(--radius-lg);   /* rounded-xl inputs, buttons-in-grid */
+  --radius-card: var(--radius-xl);      /* rounded-2xl cards */
+  --radius-panel: var(--radius-3xl);    /* rounded-3xl glass panels, modals */
+  --radius-action: var(--radius-pill);  /* btn-awesome, nav items, role pills */
+
+  /* --- Motion (low priority per handoff) --- */
+  --dur-fast: 200ms;
+  --dur-base: 300ms;
+  --dur-slow: 500ms;
+  --dur-slower: 700ms;
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --ease-out: cubic-bezier(0, 0, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --press-scale: .95;
+  --hover-lift: -2px;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

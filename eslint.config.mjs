@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local-only design system reference, not part of the app (see .gitignore).
+    "Designsystem/**",
   ]),
 ]);
 
