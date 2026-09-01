@@ -238,11 +238,18 @@ body {
 
 @layer components {
   .btn-awesome {
-    @apply flex items-center justify-center gap-2 px-6 py-[10px] bg-[#07fc03] text-black font-bold uppercase text-xs rounded-full transition-all duration-300 shadow-[0_10px_30px_-5px_rgba(7,252,3,0.6)] hover:shadow-[0_15px_40px_-5px_rgba(7,252,3,0.8)] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+    /* Same computed values as before, now sourced from tokens/effects.css
+       and tokens/colors.css instead of hardcoded hex/rgba. */
+    @apply flex items-center justify-center gap-2 px-6 py-[10px] font-bold uppercase text-xs rounded-full transition-all duration-300 shadow-[var(--shadow-glow-primary)] hover:shadow-[var(--shadow-glow-primary-hover)] hover:-translate-y-0.5 active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+    background: var(--primary-500);
+    color: var(--text-on-primary);
   }
 
   .glass-panel {
-    @apply bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/50 rounded-3xl;
+    @apply border rounded-[var(--radius-panel)];
+    background: var(--surface-panel);
+    backdrop-filter: var(--blur-xl);
+    border-color: var(--border-subtle);
   }
 
   .toggle-switch {
