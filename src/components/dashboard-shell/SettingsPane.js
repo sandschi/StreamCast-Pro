@@ -90,12 +90,15 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
         const el = previewBoxRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
         // The absolutely-positioned bubble's containing block is this element's
-        // padding box, not its content box — measure via getBoundingClientRect
-        // (border box; there's no border here) rather than entry.contentRect,
-        // which excludes padding and would under-report the space it actually has.
+        // padding box, not its content box — offsetWidth/offsetHeight (border
+        // box; there's no border here) cover that, unlike entry.contentRect,
+        // which excludes padding. They also stay in logical CSS pixels
+        // regardless of the page's zoom level, unlike getBoundingClientRect
+        // (which reports the zoomed/rendered size) — that mismatch against the
+        // natural-size measurement above, which also uses offsetWidth/Height,
+        // was letting the bubble overflow this box whenever the page was zoomed.
         const ro = new ResizeObserver(() => {
-            const rect = el.getBoundingClientRect();
-            setPreviewBoxSize({ width: rect.width, height: rect.height });
+            setPreviewBoxSize({ width: el.offsetWidth, height: el.offsetHeight });
         });
         ro.observe(el);
         return () => ro.disconnect();

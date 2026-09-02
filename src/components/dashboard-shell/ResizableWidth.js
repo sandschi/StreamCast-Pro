@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { getZoomFactor } from './zoom';
 
 // Same idea as ResizableBox but for width, with the handle on the left edge —
 // used for the inspector column on the right side of Chat/KaraFun/Settings/
@@ -26,11 +27,12 @@ export default function ResizableWidth({ t, storageKey, defaultWidth = 250, minW
         e.preventDefault();
         const startX = e.clientX;
         const startWidth = dragRef.current?.offsetWidth ?? width;
+        const zoom = getZoomFactor();
         let liveWidth = startWidth;
         const onMove = (ev) => {
             // Handle sits on the left edge of a right-side column, so dragging
             // left (negative delta) should grow it.
-            liveWidth = Math.min(maxWidth, Math.max(minWidth, startWidth - (ev.clientX - startX)));
+            liveWidth = Math.min(maxWidth, Math.max(minWidth, startWidth - (ev.clientX - startX) / zoom));
             setWidth(liveWidth);
         };
         const onUp = () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { getZoomFactor } from './zoom';
 
 // A panel with a real drag-to-resize handle on its bottom edge. Height is
 // remembered per-viewer in localStorage (a manual layout preference, not
@@ -25,9 +26,10 @@ export default function ResizableBox({ t, storageKey, defaultHeight = 190, minHe
         e.preventDefault();
         const startY = e.clientY;
         const startHeight = dragRef.current?.offsetHeight ?? height;
+        const zoom = getZoomFactor();
         let liveHeight = startHeight;
         const onMove = (ev) => {
-            liveHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + (ev.clientY - startY)));
+            liveHeight = Math.min(maxHeight, Math.max(minHeight, startHeight + (ev.clientY - startY) / zoom));
             setHeight(liveHeight);
         };
         const onUp = () => {
