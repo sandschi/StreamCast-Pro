@@ -1,13 +1,13 @@
 'use client';
 
 import Image from 'next/image';
-import { MONO, Dot, CONN, scan } from './treatments';
+import { MONO, Dot, CONN, scan, tiny, L } from './treatments';
 import { pressStart2P } from '@/lib/fonts';
 import { APP_VERSION } from '@/lib/version';
 
 const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
 
-export default function TitleBar({ t, d, conn, channel }) {
+export default function TitleBar({ t, d, conn, channel, role, isMasterAdmin }) {
     return (
         <div style={{ height: d.title, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', background: t.chrome, borderBottom: `1px solid ${t.edge}`, ...scan(t) }}>
             <div style={{ display: 'flex', gap: 7, paddingRight: 4 }}>
@@ -25,6 +25,7 @@ export default function TitleBar({ t, d, conn, channel }) {
                 <Dot tone={CONN[conn].tone} pulse={conn === 'reconnecting'} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{channel}</span>
             </span>
+            {role && <span style={{ ...tiny(t), color: isMasterAdmin ? t.accent : t.dim, padding: '3px 8px', border: `1px solid ${t.edge}`, borderRadius: t.round ? 5 : 0 }}>{L(t, role)}</span>}
             <span style={{ width: 1, height: 16, background: t.hair }} />
             <span style={{ fontFamily: MONO, fontSize: 11, color: t.faint }}>v{APP_VERSION}</span>
         </div>

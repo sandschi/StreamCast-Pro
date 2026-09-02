@@ -9,7 +9,6 @@ import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, query, or
 
 import { TREATMENTS } from '@/components/dashboard-shell/treatments';
 import { NAV, ROLE_TABS } from '@/components/dashboard-shell/nav';
-import { tiny, L } from '@/components/dashboard-shell/treatments';
 import TitleBar from '@/components/dashboard-shell/TitleBar';
 import MenuBar from '@/components/dashboard-shell/MenuBar';
 import NavTabStrip from '@/components/dashboard-shell/NavTabStrip';
@@ -370,20 +369,9 @@ function DashboardContent() {
     }
 
     const current = allowed.includes(activeTab) ? activeTab : (allowed[0] || activeTab);
-    const meta = NAV.find(n => n.id === current) || NAV[0];
     const Body = PANES[current];
     const isVerifying = verifyingMod && isModeratorMode && !isMasterAdmin;
     const showChrome = hasVerifiedAccess && !verifyingMod;
-
-    const SUBTITLES = {
-        chat: 'Listen to your Twitch chat and send messages to your stream overlay.',
-        history: 'Review and re-send previous messages to the screen.',
-        users: 'Manage moderators, viewers, and restricted accounts.',
-        karafun: 'Live song queue from your KaraFun party.',
-        settings: 'Configure colors, animations, and display behavior.',
-        api: 'Generate secure URLs for stream tools like Stream Deck.',
-        broadcasters: 'Approve or deny broadcaster access to StreamCast.',
-    };
 
     const navUser = { photoURL: userData?.photoURL || user?.photoURL, username: userData?.twitchUsername || user?.displayName };
 
@@ -400,23 +388,17 @@ function DashboardContent() {
 
     return (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: t.app, color: t.text, fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
-            <TitleBar t={t} d={d} conn={conn} channel={chat.channelName || navUser.username || 'Not connected'} />
+            <TitleBar t={t} d={d} conn={conn} channel={chat.channelName || navUser.username || 'Not connected'}
+                role={showChrome ? (isMasterAdmin ? 'Master admin' : (userRole || '')) : ''} isMasterAdmin={isMasterAdmin} />
             {menubar && <MenuBar t={t} d={d} onSelect={handleMenuSelect} restricted={!hasVerifiedAccess} />}
             {navVariant === 'tabs' && <NavTabStrip t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} />}
             <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 {navVariant === 'rail' && <NavRail t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} onSignOut={logout} />}
                 {navVariant === 'list' && <NavList t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} role={isMasterAdmin ? 'Master admin' : (userRole || '')} user={navUser} />}
                 <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    {showChrome && (
-                        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: `0 ${d.pad}px`, height: compact ? 34 : 40, borderBottom: `1px solid ${t.hair}` }}>
-                            <span style={{ flex: 'none', fontFamily: 'var(--font-sans)', fontSize: compact ? 13 : 14, fontWeight: 700, letterSpacing: '-.01em', color: t.text }}>{meta.title}</span>
-                            {current === 'settings' ? (
-                                <SectionTabs t={t} active={settingsSection} onChange={setSettingsSection} />
-                            ) : (
-                                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{SUBTITLES[current]}</span>
-                            )}
-                            <span style={{ flex: 1 }} />
-                            <span style={{ ...tiny(t), color: isMasterAdmin ? t.accent : t.dim, padding: '3px 8px', border: `1px solid ${t.edge}`, borderRadius: t.round ? 5 : 0 }}>{L(t, isMasterAdmin ? 'Master admin' : (userRole || ''))}</span>
+                    {showChrome && current === 'settings' && (
+                        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', padding: `0 ${d.pad}px`, height: compact ? 34 : 40, borderBottom: `1px solid ${t.hair}` }}>
+                            <SectionTabs t={t} active={settingsSection} onChange={setSettingsSection} />
                         </div>
                     )}
                     <AlertBar t={t} d={d} alert="none" />
