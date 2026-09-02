@@ -216,7 +216,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                             onMouseUp={() => { const audio = new Audio(SOUNDS[settings.soundType || 'pop']); audio.volume = settings.soundVolume ?? 0.5; audio.play().catch(() => { }); }} />
                     </div>
                 )}
-                <ToggleSwitch checked={settings.karafunEnabled} onChange={v => updateSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar." />
+                <ToggleSwitch checked={settings.karafunEnabled} onChange={v => updateAppearanceSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar. Takes effect immediately — the KaraFun tab appears or disappears as soon as you toggle this." />
             </Pane>
 
             <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector + 40} minWidth={210} maxWidth={520} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0, overflowY: 'auto' }}>
