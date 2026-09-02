@@ -29,6 +29,13 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
     const previewMessage = { id: 'preview', username: user?.displayName || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: user?.photoURL, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
     const canHide = activeMessage && (user?.uid === effectiveUid || isModeratorMode);
 
+    // MessageBubble is position:absolute (built for the full-screen overlay), so it
+    // never pushes this box taller on its own — size it from the same settings that
+    // size the bubble itself, so bigger avatar/font settings don't get clipped.
+    const headerH = Math.max(settings.showAvatar ? settings.avatarSize : 0, settings.nameSize + 10) + 20;
+    const bodyH = settings.fontSize * 1.3 + 50;
+    const previewHeight = Math.min(420, Math.max(170, headerH + bodyH + 32));
+
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
             <Pane t={t} d={d} icon={<SettingsIcon size={13} />} title="Overlay Customization"
@@ -138,7 +145,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
                         <span style={{ color: t.accent, display: 'inline-flex' }}><Sparkles size={13} /></span>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, letterSpacing: '.15em', color: t.accent }}>{L(t, 'Live preview')}</span>
                     </div>
-                    <div style={{ position: 'relative', minHeight: 170, padding: 16, background: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '16px 16px', overflow: 'hidden' }}>
+                    <div style={{ position: 'relative', height: previewHeight, padding: 16, background: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '16px 16px', overflow: 'auto' }}>
                         <MessageBubble message={previewMessage} settings={{ ...settings, posX: 0, posY: 0 }} />
                     </div>
                 </div>
