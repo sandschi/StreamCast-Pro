@@ -24,6 +24,7 @@ import HistoryPane from '@/components/dashboard-shell/HistoryPane';
 import UsersPane from '@/components/dashboard-shell/UsersPane';
 import KaraFunPane from '@/components/dashboard-shell/KaraFunPane';
 import SettingsPane from '@/components/dashboard-shell/SettingsPane';
+import SectionTabs from '@/components/dashboard-shell/SectionTabs';
 import ApiPane from '@/components/dashboard-shell/ApiPane';
 import BroadcastersPane from '@/components/dashboard-shell/BroadcastersPane';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
@@ -67,6 +68,7 @@ function DashboardContent() {
     const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
     const [showChangelog, setShowChangelog] = useState(false);
     const [suggestionsMuted, setSuggestionsMuted] = useState(false);
+    const [settingsSection, setSettingsSection] = useState('dashboard');
 
     // A viewer's own legibility preference (like their browser zoom level),
     // not a broadcaster-wide style choice, so it lives in localStorage rather
@@ -407,8 +409,12 @@ function DashboardContent() {
                 <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                     {showChrome && (
                         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: `0 ${d.pad}px`, height: compact ? 34 : 40, borderBottom: `1px solid ${t.hair}` }}>
-                            <span style={{ fontFamily: 'var(--font-sans)', fontSize: compact ? 13 : 14, fontWeight: 700, letterSpacing: '-.01em', color: t.text }}>{meta.title}</span>
-                            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{SUBTITLES[current]}</span>
+                            <span style={{ flex: 'none', fontFamily: 'var(--font-sans)', fontSize: compact ? 13 : 14, fontWeight: 700, letterSpacing: '-.01em', color: t.text }}>{meta.title}</span>
+                            {current === 'settings' ? (
+                                <SectionTabs t={t} active={settingsSection} onChange={setSettingsSection} />
+                            ) : (
+                                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{SUBTITLES[current]}</span>
+                            )}
                             <span style={{ flex: 1 }} />
                             <span style={{ ...tiny(t), color: isMasterAdmin ? t.accent : t.dim, padding: '3px 8px', border: `1px solid ${t.edge}`, borderRadius: t.round ? 5 : 0 }}>{L(t, isMasterAdmin ? 'Master admin' : (userRole || ''))}</span>
                         </div>
@@ -428,6 +434,7 @@ function DashboardContent() {
                                         userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
                                         isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
                                         uiScale={uiScale} setUiScale={setUiScale}
+                                        activeSection={settingsSection}
                                     />
                                 )}
                             </>

@@ -20,33 +20,6 @@ const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', '
 const STYLES = [['classic', 'Classic'], ['glass', 'Glass'], ['neon', 'Neon'], ['minimal', 'Minimal'], ['bold', 'Bold'], ['cyberpunk', 'Cyber'], ['comic', 'Comic'], ['retro', 'Retro'], ['future', 'Future']];
 const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate', 'Slate'], ['phosphor', 'Phosphor']];
 
-const SECTIONS = [['dashboard', 'Dashboard'], ['overlay', 'Overlay appearance'], ['sound', 'Sound & integrations']];
-
-// Real tabs (flat strip, top accent bar on the active item, no per-item
-// border box) — the same visual language as the dashboard's own top nav
-// (NavTabStrip.js), not the bordered segmented-button "pill" look used by
-// Navigation/Density/UI Scale further down.
-function SectionTabs({ t, d, active, onChange }) {
-    return (
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 1, marginTop: -d.pad, marginLeft: -d.pad, marginRight: -d.pad, padding: '0 8px', borderBottom: `1px solid ${t.hair}`, background: t.chrome }}>
-            {SECTIONS.map(([id, label]) => {
-                const on = active === id;
-                return (
-                    <button key={id} onClick={() => onChange(id)}
-                        style={{
-                            display: 'flex', alignItems: 'center', height: 34, padding: '0 14px', appearance: 'none', cursor: 'pointer',
-                            borderLeft: `1px solid ${on ? t.hair : 'transparent'}`, borderRight: `1px solid ${on ? t.hair : 'transparent'}`,
-                            borderTop: `2px solid ${on ? t.accent : 'transparent'}`, borderBottom: 'none',
-                            background: on ? t.pane : 'transparent', color: on ? t.text : t.dim,
-                            fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: on ? 700 : 500,
-                            boxShadow: on && t.glow ? '0 -8px 18px -8px rgba(7,252,3,.35)' : 'none',
-                        }}>{L(t, label)}</button>
-                );
-            })}
-        </div>
-    );
-}
-
 // MessageBubble is position:absolute (built for the full-screen overlay) so it
 // never contributes to a parent's layout size on its own, and measuring the
 // visible (already-scaled) copy back out proved unreliable in practice. So this
@@ -99,7 +72,7 @@ function ScaledBubblePreview({ message, settings, boxWidth, boxHeight }) {
     );
 }
 
-export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale, setUiScale }) {
+export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale, setUiScale, activeSection = 'dashboard' }) {
     const { user } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
@@ -109,7 +82,6 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
 
     const previewMessage = { id: 'preview', username: user?.displayName || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: user?.photoURL, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
     const canHide = activeMessage && (user?.uid === effectiveUid || isModeratorMode);
-    const [activeSection, setActiveSection] = useState('dashboard');
 
     const previewBoxRef = useRef(null);
     const [previewBoxSize, setPreviewBoxSize] = useState({ width: 0, height: 0 });
@@ -140,8 +112,6 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToolBtn t={t} icon={<Send size={12} />} onClick={() => sendTestOverlay(true)}>Send ∞</ToolBtn>
                     <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
-
-                <SectionTabs t={t} d={d} active={activeSection} onChange={setActiveSection} />
 
                 {activeSection === 'dashboard' && <>
                 <Field t={t} label="Appearance" hint="Applies to this dashboard immediately — your stream overlay is unaffected.">
