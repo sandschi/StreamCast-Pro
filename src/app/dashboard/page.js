@@ -68,28 +68,6 @@ function DashboardContent() {
     const [showChangelog, setShowChangelog] = useState(false);
     const [suggestionsMuted, setSuggestionsMuted] = useState(false);
 
-    // A viewer's own legibility preference (like their browser zoom level),
-    // not a broadcaster-wide style choice, so it lives in localStorage rather
-    // than settings/config alongside treatment/nav/density.
-    const [uiScale, setUiScaleState] = useState(100);
-    useEffect(() => {
-        try {
-            const saved = window.localStorage.getItem('sc-ui-scale');
-            if (saved) {
-                const n = parseInt(saved, 10);
-                if (!Number.isNaN(n)) setUiScaleState(n);
-            }
-        } catch (e) { /* storage unavailable — keep default */ }
-    }, []);
-    const setUiScale = (n) => {
-        setUiScaleState(n);
-        try { window.localStorage.setItem('sc-ui-scale', String(n)); } catch (e) { /* ignore */ }
-    };
-    useEffect(() => {
-        document.documentElement.style.zoom = uiScale !== 100 ? `${uiScale}%` : '';
-        return () => { document.documentElement.style.zoom = ''; };
-    }, [uiScale]);
-
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
 
@@ -419,7 +397,6 @@ function DashboardContent() {
                                         t={t} d={d} targetUid={targetUid} userRole={userRole} user={user}
                                         userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
                                         isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
-                                        uiScale={uiScale} setUiScale={setUiScale}
                                     />
                                 )}
                             </>
