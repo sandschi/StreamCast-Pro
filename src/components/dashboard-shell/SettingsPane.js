@@ -77,7 +77,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
     const { user } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
-        twitchUsername, setTwitchUsername, saving, activeMessage,
+        twitchUsername, saving, activeMessage,
         handleSave, sendTestOverlay, hideOverlay,
     } = useSettingsData({ targetUid, isModeratorMode });
 
@@ -178,7 +178,9 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                 <ToggleSwitch checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
                 <ToggleSwitch checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
 
-                <Field t={t} label="Twitch identity"><TextInput placeholder="Twitch Channel Name" value={twitchUsername} onChange={setTwitchUsername} /></Field>
+                <Field t={t} label="Twitch identity" hint="Set from your Twitch login, not editable here.">
+                    <TextInput value={twitchUsername} readOnly />
+                </Field>
 
                 <Field t={t} label="Bubble style">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>

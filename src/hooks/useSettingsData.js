@@ -118,8 +118,10 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
         if (!user) return;
         setSaving(true);
         try {
+            // twitchUsername is not user-editable — it is set from the real,
+            // OAuth-verified Twitch login (AuthContext.js) and only ever read
+            // here, never written back.
             await setDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), settings, { merge: true });
-            await setDoc(doc(db, 'users', effectiveUid), { twitchUsername: twitchUsername.toLowerCase().trim() }, { merge: true });
         } catch (e) {
             console.error(e);
             alert('Error saving. Check Firestore connection.');
@@ -162,7 +164,7 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
 
     return {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
-        twitchUsername, setTwitchUsername, saving, activeMessage,
+        twitchUsername, saving, activeMessage,
         handleSave, sendTestOverlay, hideOverlay,
     };
 }

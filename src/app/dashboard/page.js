@@ -127,11 +127,14 @@ function DashboardContent() {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     let status = data?.status;
-                    const isSandschiName = user.displayName?.toLowerCase() === 'sandschi';
-                    const isSandschiTwitch = data?.twitchUsername?.toLowerCase() === 'sandschi';
-                    const isSandschi = isSandschiName || isSandschiTwitch;
+                    // Master-admin detection uses ONLY displayName (Firebase Auth's
+                    // Twitch OIDC provider, never client-writable) — data.twitchUsername
+                    // lives in Firestore and was, before this fix, user-editable from
+                    // Settings, which meant anyone could self-grant the client-side
+                    // master-admin UI by typing "sandschi" into that field.
+                    const isSandschi = user.displayName?.toLowerCase() === 'sandschi';
 
-                    console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName, twitch: data?.twitchUsername });
+                    console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName });
 
                     setIsMasterAdmin(isSandschi);
 

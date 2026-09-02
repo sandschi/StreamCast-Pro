@@ -36,10 +36,13 @@ export function AuthProvider({ children }) {
                 const existingData = userSnapshot.data();
 
                 // Determine initial status
+                // Master-admin detection uses ONLY displayName, which comes straight
+                // from Firebase Auth's Twitch OIDC provider and is never client-writable.
+                // twitchUsername lives in Firestore and, before this fix, was editable
+                // from Settings — checking it here meant anyone could self-grant the
+                // client-side master-admin UI by typing "sandschi" into that field.
                 let status = existingData?.status;
-                const isSandschi =
-                    currentUser.displayName?.toLowerCase() === 'sandschi' ||
-                    existingData?.twitchUsername?.toLowerCase() === 'sandschi';
+                const isSandschi = currentUser.displayName?.toLowerCase() === 'sandschi';
 
                 if (!status || (isSandschi && status !== 'approved')) {
                     status = isSandschi ? 'approved' : 'waiting';
@@ -104,8 +107,16 @@ export function AuthProvider({ children }) {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
                     photoURL: extractedPhotoURL,
-                    status: isSandschi ? 'approved' : 'waiting'
                 };
+                // Only ever set status for a brand-new user (isNewUser, below) or the
+                // real master admin — a returning broadcaster's status was previously
+                // recomputed here on every login with no regard for an existing
+                // approval, silently resetting already-approved broadcasters back to
+                // "waiting" (racing with the correct, preserving logic in
+                // onAuthStateChanged above, so the outcome was non-deterministic).
+                if (isNewUser || isSandschi) {
+                    userData.status = isSandschi ? 'approved' : 'waiting';
+                }
 
                 await setDoc(doc(db, 'users', result.user.uid), userData, { merge: true });
 
