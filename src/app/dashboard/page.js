@@ -128,14 +128,16 @@ function DashboardContent() {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     let status = data?.status;
-                    // Master-admin detection uses ONLY displayName (Firebase Auth's
-                    // Twitch OIDC provider, never client-writable) — data.twitchUsername
-                    // lives in Firestore and was, before this fix, user-editable from
-                    // Settings, which meant anyone could self-grant the client-side
-                    // master-admin UI by typing "sandschi" into that field.
-                    const isSandschi = user.displayName?.toLowerCase() === 'sandschi';
+                    // Master-admin detection uses twitchUsername (Firestore), not
+                    // user.displayName — Firebase's OIDC integration never actually
+                    // populates displayName for the Twitch provider (confirmed always
+                    // null at runtime), so that check silently failed on every
+                    // returning session. twitchUsername is set once from the raw OAuth
+                    // response at login and locked from further client writes in
+                    // firestore.rules, so it's safe to trust here.
+                    const isSandschi = data?.twitchUsername?.toLowerCase() === 'sandschi';
 
-                    console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName });
+                    console.log('Admin Security Check (Dashboard):', { isSandschi, twitchUsername: data?.twitchUsername });
 
                     setIsMasterAdmin(isSandschi);
 
@@ -260,9 +262,9 @@ function DashboardContent() {
         const base = ROLE_TABS[userRole] || [];
         const extra = [];
         if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
-        if (isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') extra.push('broadcasters');
+        if (isMasterAdmin) extra.push('broadcasters');
         return NAV.map(n => n.id).filter(id => base.includes(id) || extra.includes(id));
-    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled, user?.displayName]);
+    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled]);
 
     // Cmd/Ctrl+1-9 tab switching
     useEffect(() => {
