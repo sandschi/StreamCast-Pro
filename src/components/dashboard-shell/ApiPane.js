@@ -15,7 +15,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
 
     if (!privateConfig?.apiToken) {
         return (
-            <Pane t={t} d={d} icon={<Terminal size={13} />} title="Remote Actions · Stream Deck">
+            <Pane t={t} d={d} icon={<Terminal size={13} />} title="Remote Actions · Touch Portal">
                 <EmptyState icon={<Terminal size={32} />} title="No API token generated yet." hint="Generate one to unlock remote-control URLs for Stream Deck, Touch Portal, or custom scripts." />
                 <button onClick={handleGenerateToken} disabled={generatingToken} style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 8, height: 32, padding: '0 14px', appearance: 'none', cursor: 'pointer', border: 'none', background: t.accent, color: 'var(--primary-ink)', fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, marginTop: 12 }}>
                     <Key size={14} />{generatingToken ? 'Generating…' : 'Generate API Token'}
@@ -26,7 +26,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
 
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
-            <Pane t={t} d={d} icon={<Terminal size={13} />} title="Remote Actions · Stream Deck" flush scroll>
+            <Pane t={t} d={d} icon={<Terminal size={13} />} title="Remote Actions · Touch Portal" flush scroll>
                 {REMOTE_ACTIONS.map(group => (
                     <div key={group.group} style={{ flex: 'none' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', height: 24, background: t.inset, borderBottom: `1px solid ${t.hair}`, borderTop: `1px solid ${t.hair}` }}>
