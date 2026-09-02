@@ -9,7 +9,7 @@ import Field from './Field';
 import ToolBtn from './ToolBtn';
 import ResizableBox from './ResizableBox';
 import ResizableWidth from './ResizableWidth';
-import { TREATMENTS, bevel, tiny, L } from './treatments';
+import { TREATMENTS, bevel, lbl, tiny, L } from './treatments';
 import TextInput from '@/components/ui/TextInput';
 import Select from '@/components/ui/Select';
 import RangeSlider from '@/components/ui/RangeSlider';
@@ -20,6 +20,18 @@ import MessageBubble from '@/components/overlay/MessageBubble';
 const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'];
 const STYLES = [['classic', 'Classic'], ['glass', 'Glass'], ['neon', 'Neon'], ['minimal', 'Minimal'], ['bold', 'Bold'], ['cyberpunk', 'Cyber'], ['comic', 'Comic'], ['retro', 'Retro'], ['future', 'Future']];
 const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate', 'Slate'], ['phosphor', 'Phosphor']];
+
+// A labeled rule breaking the settings list into groups — Pane already puts a
+// uniform gap above/below every direct child, so this just needs its own
+// label + hairline to read as a break rather than another field.
+function Section({ t, label }) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+            <span style={{ ...lbl(t), color: t.accent, flex: 'none' }}>{L(t, label)}</span>
+            <span style={{ flex: 1, height: 1, background: t.hair }} />
+        </div>
+    );
+}
 
 // MessageBubble is position:absolute (built for the full-screen overlay) so it
 // never contributes to a parent's layout size on its own, and measuring the
@@ -114,6 +126,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
 
+                <Section t={t} label="Dashboard" />
                 <Field t={t} label="Appearance" hint="Applies to this dashboard immediately — your stream overlay is unaffected.">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                         {TREATMENT_IDS.map(([id, label]) => {
@@ -182,6 +195,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <TextInput t={t} value={twitchUsername} readOnly />
                 </Field>
 
+                <Section t={t} label="Overlay appearance" />
                 <Field t={t} label="Bubble style">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
                         {STYLES.map(([id, label]) => <StyleTile key={id} t={t} id={id} label={label} selected={settings.bubbleStyle === id} onClick={() => updateSetting('bubbleStyle', id)} />)}
@@ -203,6 +217,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                 <RangeSlider t={t} label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
                 <ToggleSwitch t={t} checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's circular avatar next to their name." />
                 {settings.showAvatar && <RangeSlider t={t} label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
+                <Section t={t} label="Sound & integrations" />
                 <ToggleSwitch t={t} checked={settings.soundEnabled} onChange={v => updateSetting('soundEnabled', v)} label="Enable Sound" description="Play a sound when a message appears." />
                 {settings.soundEnabled && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
