@@ -9,8 +9,7 @@ import Field from './Field';
 import ToolBtn from './ToolBtn';
 import ResizableBox from './ResizableBox';
 import ResizableWidth from './ResizableWidth';
-import { TREATMENTS, bevel, lbl, tiny, L } from './treatments';
-import TextInput from '@/components/ui/TextInput';
+import { TREATMENTS, bevel, tiny, L } from './treatments';
 import Select from '@/components/ui/Select';
 import RangeSlider from '@/components/ui/RangeSlider';
 import ToggleSwitch from '@/components/ui/ToggleSwitch';
@@ -21,14 +20,18 @@ const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', '
 const STYLES = [['classic', 'Classic'], ['glass', 'Glass'], ['neon', 'Neon'], ['minimal', 'Minimal'], ['bold', 'Bold'], ['cyberpunk', 'Cyber'], ['comic', 'Comic'], ['retro', 'Retro'], ['future', 'Future']];
 const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate', 'Slate'], ['phosphor', 'Phosphor']];
 
-// A labeled rule breaking the settings list into groups — Pane already puts a
-// uniform gap above/below every direct child, so this just needs its own
-// label + hairline to read as a break rather than another field.
-function Section({ t, label }) {
+// A real section break, not just another field: a rule above (skipped on the
+// first section, which already sits right under Pane's own toolbar) and a
+// heading sized well past Field's tiny() labels so it actually reads as a
+// group title rather than blending into the field noise around it.
+function Section({ t, label, first }) {
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-            <span style={{ ...lbl(t), color: t.accent, flex: 'none' }}>{L(t, label)}</span>
-            <span style={{ flex: 1, height: 1, background: t.hair }} />
+        <div style={{ marginTop: first ? 0 : 10, paddingTop: first ? 0 : 20, borderTop: first ? 'none' : `1px solid ${t.hair}` }}>
+            <span style={{
+                fontFamily: t.modern ? 'var(--font-sans)' : 'var(--font-mono)',
+                fontSize: t.modern ? 15 : 13.5, fontWeight: 800,
+                letterSpacing: t.modern ? '-.01em' : '.1em', color: t.accent,
+            }}>{L(t, label)}</span>
         </div>
     );
 }
@@ -89,7 +92,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
     const { user } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
-        twitchUsername, saving, activeMessage,
+        saving, activeMessage,
         handleSave, sendTestOverlay, hideOverlay,
     } = useSettingsData({ targetUid, isModeratorMode });
 
@@ -126,7 +129,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
 
-                <Section t={t} label="Dashboard" />
+                <Section t={t} label="Dashboard" first />
                 <Field t={t} label="Appearance" hint="Applies to this dashboard immediately — your stream overlay is unaffected.">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                         {TREATMENT_IDS.map(([id, label]) => {
@@ -188,12 +191,10 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                         ))}
                     </div>
                 </Field>
-                <ToggleSwitch t={t} checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
-                <ToggleSwitch t={t} checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
-
-                <Field t={t} label="Twitch identity" hint="Set from your Twitch login, not editable here.">
-                    <TextInput t={t} value={twitchUsername} readOnly />
-                </Field>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                    <ToggleSwitch t={t} checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
+                    <ToggleSwitch t={t} checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
+                </div>
 
                 <Section t={t} label="Overlay appearance" />
                 <Field t={t} label="Bubble style">
