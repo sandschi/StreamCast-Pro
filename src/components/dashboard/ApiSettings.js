@@ -1,71 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
 import { Terminal, Key, RefreshCw, Power, EyeOff, Check, Copy, AlertTriangle, Link as LinkIcon, Play } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { useApiSettingsData } from '@/hooks/useApiSettingsData';
 import SectionLabel from '@/components/ui/SectionLabel';
 
 export default function ApiSettings({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole }) {
-    const [generatingToken, setGeneratingToken] = useState(false);
-    const [copyState, setCopyState] = useState(null);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        if (copyState) {
-            const timer = setTimeout(() => setCopyState(null), 2000);
-            return () => clearTimeout(timer);
-        }
-    }, [copyState]);
-
-    const handleGenerateToken = async () => {
-        if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
-
-        // Security check: Only master admins can target other users
-        const effectiveUid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
-
-        setGeneratingToken(true);
-        setError(null);
-        try {
-            const token = crypto.randomUUID();
-            await setDoc(doc(db, 'users', effectiveUid, 'private', 'config'), {
-                apiToken: token
-            }, { merge: true });
-            if (setPrivateConfig) {
-                setPrivateConfig({ apiToken: token });
-            }
-        } catch (err) {
-            console.error('Error generating token:', err);
-            setError(err.message || 'Failed to generate API token. Please try again.');
-        } finally {
-            setGeneratingToken(false);
-        }
-    };
-
-    const copyApiCommand = async (action) => {
-        if (!user || !privateConfig?.apiToken) return;
-        const baseUrl = window.location.origin;
-        const uid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
-
-        const url = `${baseUrl}/api/overlay/${uid}?action=${encodeURIComponent(action)}&token=${encodeURIComponent(privateConfig.apiToken)}`;
-
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopyState(`api-${action}`);
-        } catch (err) {
-            console.error('Failed to copy API link!', err);
-        }
-    };
-
-    const copyTokenOnly = async () => {
-        if (!privateConfig?.apiToken) return;
-        try {
-            await navigator.clipboard.writeText(privateConfig.apiToken);
-            setCopyState('token');
-        } catch (err) {
-            console.error('Failed to copy token!', err);
-        }
-    }
+    const { generatingToken, copyState, error, handleGenerateToken, copyApiCommand, copyTokenOnly } = useApiSettingsData({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole });
 
     if (!privateConfig?.apiToken) {
         return (
