@@ -23,11 +23,16 @@ service cloud.firestore {
       // twitchUsername to "sandschi"), exposing every broadcaster's profile data.
       allow get: if request.auth != null;
       allow list: if isMasterAdmin();
-      // A user may update their own document, but never their own approval status —
-      // that field must only ever change via the master-admin bypass above, or a
-      // signed-in user could self-approve as a broadcaster with no review at all.
+      // A user may update their own document, but never their own approval status
+      // or twitchUsername (once set) — status must only change via the
+      // master-admin bypass above (self-approval otherwise), and twitchUsername
+      // drives the client-side "is this the master admin" UI check (see
+      // AuthContext.js/dashboard/page.js), so letting it change after creation
+      // would let a user cosmetically spoof that UI, even though every real
+      // permission check (isMasterAdmin() above) is keyed to the Auth UID, not
+      // this field.
       allow update: if request.auth != null && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'twitchUsername']);
       allow create: if request.auth != null && request.auth.uid == userId;
       
       match /settings/{document=**} {
