@@ -6,7 +6,7 @@ import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
 import ResizableWidth from './ResizableWidth';
-import { MONO, tiny, L } from './treatments';
+import { bevel, MONO, tiny, L } from './treatments';
 import TextInput from '@/components/ui/TextInput';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -17,7 +17,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
         return (
             <Pane t={t} d={d} icon={<Terminal size={13} />} title="Remote Actions · Touch Portal">
                 <EmptyState icon={<Terminal size={32} />} title="No API token generated yet." hint="Generate one to unlock remote-control URLs for Stream Deck, Touch Portal, or custom scripts." />
-                <button onClick={handleGenerateToken} disabled={generatingToken} style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 8, height: 32, padding: '0 14px', appearance: 'none', cursor: 'pointer', border: 'none', background: t.accent, color: 'var(--primary-ink)', fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, marginTop: 12 }}>
+                <button onClick={handleGenerateToken} disabled={generatingToken} style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 8, height: 32, padding: '0 14px', appearance: 'none', cursor: 'pointer', border: 'none', background: t.accent, color: 'var(--primary-ink)', fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, marginTop: 12, ...bevel(t) }}>
                     <Key size={14} />{generatingToken ? 'Generating…' : 'Generate API Token'}
                 </button>
             </Pane>
@@ -42,7 +42,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
                                         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600, color: t.text }}>{item.label}</div>
                                         <div style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>?action={item.action}</div>
                                     </div>
-                                    <button onClick={() => copyApiCommand(item.action)} style={{ height: 22, padding: '0 9px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: copied ? 'var(--success)' : t.dim, flex: 'none', ...tiny(t) }}>{L(t, copied ? 'Copied' : 'Copy')}</button>
+                                    <button onClick={() => copyApiCommand(item.action)} style={{ height: 22, padding: '0 9px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: copied ? 'var(--success)' : t.dim, flex: 'none', ...tiny(t), ...bevel(t) }}>{L(t, copied ? 'Copied' : 'Copy')}</button>
                                 </div>
                             );
                         })}
