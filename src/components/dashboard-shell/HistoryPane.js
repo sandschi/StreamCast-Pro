@@ -33,7 +33,7 @@ export default function HistoryPane({ t, d, targetUid, userRole }) {
                 <span style={{ width: 26 }} /><span style={{ width: 92 }}>{L(t, 'Time')}</span><span style={{ width: 110 }}>{L(t, 'User')}</span><span style={{ flex: 1 }}>{L(t, 'Message')}</span><span>{L(t, 'Action')}</span>
             </div>
             {history.map((msg) => (
-                <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: `1px solid ${t.hair}`, minWidth: 0 }}>
+                <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', boxShadow: `inset 0 -1px 0 ${t.hair}`, minWidth: 0 }}>
                     <Avatar photoURL={msg.avatarUrl} username={msg.username} size={26} />
                     <span style={{ width: 92, fontFamily: MONO, fontSize: 11, color: t.faint, fontVariantNumeric: 'tabular-nums' }}>{formatTimestamp(msg.timestamp)}</span>
                     <span style={{ width: 110, fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600, color: msg.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.username}</span>
