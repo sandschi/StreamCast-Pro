@@ -130,7 +130,10 @@ export function getBubbleStyles(settings, messageColor) {
                     fontWeight: '900',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
-                    borderRadius: '9999px',
+                    borderTopLeftRadius: '9999px',
+                    borderTopRightRadius: '9999px',
+                    borderBottomLeftRadius: '9999px',
+                    borderBottomRightRadius: '9999px',
                     padding: '6px 20px',
                     boxShadow: '0 0 15px rgba(7,252,3,0.4)',
                     marginBottom: '-8px',
@@ -141,7 +144,10 @@ export function getBubbleStyles(settings, messageColor) {
                     backgroundColor: 'rgba(10, 10, 10, 0.7)',
                     backdropFilter: 'blur(20px)',
                     border: '1px solid rgba(39, 39, 42, 0.4)',
-                    borderRadius: '24px',
+                    borderTopLeftRadius: '24px',
+                    borderTopRightRadius: '24px',
+                    borderBottomLeftRadius: '24px',
+                    borderBottomRightRadius: '24px',
                     boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
                     zIndex: 10
                 }
@@ -203,7 +209,10 @@ export function getBubbleStyles(settings, messageColor) {
                     backgroundColor: 'rgba(10, 10, 10, 0.6)',
                     backdropFilter: 'blur(16px)',
                     border: '1px solid rgba(39, 39, 42, 0.3)',
-                    borderRadius: '16px',
+                    borderTopLeftRadius: '16px',
+                    borderTopRightRadius: '16px',
+                    borderBottomLeftRadius: '16px',
+                    borderBottomRightRadius: '16px',
                     zIndex: 10
                 }
             };
