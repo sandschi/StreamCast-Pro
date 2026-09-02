@@ -2,230 +2,356 @@
 
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
-import { MessageSquare, Sparkles, Shield, Zap, Users, CheckCircle, Clock, ExternalLink } from 'lucide-react';
+import {
+    ExternalLink, Shield, MessageSquare, ListMusic, RotateCcw, Users, Move,
+    ScreenShare, EyeOff, Settings as SettingsIcon, LayoutDashboard, Monitor, Clock,
+} from 'lucide-react';
 import TwitchIcon from '@/components/TwitchIcon';
+import Button from '@/components/ui/Button';
+import Avatar from '@/components/ui/Avatar';
+import MessageBubble from '@/components/overlay/MessageBubble';
+
+const MONO = 'var(--font-mono)';
+const ARCADE = 'var(--font-display)';
+
+/* ---------- atoms ---------- */
+
+function Eyebrow({ children, tone }) {
+    return <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: 'var(--ls-widest)', textTransform: 'uppercase', color: tone || 'var(--text-faint)' }}>{children}</div>;
+}
+
+function Band({ children, tint, rule = true, glow, id, size = 'lg' }) {
+    return (
+        <section id={id} style={{ borderTop: rule ? '1px solid ' + (glow ? 'rgba(7,252,3,.2)' : 'var(--border-subtle)') : 'none', background: tint || 'transparent' }}>
+            <div className={'scl-band-' + size}>{children}</div>
+        </section>
+    );
+}
+
+function SectionHead({ label, title, blurb }) {
+    return (
+        <div className="scl-head">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 3 }}>
+                <Eyebrow tone="var(--primary-500)">{label}</Eyebrow>
+                <span style={{ width: 24, height: 2, background: 'var(--primary-500)' }} />
+            </div>
+            <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <h2 className="scl-head-t" style={{ margin: 0, fontFamily: ARCADE, lineHeight: 1.7, fontWeight: 400, color: 'var(--text-heading)' }}>{title}</h2>
+                {blurb && <p style={{ margin: 0, font: 'var(--type-body)', fontSize: 15, color: 'var(--text-muted)', textWrap: 'pretty' }}>{blurb}</p>}
+            </div>
+        </div>
+    );
+}
+
+function Chip({ children, on, onClick, tight }) {
+    return (
+        <button type="button" onClick={onClick} disabled={!onClick}
+            style={{
+                appearance: 'none', cursor: onClick ? 'pointer' : 'default', flex: 'none', padding: tight ? '0 7px' : '0 11px', height: tight ? 24 : 27, display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: on ? 'rgba(7,252,3,.1)' : 'transparent', border: '1px solid ' + (on ? 'var(--primary-500)' : 'var(--border-strong)'),
+                color: on ? 'var(--primary-400)' : 'var(--text-muted)', fontFamily: MONO, fontSize: tight ? 9.5 : 11, fontWeight: 600, letterSpacing: tight ? '.04em' : '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                transition: 'color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard)'
+            }}>{children}</button>
+    );
+}
+
+function Chrome({ title, right, children, aspect, pad, flush }) {
+    return (
+        <div style={{ border: '1px solid var(--border-control)', background: 'var(--zinc-950)', boxShadow: '0 26px 64px -26px rgba(0,0,0,.9)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 30, padding: '0 10px', background: 'var(--zinc-900)', borderBottom: '1px solid var(--border-strong)' }}>
+                <div style={{ display: 'flex', gap: 5 }}>{[0, 1, 2].map(i => <span key={i} style={{ width: 9, height: 9, border: '1px solid var(--zinc-700)' }} />)}</div>
+                <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{title}</span>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>{right}</div>
+            </div>
+            <div style={{ position: 'relative', aspectRatio: aspect, padding: flush ? 0 : pad }}>{children}</div>
+        </div>
+    );
+}
+
+function CapRow({ n, icon, title, body }) {
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: '32px 24px 1fr', gap: 14, alignItems: 'start', padding: '17px 0', borderBottom: '1px solid var(--border-hairline)' }}>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--primary-700)', paddingTop: 3 }}>{n}</span>
+            <span style={{ color: 'var(--primary-500)', paddingTop: 1 }}>{icon}</span>
+            <div>
+                <div style={{ font: 'var(--type-label)', fontSize: 13.5, color: 'var(--text-heading)', marginBottom: 4 }}>{title}</div>
+                <div style={{ font: 'var(--type-body)', fontSize: 13, color: 'var(--text-muted)', textWrap: 'pretty' }}>{body}</div>
+            </div>
+        </div>
+    );
+}
+
+/* ---------- data ---------- */
+
+const STYLES = [
+    ['classic', 'Classic', 'rgba(147,51,234,.9)'],
+    ['glass', 'Glass', 'rgba(147,51,234,.9)'],
+    ['neon', 'Neon', 'var(--primary-600)'],
+    ['cyberpunk', 'Cyberpunk', 'var(--cyber-red)'],
+    ['comic', 'Comic', 'var(--warning)'],
+    ['retro', 'Retro', 'var(--primary-600)'],
+    ['future', 'Future', 'var(--future-blue)'],
+    ['bold', 'Bold', 'var(--info)'],
+    ['minimal', 'Minimal', 'transparent'],
+];
+
+const CAPS = [
+    ['01', <MessageSquare key="i" size={17} />, 'Live chat on stream', 'Twitch messages appear over your video, emotes intact.'],
+    ['02', <Shield key="i" size={17} />, 'Approve before it airs', 'Nothing reaches the overlay until you or a moderator clears it.'],
+    ['03', <Users key="i" size={17} />, 'Moderators with real roles', 'Invite mods by link. Role gating is enforced server-side, not hidden in the UI.'],
+    ['04', <ListMusic key="i" size={17} />, 'KaraFun song queue', 'Pull the party queue in and show who is singing next, live on the overlay.'],
+    ['05', <RotateCcw key="i" size={17} />, 'Full message history', 'Every message kept and searchable. Re-air any of them with one click.'],
+    ['06', <Move key="i" size={17} />, 'Pixel positioning', 'Place the bubble anywhere in the 16:9 frame and save it per scene.'],
+];
+
+const TABS = ['Overview', 'Chat', 'Queue', 'History', 'Users', 'Overlay', 'Settings'];
+
+const ROWS = [
+    ['sandschi', 'MOD', 'pushing this one to the overlay in a sec', '21:04', 'live'],
+    ['lurker42', '—', 'first time caller, long time lurker', '21:05', 'ok'],
+    ['nightowl', '—', 'the retro bubble style goes hard', '21:06', 'ok'],
+    ['kbmods', 'MOD', 'queue is open for the next 20 minutes', '21:07', 'ok'],
+    ['pixelpanda', '—', 'can we get Africa on the karafun list', '21:08', 'hold'],
+];
+
+const RAIL_ICONS = [
+    <LayoutDashboard key="0" size={15} />, <MessageSquare key="1" size={15} />, <ListMusic key="2" size={15} />,
+    <RotateCcw key="3" size={15} />, <Users key="4" size={15} />, <Monitor key="5" size={15} />, <SettingsIcon key="6" size={15} />,
+];
 
 export default function Home() {
-  const { user, loginWithTwitch, loading } = useAuth();
-  const router = useRouter();
+    const { user, loginWithTwitch, loading } = useAuth();
+    const router = useRouter();
+    const [style, setStyle] = useState('retro');
+    const active = STYLES.find(s => s[0] === style) || STYLES[0];
 
-  useEffect(() => {
-    if (user && !loading) {
-      router.push('/dashboard');
-    }
-  }, [user, loading, router]);
+    useEffect(() => {
+        if (user && !loading) {
+            router.push('/dashboard');
+        }
+    }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (user) {
-    return null; // Will redirect via useEffect
-  }
-
-  const colorClasses = {
-    primary: {
-      bg: 'bg-primary-600/10',
-      border: 'border-primary-500/20',
-      text: 'text-primary-400'
-    },
-    yellow: {
-      bg: 'bg-yellow-600/10',
-      border: 'border-yellow-500/20',
-      text: 'text-yellow-400'
-    },
-    blue: {
-      bg: 'bg-blue-600/10',
-      border: 'border-blue-500/20',
-      text: 'text-blue-400'
-    },
-    green: {
-      bg: 'bg-green-600/10',
-      border: 'border-green-500/20',
-      text: 'text-green-400'
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
-      {/* Animated Background */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary-900/20 via-zinc-950 to-zinc-950" />
-      <div className="fixed inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-40" />
-
-      <div className="relative z-10">
-        {/* Header (lines 40-116 truncated for brevity in this replacement chunk) */}
-        {/* ... */}
-
-        {/* Features Section */}
-        <section className="max-w-7xl mx-auto px-6 py-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-black mb-4">Powerful Features</h2>
-            <p className="text-xl text-zinc-400">Everything you need to create professional stream overlays</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Sparkles className="w-8 h-8" />,
-                title: 'Custom Animations',
-                description: 'Choose from slide, fade, zoom, and bounce animations. Fully customize colors, fonts, and timing.',
-                color: 'primary'
-              },
-              {
-                icon: <Zap className="w-8 h-8" />,
-                title: 'Real-Time Chat',
-                description: 'Instantly display Twitch messages on your stream with support for emotes and custom styling.',
-                color: 'yellow'
-              },
-              {
-                icon: <Users className="w-8 h-8" />,
-                title: 'Team Management',
-                description: 'Invite moderators to help manage your overlay. Control permissions and access levels.',
-                color: 'blue'
-              },
-              {
-                icon: <Shield className="w-8 h-8" />,
-                title: 'Moderation Tools',
-                description: 'Review and approve messages before they appear. Keep your stream safe and professional.',
-                color: 'green'
-              },
-              {
-                icon: <MessageSquare className="w-8 h-8" />,
-                title: 'Message History',
-                description: 'Access your entire message history. Re-send previous messages with a single click.',
-                color: 'primary'
-              },
-              {
-                icon: <CheckCircle className="w-8 h-8" />,
-                title: 'Multiple Styles',
-                description: '8+ bubble styles including Glass, Neon, Cyberpunk, Comic, and more. Match your brand perfectly.',
-                color: 'primary'
-              }
-            ].map((feature, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -5 }}
-                className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl backdrop-blur-sm hover:border-zinc-700 transition-all"
-              >
-                <div className={`w-16 h-16 ${colorClasses[feature.color].bg} border ${colorClasses[feature.color].border} rounded-xl flex items-center justify-center mb-4 ${colorClasses[feature.color].text}`}>
-                  {feature.icon}
-                </div>
-                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                <p className="text-zinc-400 leading-relaxed">{feature.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* How It Works */}
-        <section className="max-w-7xl mx-auto px-6 py-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-black mb-4">Getting Started</h2>
-            <p className="text-xl text-zinc-400">Join StreamCast Pro in three simple steps</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-8 relative">
-            {/* Connection Lines */}
-            <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600/50 via-primary-600/50 to-primary-600/50 -translate-y-1/2" />
-
-            {[
-              {
-                step: '01',
-                title: 'Sign Up with Twitch',
-                description: 'Connect your Twitch account securely using OAuth. No passwords needed.',
-                icon: <TwitchIcon className="w-12 h-12" />
-              },
-              {
-                step: '02',
-                title: 'Wait for Approval',
-                description: 'Your application will be manually reviewed by Sandschi. This usually takes 24-48 hours.',
-                icon: <Clock className="w-12 h-12" />
-              },
-              {
-                step: '03',
-                title: 'Start Streaming',
-                description: 'Once approved, customize your overlay and add it to OBS. It\'s completely free!',
-                icon: <Sparkles className="w-12 h-12" />
-              }
-            ].map((step, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.2 }}
-                className="relative"
-              >
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center relative z-10">
-                  <div className="w-20 h-20 bg-gradient-to-br from-primary-600 to-primary-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white shadow-lg shadow-primary-500/50">
-                    {step.icon}
-                  </div>
-                  <div className="text-6xl font-black text-zinc-800 mb-4">{step.step}</div>
-                  <h3 className="text-2xl font-bold mb-3">{step.title}</h3>
-                  <p className="text-zinc-400 leading-relaxed">{step.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="max-w-4xl mx-auto px-6 py-20">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="bg-gradient-to-br from-primary-900/40 to-primary-900/40 border border-primary-500/20 rounded-3xl p-12 text-center backdrop-blur-sm relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA0MCAwIEwgMCAwIDAgNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-30" />
-            <div className="relative z-10 space-y-6">
-              <h2 className="text-4xl md:text-5xl font-black">Ready to Transform Your Stream?</h2>
-              <p className="text-xl text-zinc-300">Join StreamCast Pro today. It&apos;s completely free during beta!</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={loginWithTwitch}
-                className="px-10 py-5 bg-white text-primary-900 font-black rounded-xl transition-all shadow-2xl hover:shadow-primary-500/50 text-lg inline-flex items-center gap-3"
-              >
-                <TwitchIcon className="w-6 h-6" />
-                Connect with Twitch
-              </motion.button>
-              <p className="text-sm text-zinc-400">
-                <Shield size={16} className="inline mr-1" />
-                Manual approval required • Free during beta • No credit card needed
-              </p>
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
             </div>
-          </motion.div>
-        </section>
+        );
+    }
 
-        {/* Footer */}
-        <footer className="border-t border-zinc-800/50 mt-20">
-          <div className="max-w-7xl mx-auto px-6 py-8 text-center text-zinc-500 text-sm">
-            <p>© 2026 StreamCast Pro. Built with ❤️ for the Twitch community.</p>
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
+    if (user) {
+        return null; // Will redirect via useEffect
+    }
+
+    const navLink = { fontFamily: MONO, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', cursor: 'pointer' };
+
+    return (
+        <div style={{ background: 'var(--bg-app)', color: 'var(--text-body)', minHeight: '100vh' }}>
+
+            {/* Title bar — the app's own chrome, not a marketing header */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 20, height: 52, background: 'rgba(10,10,10,.86)', backdropFilter: 'var(--blur-md)', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div className="scl-topbar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Image src="/logo.svg" alt="" width={22} height={22} />
+                        <span style={{ fontFamily: ARCADE, fontSize: 11, color: 'var(--text-heading)' }}>STREAMCAST</span>
+                        <span style={{ padding: '2px 5px', fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: '.1em', color: 'var(--primary-400)', border: '1px solid rgba(7,252,3,.35)' }}>PRO</span>
+                    </div>
+                    <nav className="scl-nav">
+                        <a href="#overlay" style={navLink}>Overlay</a>
+                        <a href="#dashboard" style={navLink}>Dashboard</a>
+                        <a href="#access" style={navLink}>Access</a>
+                    </nav>
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18 }}>
+                        <span className="scl-beta" style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Free during beta</span>
+                        <Button variant="twitch" size="sm" icon={<TwitchIcon className="w-3.5 h-3.5" />} onClick={loginWithTwitch}>Connect</Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Hero — copy left, live product right */}
+            <section id="overlay" className="scl-hero">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+                    <Eyebrow>A Pervtown product</Eyebrow>
+                    <h1 className="scl-h1" style={{ margin: 0, fontFamily: ARCADE, lineHeight: 1.5, fontWeight: 400, color: 'var(--text-heading)' }}>
+                        PUT CHAT<br /><span style={{ color: 'var(--primary-500)' }}>ON STREAM</span>
+                    </h1>
+                    <p style={{ margin: 0, font: 'var(--type-body)', fontSize: 16, lineHeight: 1.65, color: 'var(--text-muted)', textWrap: 'pretty' }}>
+                        A Twitch chat overlay, a KaraFun queue and a moderation dashboard. Approve a message, it appears on your stream. Built by a streamer who needed it.
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                        <Button size="lg" icon={<TwitchIcon className="w-[18px] h-[18px]" />} onClick={loginWithTwitch}>Connect with Twitch</Button>
+                        <a href="#dashboard" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: MONO, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                            See the dashboard <ExternalLink size={13} />
+                        </a>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4, fontFamily: MONO, fontSize: 10.5, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+                        <Shield size={13} /> Manual approval · No card · No cost
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <Chrome aspect="16/9" title="OBS · Browser Source · 1920×1080"
+                        right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10, letterSpacing: '.1em', color: 'var(--danger)' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', animation: 'sc-blink 1.2s steps(2,end) infinite' }} />LIVE</span>}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg,#101418,#07090b 60%)', backgroundImage: 'var(--grid-overlay)', backgroundSize: '48px 48px' }} />
+                        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--zinc-800)', fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase' }}>your scene</div>
+                        <div style={{ position: 'absolute', inset: 0 }}>
+                            <MessageBubble
+                                message={{ id: 'hero-demo', username: 'nightowl', color: active[2], fragments: [{ type: 'text', content: 'the retro bubble style goes hard' }] }}
+                                settings={{
+                                    bubbleStyle: style, posX: 4, posY: 96, borderRadius: 9, animationStyle: 'fade',
+                                    fontSize: 13, nameSize: 10, avatarSize: 26, showAvatar: style !== 'minimal',
+                                    textColor: '#ffffff', strokeColor: '#000000',
+                                }}
+                            />
+                        </div>
+                    </Chrome>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: 'var(--ls-widest)', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 'none' }}>Style</span>
+                        <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }} className="sc-xscroll">
+                            {STYLES.map(([id, label]) => <Chip key={id} tight on={style === id} onClick={() => setStyle(id)}>{label}</Chip>)}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Dashboard — the real chrome, cropped */}
+            <Band id="dashboard">
+                <SectionHead label="The dashboard"
+                    title="A CONTROL SURFACE, NOT A WEBSITE."
+                    blurb="Seven panes, a menu bar, a status bar and dense tables. It runs beside OBS on a second monitor, so it is built like a broadcast tool: keyboard-first, no scroll-hunting, every row actionable." />
+                <div className="scl-row">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {TABS.map(t => <Chip key={t} tight on={t === 'Chat'}>{t}</Chip>)}
+                    </div>
+                    <div className="scl-xwrap sc-xscroll">
+                        <div className="scl-xinner">
+                            <Chrome title="StreamCast Pro — sandschi" flush
+                                right={<span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--primary-500)' }}>● CONNECTED</span>}>
+                                <div style={{ display: 'flex', gap: 8, padding: '0 10px', height: 28, alignItems: 'center', borderBottom: '1px solid var(--border-hairline)', background: 'var(--zinc-900)' }}>
+                                    {['File', 'Overlay', 'Chat', 'Queue', 'Help'].map(m => (
+                                        <span key={m} style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text-muted)', padding: '0 6px' }}>{m}</span>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', minHeight: 268 }}>
+                                    <div style={{ width: 46, flex: 'none', borderRight: '1px solid var(--border-hairline)', background: 'var(--zinc-900)', padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                                        {RAIL_ICONS.map((ic, i) => (
+                                            <span key={i} style={{ position: 'relative', width: 32, height: 30, display: 'grid', placeItems: 'center', color: i === 1 ? 'var(--primary-500)' : 'var(--text-faint)', background: i === 1 ? 'rgba(7,252,3,.07)' : 'transparent' }}>
+                                                {i === 1 && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 2, background: 'var(--primary-500)' }} />}
+                                                {ic}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 30, padding: '0 12px', borderBottom: '1px solid var(--border-hairline)' }}>
+                                            <MessageSquare size={13} />
+                                            <span style={{ font: 'var(--type-label)', fontSize: 11.5, color: 'var(--text-heading)' }}>Chat · 5 pending</span>
+                                            <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 10, color: 'var(--text-faint)' }}>AUTO-APPROVE OFF</span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '128px 46px 1fr 52px 68px', alignItems: 'center', gap: 10, height: 22, padding: '0 12px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-hairline)', fontFamily: MONO, fontSize: 9.5, letterSpacing: '.1em', color: 'var(--text-faint)' }}>
+                                            <span>USER</span><span>ROLE</span><span>MESSAGE</span><span>TIME</span><span />
+                                        </div>
+                                        {ROWS.map(([u, role, text, time, state]) => (
+                                            <div key={u} style={{ display: 'grid', gridTemplateColumns: '128px 46px 1fr 52px 68px', alignItems: 'center', gap: 10, height: 38, padding: '0 12px', borderBottom: '1px solid var(--border-hairline)', background: state === 'live' ? 'rgba(7,252,3,.05)' : 'transparent' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                                                    <Avatar size={18} />
+                                                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: state === 'live' ? 'var(--primary-400)' : 'var(--text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u}</span>
+                                                </span>
+                                                <span style={{ fontFamily: MONO, fontSize: 9.5, color: role === 'MOD' ? 'var(--success)' : 'var(--zinc-700)' }}>{role}</span>
+                                                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+                                                <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--text-faint)' }}>{time}</span>
+                                                <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, color: 'var(--text-faint)' }}>
+                                                    {state === 'live'
+                                                        ? <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.1em', color: 'var(--primary-500)' }}>ON AIR</span>
+                                                        : <>
+                                                            <ScreenShare size={13} /><EyeOff size={13} />
+                                                        </>}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 14, height: 24, padding: '0 12px', borderTop: '1px solid var(--border-hairline)', background: 'var(--zinc-900)', fontFamily: MONO, fontSize: 9.5, letterSpacing: '.08em', color: 'var(--text-faint)' }}>
+                                            <span style={{ color: 'var(--primary-500)' }}>● TWITCH OK</span><span>LATENCY 180MS</span><span>QUEUE 12</span>
+                                            <span style={{ marginLeft: 'auto' }}>SAVED 21:08</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Chrome>
+                        </div>
+                    </div>
+                </div>
+            </Band>
+
+            {/* Capabilities — dense list, two columns */}
+            <Band>
+                <SectionHead label="What it does" title="SIX THINGS, DONE PROPERLY." />
+                <div className="scl-caps">
+                    {CAPS.map(([n, ic, t, b]) => <CapRow key={n} n={n} icon={ic} title={t} body={b} />)}
+                </div>
+            </Band>
+
+            {/* Access — honest about the gate */}
+            <Band id="access" size="md" tint="var(--surface-inset)">
+                <SectionHead label="Getting in" title="APPROVAL IS MANUAL. ON PURPOSE."
+                    blurb="Every account is reviewed by hand so the overlay network stays small and abuse stays rare. Expect about a week." />
+                <div className="scl-row">
+                    <span className="scl-spacer" />
+                    <div className="scl-steps">
+                        {[['01', <TwitchIcon key="i" className="w-[15px] h-[15px]" />, 'Connect', 'OAuth only. No password ever touches us.'],
+                        ['02', <Clock key="i" size={15} />, 'Reviewed', 'Sandschi reads every application personally.'],
+                        ['03', <ScreenShare key="i" size={15} />, 'Go live', 'Paste one URL into OBS and you are on.']].map(([n, ic, t, b]) => (
+                            <div key={n} style={{ flex: 1, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                                    <span style={{ fontFamily: MONO, fontSize: 10.5, color: 'var(--primary-600)' }}>{n}</span>
+                                    <span style={{ color: 'var(--primary-500)' }}>{ic}</span>
+                                    <span style={{ font: 'var(--type-label)', fontSize: 13, color: 'var(--text-heading)' }}>{t}</span>
+                                </div>
+                                <div style={{ font: 'var(--type-body)', fontSize: 12.5, color: 'var(--text-muted)', textWrap: 'pretty' }}>{b}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Band>
+
+            {/* CTA */}
+            <Band glow tint="rgba(0,51,0,.22)" size="md">
+                <div className="scl-cta">
+                    <div className="scl-cta-main" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <h2 className="scl-cta-h2" style={{ margin: 0, fontFamily: ARCADE, lineHeight: 1.65, fontWeight: 400, color: 'var(--text-heading)' }}>
+                            READY TO PUT<br /><span style={{ color: 'var(--primary-500)' }}>CHAT ON STREAM?</span>
+                        </h2>
+                        <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Free during beta</span>
+                    </div>
+                    <Button size="lg" icon={<TwitchIcon className="w-[18px] h-[18px]" />} onClick={loginWithTwitch}>Connect with Twitch</Button>
+                </div>
+            </Band>
+
+            {/* Footer */}
+            <footer style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                <div className="scl-foot">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                            <Image src="/logo.svg" alt="" width={20} height={20} />
+                            <span style={{ fontFamily: ARCADE, fontSize: 10, color: 'var(--text-heading)' }}>PERVTOWN</span>
+                        </div>
+                        <p style={{ margin: 0, font: 'var(--type-body)', fontSize: 12.5, maxWidth: 300, color: 'var(--text-faint)', textWrap: 'pretty' }}>
+                            StreamCast Pro is a Pervtown product. Small tools for small streams, run by the people who use them.
+                        </p>
+                    </div>
+                    {[['Product', ['Overlay styles', 'Dashboard', 'KaraFun queue', 'Status']],
+                    ['Community', ['Twitch', 'Discord', 'Changelog']],
+                    ['Legal', ['Terms', 'Privacy', 'Contact']]].map(([h, items]) => (
+                        <div key={h} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                            <Eyebrow>{h}</Eyebrow>
+                            {items.map(i => <a key={i} href="#overlay" style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-muted)' }}>{i}</a>)}
+                        </div>
+                    ))}
+                </div>
+                <div className="scl-footbar" style={{ borderTop: '1px solid var(--border-hairline)', display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', fontFamily: MONO, fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--zinc-700)' }}>
+                    <span>© 2026 Pervtown</span><span>Built for the Twitch community</span>
+                </div>
+            </footer>
+        </div>
+    );
 }

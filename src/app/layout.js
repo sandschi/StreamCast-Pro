@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
@@ -10,6 +11,15 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Display face — logotypes, marketing headlines and big stat numerals only.
+// Never body/nav/buttons/labels. See Designsystem/HANDOFF.md section 1.
+const pressStart2P = localFont({
+  src: "./fonts/PressStart2P-Regular.ttf",
+  variable: "--font-press-start-2p",
+  weight: "400",
+  display: "swap",
 });
 
 export const metadata = {
@@ -28,7 +38,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}
       >
         <PostHogProvider>
           <AuthProvider>
