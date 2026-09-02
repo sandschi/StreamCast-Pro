@@ -82,23 +82,23 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">
                         <div style={{ display: 'flex', gap: 6 }}>
-                            <TextInput mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                            <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
                         </div>
                     </Field>
                     <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
                     <Field t={t} label="Overlay visibility">
-                        <ToggleSwitch checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
-                        <ToggleSwitch checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
+                        <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
+                        <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
                     </Field>
                 </Pane>
                 <Pane t={t} d={d} icon={<Music size={13} />} title="Overlay Style">
                     <Field t={t} label="Theme">
-                        <Select value={userSettings?.karafunOverlayTheme || 'classic'} onChange={(v) => handleToggleSetting('karafunOverlayTheme', v)} options={THEMES} />
+                        <Select t={t} value={userSettings?.karafunOverlayTheme || 'classic'} onChange={(v) => handleToggleSetting('karafunOverlayTheme', v)} options={THEMES} />
                     </Field>
-                    <RangeSlider label="Queue X" value={userSettings?.karafunQueuePosX ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosX', v)} />
-                    <RangeSlider label="Queue Y" value={userSettings?.karafunQueuePosY ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosY', v)} />
-                    <RangeSlider label="Now Playing X" value={userSettings?.karafunNowPlayingPosX ?? 50} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosX', v)} />
-                    <RangeSlider label="Now Playing Y" value={userSettings?.karafunNowPlayingPosY ?? 90} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosY', v)} />
+                    <RangeSlider t={t} label="Queue X" value={userSettings?.karafunQueuePosX ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosX', v)} />
+                    <RangeSlider t={t} label="Queue Y" value={userSettings?.karafunQueuePosY ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosY', v)} />
+                    <RangeSlider t={t} label="Now Playing X" value={userSettings?.karafunNowPlayingPosX ?? 50} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosX', v)} />
+                    <RangeSlider t={t} label="Now Playing Y" value={userSettings?.karafunNowPlayingPosY ?? 90} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosY', v)} />
                 </Pane>
             </ResizableWidth>
         </div>

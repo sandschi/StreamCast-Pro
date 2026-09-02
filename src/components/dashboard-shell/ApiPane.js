@@ -52,7 +52,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
             <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector} minWidth={210} maxWidth={480} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter }}>
                 <Pane t={t} d={d} icon={<Key size={13} />} title="API Token">
                     <Field t={t} label="Active token">
-                        <TextInput mono readOnly value={privateConfig.apiToken} />
+                        <TextInput t={t} mono readOnly value={privateConfig.apiToken} />
                     </Field>
                     <div style={{ display: 'flex', gap: 8 }}>
                         <ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleGenerateToken}>{generatingToken ? 'Revoking…' : 'Regenerate'}</ToolBtn>

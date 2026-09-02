@@ -145,7 +145,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                                     style={{
                                         flex: 1, height: 30, appearance: 'none', cursor: 'pointer', border: `1px solid ${settings.dashboardNav === id ? t.accent : t.hair}`,
                                         background: settings.dashboardNav === id ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
-                                        color: settings.dashboardNav === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600
+                                        color: settings.dashboardNav === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, ...bevel(t)
                                     }}>{label}</button>
                             ))}
                         </div>
@@ -157,7 +157,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                                     style={{
                                         flex: 1, height: 30, appearance: 'none', cursor: 'pointer', border: `1px solid ${settings.dashboardDensity === id ? t.accent : t.hair}`,
                                         background: settings.dashboardDensity === id ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
-                                        color: settings.dashboardDensity === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600
+                                        color: settings.dashboardDensity === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, ...bevel(t)
                                     }}>{label}</button>
                             ))}
                         </div>
@@ -170,26 +170,26 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                                 style={{
                                     flex: 1, height: 30, appearance: 'none', cursor: 'pointer', border: `1px solid ${uiScale === pct ? t.accent : t.hair}`,
                                     background: uiScale === pct ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
-                                    color: uiScale === pct ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600
+                                    color: uiScale === pct ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, ...bevel(t)
                                 }}>{pct}%</button>
                         ))}
                     </div>
                 </Field>
-                <ToggleSwitch checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
-                <ToggleSwitch checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
+                <ToggleSwitch t={t} checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
+                <ToggleSwitch t={t} checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
 
                 <Field t={t} label="Twitch identity" hint="Set from your Twitch login, not editable here.">
-                    <TextInput value={twitchUsername} readOnly />
+                    <TextInput t={t} value={twitchUsername} readOnly />
                 </Field>
 
                 <Field t={t} label="Bubble style">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
-                        {STYLES.map(([id, label]) => <StyleTile key={id} id={id} label={label} selected={settings.bubbleStyle === id} onClick={() => updateSetting('bubbleStyle', id)} />)}
+                        {STYLES.map(([id, label]) => <StyleTile key={id} t={t} id={id} label={label} selected={settings.bubbleStyle === id} onClick={() => updateSetting('bubbleStyle', id)} />)}
                     </div>
                 </Field>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
-                    <Field t={t} label="Font family"><Select value={settings.fontFamily} options={FONTS} onChange={v => updateSetting('fontFamily', v)} /></Field>
+                    <Field t={t} label="Font family"><Select t={t} value={settings.fontFamily} options={FONTS} onChange={v => updateSetting('fontFamily', v)} /></Field>
                     <Field t={t} label="Text colour">
                         <div style={{ display: 'flex', gap: 6 }}>
                             <input type="color" value={settings.textColor} onChange={e => updateSetting('textColor', e.target.value)} style={{ width: 32, height: 32, border: `1px solid ${t.hair}`, background: t.inset, cursor: 'pointer', padding: 0 }} />
@@ -198,27 +198,27 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     </Field>
                 </div>
 
-                <RangeSlider label="Display Duration" value={settings.displayDuration} min={3} max={60} unit="s" onChange={v => updateSetting('displayDuration', v)} hint="How long the message stays on screen (in seconds)." />
-                <RangeSlider label="Message Text Size" value={settings.fontSize} min={12} max={80} unit="px" onChange={v => updateSetting('fontSize', v)} />
-                <RangeSlider label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
-                <ToggleSwitch checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's circular avatar next to their name." />
-                {settings.showAvatar && <RangeSlider label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
-                <ToggleSwitch checked={settings.soundEnabled} onChange={v => updateSetting('soundEnabled', v)} label="Enable Sound" description="Play a sound when a message appears." />
+                <RangeSlider t={t} label="Display Duration" value={settings.displayDuration} min={3} max={60} unit="s" onChange={v => updateSetting('displayDuration', v)} hint="How long the message stays on screen (in seconds)." />
+                <RangeSlider t={t} label="Message Text Size" value={settings.fontSize} min={12} max={80} unit="px" onChange={v => updateSetting('fontSize', v)} />
+                <RangeSlider t={t} label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
+                <ToggleSwitch t={t} checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's circular avatar next to their name." />
+                {settings.showAvatar && <RangeSlider t={t} label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
+                <ToggleSwitch t={t} checked={settings.soundEnabled} onChange={v => updateSetting('soundEnabled', v)} label="Enable Sound" description="Play a sound when a message appears." />
                 {settings.soundEnabled && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
                         <Field t={t} label="Sound Type">
-                            <Select value={settings.soundType || 'pop'} options={Object.keys(SOUNDS)} onChange={(v) => {
+                            <Select t={t} value={settings.soundType || 'pop'} options={Object.keys(SOUNDS)} onChange={(v) => {
                                 updateSetting('soundType', v);
                                 const audio = new Audio(SOUNDS[v]);
                                 audio.volume = settings.soundVolume ?? 0.5;
                                 audio.play().catch(() => { });
                             }} />
                         </Field>
-                        <RangeSlider label="Volume" value={settings.soundVolume ?? 0.5} min={0} max={1} step={0.05} displayValue={Math.round((settings.soundVolume ?? 0.5) * 100)} unit="%" onChange={v => updateSetting('soundVolume', v)}
+                        <RangeSlider t={t} label="Volume" value={settings.soundVolume ?? 0.5} min={0} max={1} step={0.05} displayValue={Math.round((settings.soundVolume ?? 0.5) * 100)} unit="%" onChange={v => updateSetting('soundVolume', v)}
                             onMouseUp={() => { const audio = new Audio(SOUNDS[settings.soundType || 'pop']); audio.volume = settings.soundVolume ?? 0.5; audio.play().catch(() => { }); }} />
                     </div>
                 )}
-                <ToggleSwitch checked={settings.karafunEnabled} onChange={v => updateAppearanceSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar. Takes effect immediately — the KaraFun tab appears or disappears as soon as you toggle this." />
+                <ToggleSwitch t={t} checked={settings.karafunEnabled} onChange={v => updateAppearanceSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar. Takes effect immediately — the KaraFun tab appears or disappears as soon as you toggle this." />
             </Pane>
 
             <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector + 40} minWidth={210} maxWidth={520} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0, overflowY: 'auto' }}>
@@ -230,16 +230,16 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                         <span style={{ flex: 1 }} />
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: t.faint }}>{L(t, 'Drag bottom edge to resize')}</span>
                     </div>
-                    <div ref={previewBoxRef} style={{ position: 'relative', flex: 1, minHeight: 0, padding: 16, background: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '16px 16px', overflow: 'hidden' }}>
+                    <div ref={previewBoxRef} style={{ position: 'relative', flex: 1, minHeight: 0, padding: 16, backgroundColor: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '16px 16px', overflow: 'hidden' }}>
                         <ScaledBubblePreview message={previewMessage} settings={settings} boxWidth={previewBoxSize.width} boxHeight={previewBoxSize.height} />
                     </div>
                 </ResizableBox>
                 <Pane t={t} d={d} icon={<Move size={13} />} title="Precision Positioning">
-                    <div style={{ position: 'relative', aspectRatio: '16/9', background: t.app, border: `1px solid ${t.hair}`, backgroundImage: `linear-gradient(${t.hair} 1px,transparent 1px),linear-gradient(90deg,${t.hair} 1px,transparent 1px)`, backgroundSize: '12.5% 16.6%' }}>
+                    <div style={{ position: 'relative', aspectRatio: '16/9', backgroundColor: t.app, border: `1px solid ${t.hair}`, backgroundImage: `linear-gradient(${t.hair} 1px,transparent 1px),linear-gradient(90deg,${t.hair} 1px,transparent 1px)`, backgroundSize: '12.5% 16.6%' }}>
                         <div style={{ position: 'absolute', left: settings.posX + '%', top: settings.posY + '%', width: 10, height: 10, marginLeft: -5, marginTop: -5, background: t.accent, boxShadow: t.glow ? '0 0 12px rgba(7,252,3,.8)' : 'none' }} />
                     </div>
-                    <RangeSlider label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={v => updateSetting('posX', v)} />
-                    <RangeSlider label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={v => updateSetting('posY', v)} />
+                    <RangeSlider t={t} label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={v => updateSetting('posX', v)} />
+                    <RangeSlider t={t} label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={v => updateSetting('posY', v)} />
                 </Pane>
             </ResizableWidth>
         </div>

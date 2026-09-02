@@ -113,7 +113,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                             <span style={{ flex: 1 }} />
                             {activeMessage && <ToolBtn t={t} icon={<XCircle size={12} />} onClick={hideOverlay}>Hide</ToolBtn>}
                         </div>
-                        <div style={{ position: 'relative', minHeight: 118, padding: 12, background: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '14px 14px', overflow: 'hidden' }}>
+                        <div style={{ position: 'relative', minHeight: 118, padding: 12, backgroundColor: t.app, backgroundImage: 'radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px)', backgroundSize: '14px 14px', overflow: 'hidden' }}>
                             {activeMessage
                                 ? <MessageBubble message={activeMessage} settings={overlaySettings} />
                                 : <div style={{ display: 'grid', placeItems: 'center', minHeight: 94 }}>
