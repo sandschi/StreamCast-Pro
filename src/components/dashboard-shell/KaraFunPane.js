@@ -87,9 +87,18 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                     </Field>
                     <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
                     <Field t={t} label="Overlay visibility">
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
-                            <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
+                        {/* This inspector column can be as narrow as 210px (ResizableWidth
+                            minWidth below) — a rigid 2-column grid left no room for the
+                            switch pill (a fixed 50px) next to wrapped label text at that
+                            width, so it visually overran the card. flex-wrap falls back to
+                            one-per-row until the panel is actually wide enough for two. */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            <div style={{ flex: '1 1 140px', minWidth: 140 }}>
+                                <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
+                            </div>
+                            <div style={{ flex: '1 1 140px', minWidth: 140 }}>
+                                <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
+                            </div>
                         </div>
                     </Field>
                 </Pane>
