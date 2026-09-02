@@ -1,88 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/context/AuthContext';
-import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-// NEW: Icons for Suggestion
-import { History as HistoryIcon, RefreshCw, Send, ScreenShare, XCircle, Clock } from 'lucide-react';
+import { useHistoryData } from '@/hooks/useHistoryData';
+import { History as HistoryIcon, Send, ScreenShare, XCircle } from 'lucide-react';
 import { formatTimestamp } from '../../lib/utils';
 
 export default function History({ targetUid, isModeratorMode, isModAuthorized, userRole }) {
-    const { user } = useAuth();
-    const effectiveUid = targetUid || user?.uid;
-    const [history, setHistory] = useState([]); // Restored missing state
-
-    useEffect(() => {
-        if (!effectiveUid) return;
-
-        const historyRef = collection(db, 'users', effectiveUid, 'history');
-        const q = query(historyRef, orderBy('timestamp', 'desc'), limit(50));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const messages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setHistory(messages);
-        });
-
-        return () => unsubscribe();
-    }, [effectiveUid]);
-
-    // Listen for active message to show Hide button
-    const [activeMessage, setActiveMessage] = useState(null);
-    useEffect(() => {
-        if (!effectiveUid) return;
-        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        const unsub = onSnapshot(msgRef, (doc) => {
-            setActiveMessage(doc.exists() ? doc.data() : null);
-        });
-        return () => unsub();
-    }, [effectiveUid]);
-
-    const hideOverlay = async () => {
-        if (!effectiveUid) return;
-        try {
-            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
-        } catch (e) { console.error("Error hiding:", e); }
-    };
-
-    const resendToScreen = async (msg, permanent = false) => {
-        if (!user || userRole === 'denied') return;
-
-        const isViewer = userRole === 'viewer';
-        const payload = {
-            ...msg,
-            timestamp: serverTimestamp(),
-            suggestedBy: user.uid,
-            suggestedByName: user.displayName,
-            fromHistory: true
-        };
-        delete payload.id;
-
-        if (permanent) {
-            payload.duration = -1;
-        } else {
-            if (payload.duration) delete payload.duration;
-        }
-
-        try {
-            if (isViewer) {
-                // VIEWERS: Suggest from history
-                const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
-                if (payload.duration) delete payload.duration;
-                await addDoc(suggestionsRef, payload);
-                console.log('History Suggestion Sent ✅');
-            } else {
-                // MODS/BROADCASTER: Show directly
-                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-                await setDoc(activeMsgRef, payload);
-                console.log('History Sent to Screen ✅');
-            }
-        } catch (e) { console.error(e); }
-    };
+    const { history, activeMessage, hideOverlay, resendToScreen } = useHistoryData({ targetUid, userRole });
 
     return (
         <div className="flex flex-col h-full bg-transparent relative">

@@ -1,67 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, updateDoc, query, where } from 'firebase/firestore';
+'use client';
+
+import { useBroadcastersData } from '@/hooks/useBroadcastersData';
 import { Users, Clock, ShieldCheck, Send } from 'lucide-react';
 import EmptyState from '@/components/ui/EmptyState';
 import BroadcasterRow from '@/components/dashboard/BroadcasterRow';
 
 export default function Broadcasters() {
-    const [broadcasters, setBroadcasters] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [testingWebhook, setTestingWebhook] = useState(false);
-
-    useEffect(() => {
-        // Query all users who have a twitchUsername (indicating they are broadcasters)
-        const usersRef = collection(db, 'users');
-        const unsubscribe = onSnapshot(usersRef, (snapshot) => {
-            const list = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(u => u.twitchUsername); // Only show those who signed in as broadcasters
-            setBroadcasters(list);
-            setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    const setStatus = async (userId, status) => {
-        try {
-            await updateDoc(doc(db, 'users', userId), { status });
-        } catch (e) {
-            console.error('Failed to update status:', e);
-        }
-    };
-
-    const testWebhook = async () => {
-        setTestingWebhook(true);
-        try {
-            const response = await fetch('/api/notify-signup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: 'test-webhook-' + Date.now(),
-                    userData: {
-                        twitchUsername: 'test_user',
-                        displayName: 'Test User',
-                        photoURL: 'https://static-cdn.jtvnw.net/user-default-pictures-uv/cdd517fe-def4-11e9-948e-784f43822e80-profile_image-300x300.png',
-                        status: 'waiting',
-                        lastLogin: new Date().toISOString()
-                    }
-                })
-            });
-
-            if (response.ok) {
-                alert('✅ Test notification sent to Discord!');
-            } else {
-                alert('❌ Failed to send test notification. Check console for details.');
-            }
-        } catch (error) {
-            console.error('Test webhook error:', error);
-            alert('❌ Error sending test notification: ' + error.message);
-        } finally {
-            setTestingWebhook(false);
-        }
-    };
+    const { broadcasters, loading, testingWebhook, setStatus, testWebhook } = useBroadcastersData();
 
     if (loading) return (
         <div className="flex items-center justify-center p-20 text-zinc-500">
