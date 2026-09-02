@@ -4,6 +4,7 @@ import { Shield, Send, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useBroadcastersData } from '@/hooks/useBroadcastersData';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
+import ResizableWidth from './ResizableWidth';
 import { bevel, MONO, tiny, L } from './treatments';
 import { pressStart2P } from '@/lib/fonts';
 import EmptyState from '@/components/ui/EmptyState';
@@ -62,14 +63,14 @@ export default function BroadcastersPane({ t, d }) {
                     );
                 })}
             </Pane>
-            <div style={{ width: 200, flex: 'none', display: 'flex', flexDirection: 'column', gap: d.gutter }}>
+            <ResizableWidth t={t} storageKey="sc-stats-w" defaultWidth={200} minWidth={150} maxWidth={360} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter }}>
                 {[[broadcasters.length, 'Registered'], [approved, 'Approved'], [waiting, 'Awaiting review']].map(([n, l]) => (
                     <div key={l} style={{ padding: '14px 12px', background: t.pane, border: `1px solid ${t.hair}`, ...bevel(t) }}>
                         <div style={t.modern ? { fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 900, letterSpacing: '-.02em', color: t.text } : { fontFamily: ARCADE, fontSize: 22, lineHeight: 1.4, color: t.accent, textShadow: t.glow ? '0 0 14px rgba(7,252,3,.4)' : 'none' }}>{n}</div>
                         <div style={{ marginTop: 4, ...tiny(t), color: t.faint }}>{L(t, l)}</div>
                     </div>
                 ))}
-            </div>
+            </ResizableWidth>
         </div>
     );
 }

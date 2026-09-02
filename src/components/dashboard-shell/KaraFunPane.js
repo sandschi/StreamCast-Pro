@@ -5,6 +5,7 @@ import { useKaraFunData } from '@/hooks/useKaraFunData';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
+import ResizableWidth from './ResizableWidth';
 import { MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import TextInput from '@/components/ui/TextInput';
@@ -74,7 +75,7 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                     </>
                 )}
             </Pane>
-            <div style={{ width: d.inspector, flex: 'none', display: 'flex', flexDirection: 'column', gap: d.gutter, overflowY: 'auto', minHeight: 0 }}>
+            <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector} minWidth={210} maxWidth={480} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, overflowY: 'auto', minHeight: 0 }}>
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -96,7 +97,7 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                     <RangeSlider label="Now Playing X" value={userSettings?.karafunNowPlayingPosX ?? 50} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosX', v)} />
                     <RangeSlider label="Now Playing Y" value={userSettings?.karafunNowPlayingPosY ?? 90} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosY', v)} />
                 </Pane>
-            </div>
+            </ResizableWidth>
         </div>
     );
 }

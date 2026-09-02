@@ -5,7 +5,7 @@ export const NAV = [
     { id: 'history', label: 'History', icon: History, title: 'Message History' },
     { id: 'users', label: 'Users', icon: Users, title: 'Manage Users' },
     { id: 'karafun', label: 'KaraFun', icon: Music, title: 'KaraFun Queue' },
-    { id: 'settings', label: 'Overlay', icon: Settings, title: 'Overlay Customization' },
+    { id: 'settings', label: 'Settings', icon: Settings, title: 'Overlay Customization' },
     { id: 'api', label: 'Remote', icon: Terminal, title: 'Remote API Controls' },
     { id: 'broadcasters', label: 'Broadcasters', icon: Shield, title: 'Manage Broadcasters' },
 ];

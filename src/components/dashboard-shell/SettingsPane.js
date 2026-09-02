@@ -8,6 +8,7 @@ import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
 import ResizableBox from './ResizableBox';
+import ResizableWidth from './ResizableWidth';
 import { TREATMENTS, bevel, tiny, L } from './treatments';
 import TextInput from '@/components/ui/TextInput';
 import Select from '@/components/ui/Select';
@@ -203,7 +204,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
                 <ToggleSwitch checked={settings.karafunEnabled} onChange={v => updateSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar." />
             </Pane>
 
-            <div style={{ width: d.inspector + 40, flex: 'none', display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0, overflowY: 'auto' }}>
+            <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector + 40} minWidth={210} maxWidth={520} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0, overflowY: 'auto' }}>
                 <ResizableBox t={t} storageKey="sc-settings-live-preview-h" defaultHeight={220} minHeight={140} maxHeight={560}
                     style={{ background: t.pane, border: `1px solid ${t.edge}`, ...bevel(t) }}>
                     <div style={{ height: d.toolbar, flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', borderBottom: `1px solid ${t.hair}`, background: t.inset }}>
@@ -223,7 +224,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
                     <RangeSlider label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={v => updateSetting('posX', v)} />
                     <RangeSlider label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={v => updateSetting('posY', v)} />
                 </Pane>
-            </div>
+            </ResizableWidth>
         </div>
     );
 }

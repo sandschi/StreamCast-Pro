@@ -22,7 +22,7 @@ export default function StatusBar({ t, d, tab, onAir, conn, role, queueDepth = 0
             <span style={{ ...cell, color: onAir ? t.accent : t.faint }}>{L(t, onAir ? 'Overlay visible' : 'Overlay hidden')}</span>
             {partyId && <span style={cell}>{L(t, `Party ${partyId}`)}</span>}
             <span style={{ flex: 1 }} />
-            <span style={{ ...cell, borderRight: 'none', color: t.faint }}>{L(t, tab.charAt(0).toUpperCase() + tab.slice(1))} · ⌘{NAV.findIndex(n => n.id === tab) + 1}</span>
+            <span style={{ ...cell, borderRight: 'none', color: t.faint }}>{L(t, NAV.find(n => n.id === tab)?.label || tab)} · ⌘{NAV.findIndex(n => n.id === tab) + 1}</span>
         </div>
     );
 }

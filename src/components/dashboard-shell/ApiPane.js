@@ -5,6 +5,7 @@ import { useApiSettingsData, REMOTE_ACTIONS } from '@/hooks/useApiSettingsData';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
+import ResizableWidth from './ResizableWidth';
 import { MONO, tiny, L } from './treatments';
 import TextInput from '@/components/ui/TextInput';
 import EmptyState from '@/components/ui/EmptyState';
@@ -48,7 +49,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
                     </div>
                 ))}
             </Pane>
-            <div style={{ width: d.inspector, flex: 'none', display: 'flex', flexDirection: 'column', gap: d.gutter }}>
+            <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector} minWidth={210} maxWidth={480} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter }}>
                 <Pane t={t} d={d} icon={<Key size={13} />} title="API Token">
                     <Field t={t} label="Active token">
                         <TextInput mono readOnly value={privateConfig.apiToken} />
@@ -59,7 +60,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
                     </div>
                     <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.faint }}>Regenerating invalidates every existing remote URL.</span>
                 </Pane>
-            </div>
+            </ResizableWidth>
         </div>
     );
 }

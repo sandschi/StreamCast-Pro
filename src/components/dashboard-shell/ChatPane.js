@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
+import ResizableWidth from './ResizableWidth';
 import { bevel, lbl, tiny, L, Dot, CONN } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import SuggestionChip from '@/components/ui/SuggestionChip';
@@ -105,7 +106,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
             </Pane>
 
             {showInspector && (
-                <div style={{ width: d.inspector, flex: 'none', display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0 }}>
+                <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector} minWidth={210} maxWidth={480} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0 }}>
                     <div style={{ flex: 'none', display: 'flex', flexDirection: 'column', background: t.pane, border: `1px solid ${activeMessage ? t.edge : t.hair}`, ...bevel(t) }}>
                         <div style={{ height: d.toolbar, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', borderBottom: `1px solid ${t.hair}`, background: t.inset }}>
                             <span style={{ ...lbl(t), color: activeMessage ? t.accent : t.dim }}>{L(t, activeMessage ? '● On stream' : '○ Overlay idle')}</span>
@@ -139,7 +140,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                             <LinkIcon size={14} /><span style={{ flex: 1 }}>Copy Mod Link</span>
                         </button>
                     </Pane>
-                </div>
+                </ResizableWidth>
             )}
         </div>
     );
