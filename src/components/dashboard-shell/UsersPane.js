@@ -38,12 +38,24 @@ export default function UsersPane({ t, d, targetUid }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 10px', height: 24, background: t.inset, borderBottom: `1px solid ${t.hair}`, ...tiny(t), color: t.faint }}>
                     <span style={{ width: 26 }} /><span style={{ flex: 1 }}>{L(t, 'User')}</span><span style={{ width: 170 }}>{L(t, 'Role')}</span><span style={{ width: 60 }}>{L(t, 'Seen')}</span><span style={{ width: 26 }} />
                 </div>
-                {userList.map(u => (
+                {userList.map(u => {
+                    // displayName falls back to the raw Firestore/Firebase Auth doc
+                    // ID (useUsersData.js) when no presence/permission record ever
+                    // set a real name — that's an internal ID, not anything from
+                    // Twitch, and isn't fit to show as a person's name.
+                    const isRawId = u.displayName === u.id;
+                    const primary = u.twitchUsername ? `@${u.twitchUsername}` : (isRawId ? 'Unknown user' : u.displayName);
+                    const secondary = !isRawId && u.twitchUsername && u.displayName !== u.twitchUsername ? u.displayName : null;
+                    return (
                     <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 10px', height: d.row + 10, borderBottom: `1px solid ${t.hair}`, borderLeft: `2px solid ${u.isOnline ? t.accent : 'transparent'}` }}>
-                        <Avatar photoURL={u.photoURL} username={u.twitchUsername || u.displayName} size={22} />
+                        <Avatar photoURL={u.photoURL} username={u.twitchUsername || (isRawId ? undefined : u.displayName)} size={22} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.displayName}</div>
-                            {u.twitchUsername && <div style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>@{u.twitchUsername}</div>}
+                            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600, color: isRawId ? t.faint : t.text, fontStyle: isRawId ? 'italic' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {primary}
+                            </div>
+                            {secondary && (
+                                <div style={{ fontFamily: MONO, fontSize: 10, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{secondary}</div>
+                            )}
                         </div>
                         <div style={{ width: 170, display: 'flex', gap: 1 }}>
                             {ROLES.map(r => (
@@ -60,7 +72,8 @@ export default function UsersPane({ t, d, targetUid }) {
                         </span>
                         <button onClick={() => removePermission(u.id)} title="Reset" style={{ width: 26, height: 22, display: 'grid', placeItems: 'center', appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}><Trash2 size={13} /></button>
                     </div>
-                ))}
+                    );
+                })}
             </div>
         </Pane>
     );
