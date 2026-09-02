@@ -87,8 +87,10 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                     </Field>
                     <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
                     <Field t={t} label="Overlay visibility">
-                        <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
-                        <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                            <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayQueueEnabled} onChange={(v) => handleToggleSetting('karafunOverlayQueueEnabled', v)} label="Queue on stream" />
+                            <ToggleSwitch t={t} checked={!!userSettings?.karafunOverlayNowPlayingEnabled} onChange={(v) => handleToggleSetting('karafunOverlayNowPlayingEnabled', v)} label="Now Playing popup" />
+                        </div>
                     </Field>
                 </Pane>
                 <Pane t={t} d={d} icon={<Music size={13} />} title="Overlay Style">
