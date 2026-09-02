@@ -73,7 +73,7 @@ function ScaledBubblePreview({ message, settings, boxWidth, boxHeight }) {
     );
 }
 
-export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
+export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale, setUiScale }) {
     const { user } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
@@ -160,6 +160,18 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode }) {
                         </div>
                     </Field>
                 </div>
+                <Field t={t} label="UI Scale" hint="Zooms the whole dashboard for legibility — this is a per-browser preference, not shared with mods or saved to your channel.">
+                    <div style={{ display: 'flex', gap: 1 }}>
+                        {[100, 110, 125, 150].map(pct => (
+                            <button key={pct} onClick={() => setUiScale && setUiScale(pct)}
+                                style={{
+                                    flex: 1, height: 30, appearance: 'none', cursor: 'pointer', border: `1px solid ${uiScale === pct ? t.accent : t.hair}`,
+                                    background: uiScale === pct ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
+                                    color: uiScale === pct ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600
+                                }}>{pct}%</button>
+                        ))}
+                    </div>
+                </Field>
                 <ToggleSwitch checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
                 <ToggleSwitch checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
 
