@@ -396,7 +396,7 @@ function DashboardContent() {
     return (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: t.app, color: t.text, fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
             <TitleBar t={t} d={d} conn={conn} channel={chat.channelName || navUser.username || 'Not connected'} />
-            {menubar && <MenuBar t={t} d={d} onSelect={handleMenuSelect} />}
+            {menubar && <MenuBar t={t} d={d} onSelect={handleMenuSelect} restricted={!hasVerifiedAccess} />}
             {navVariant === 'tabs' && <NavTabStrip t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} />}
             <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
                 {navVariant === 'rail' && <NavRail t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} onSignOut={logout} />}

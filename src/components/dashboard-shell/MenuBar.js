@@ -13,11 +13,22 @@ export const MENUS = {
     Help: ['Changelog', 'Remote API Reference', 'About StreamCast Pro'],
 };
 
-export default function MenuBar({ t, d, onSelect }) {
+// While access isn't verified (Access Pending / Access Denied) there is no
+// functional workspace behind Overlay/Chat's actions, so those categories are
+// dropped entirely and File is trimmed to just Sign Out — everything else in
+// this component (Window/Help) is chrome-level and stays available either way.
+const RESTRICTED_MENUS = {
+    File: ['Sign Out'],
+    Window: MENUS.Window,
+    Help: MENUS.Help,
+};
+
+export default function MenuBar({ t, d, onSelect, restricted = false }) {
     const [open, setOpen] = useState(null);
+    const menus = restricted ? RESTRICTED_MENUS : MENUS;
     return (
         <div onMouseLeave={() => setOpen(null)} style={{ height: d.menu, flex: 'none', position: 'relative', zIndex: 80, display: 'flex', alignItems: 'stretch', padding: '0 6px', background: t.chrome, borderBottom: `1px solid ${t.hair}`, ...scan(t) }}>
-            {Object.keys(MENUS).map(m => (
+            {Object.keys(menus).map(m => (
                 <div key={m} style={{ position: 'relative', display: 'flex' }}>
                     <button onClick={() => setOpen(open === m ? null : m)} onMouseEnter={() => open && setOpen(m)}
                         style={{
@@ -26,7 +37,7 @@ export default function MenuBar({ t, d, onSelect }) {
                         }}>{m}</button>
                     {open === m && (
                         <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: 238, padding: 4, background: t.chrome, border: `1px solid ${t.edge}`, boxShadow: '0 18px 40px -12px rgba(0,0,0,.8)', ...bevel(t) }}>
-                            {MENUS[m].map((item, i) => item === '—'
+                            {menus[m].map((item, i) => item === '—'
                                 ? <div key={i} style={{ height: 1, margin: '4px 6px', background: t.hair }} />
                                 : <div key={i}
                                     onClick={() => { setOpen(null); onSelect && onSelect(m, item); }}
