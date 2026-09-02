@@ -12,9 +12,16 @@ import TwitchIcon from '@/components/TwitchIcon';
 import Button from '@/components/ui/Button';
 import Avatar from '@/components/ui/Avatar';
 import MessageBubble from '@/components/overlay/MessageBubble';
+import { pressStart2P } from '@/lib/fonts';
 
 const MONO = 'var(--font-mono)';
-const ARCADE = 'var(--font-display)';
+// Not var(--font-display): that CSS custom property chain silently fails to
+// resolve at point-of-use in this Tailwind v4 setup (confirmed via computed
+// styles - every var()-chained --font-* custom property outside an actual
+// Tailwind utility class comes back empty, even though each piece resolves
+// fine when queried directly). Using next/font/local's own resolved
+// font-family string sidesteps it entirely and is guaranteed correct.
+const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
 
 /* ---------- atoms ---------- */
 

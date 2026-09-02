@@ -1,6 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import localFont from "next/font/local";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { pressStart2P } from "@/lib/fonts";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -11,15 +11,6 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
-
-// Display face — logotypes, marketing headlines and big stat numerals only.
-// Never body/nav/buttons/labels. See Designsystem/HANDOFF.md section 1.
-const pressStart2P = localFont({
-  src: "./fonts/PressStart2P-Regular.ttf",
-  variable: "--font-press-start-2p",
-  weight: "400",
-  display: "swap",
 });
 
 export const metadata = {

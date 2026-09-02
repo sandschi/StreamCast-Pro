@@ -166,8 +166,12 @@
   --ls-widest: .2em;
 
   /* Display face — logotypes, marketing headlines, big stat numerals only.
-     Self-hosted via next/font/local in layout.js. Never body/nav/buttons/labels. */
-  --font-display: var(--font-press-start-2p), var(--font-sans);
+     Self-hosted via next/font/local in layout.js. Never body/nav/buttons/labels.
+     Falls back to --font-geist-sans directly (not --font-sans): that indirection
+     doesn't resolve at point-of-use in this Tailwind v4 setup even though the
+     variable it points to does, when queried from a plain :root custom property
+     chain rather than a Tailwind utility class. Verified via computed styles. */
+  --font-display: var(--font-press-start-2p), var(--font-geist-sans), system-ui, sans-serif;
 
   /* Semantic type roles */
   --type-display: var(--fw-black) var(--fs-5xl) / var(--lh-tight) var(--font-sans);
