@@ -11,7 +11,7 @@ import ResizableWidth from './ResizableWidth';
 import { bevel, lbl, tiny, L, Dot, CONN } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import SuggestionChip from '@/components/ui/SuggestionChip';
-import ChatMessageRow from '@/components/dashboard/ChatMessageRow';
+import ChatMessageRow from './ChatMessageRow';
 import MessageBubble from '@/components/overlay/MessageBubble';
 
 const DEFAULT_SETTINGS = {
@@ -99,7 +99,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                     )}
                     {displayMessages.map((msg) => (
                         <div key={msg.id} style={{ padding: d.compact ? '7px 10px' : '10px 12px', borderBottom: `1px solid ${t.hair}`, minWidth: 0 }}>
-                            <ChatMessageRow msg={msg} userRole={userRole} onShow={() => sendToScreen(msg)} onShowPermanent={() => sendToScreen(msg, true)} />
+                            <ChatMessageRow t={t} msg={msg} userRole={userRole} onShow={() => sendToScreen(msg)} onShowPermanent={() => sendToScreen(msg, true)} />
                         </div>
                     ))}
                 </div>
