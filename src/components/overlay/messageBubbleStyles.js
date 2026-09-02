@@ -26,9 +26,10 @@ export function getBubbleStyles(settings, messageColor) {
     const baseBodyRadiusRight = (settings.posX > 60) ? '0' : `${settings.borderRadius}px`;
 
     const commonBodyStyles = {
-        borderRadius: `${settings.borderRadius}px`,
         borderTopLeftRadius: baseBodyRadiusLeft,
         borderTopRightRadius: baseBodyRadiusRight,
+        borderBottomLeftRadius: `${settings.borderRadius}px`,
+        borderBottomRightRadius: `${settings.borderRadius}px`,
     };
 
     const commonHeaderStyles = {
