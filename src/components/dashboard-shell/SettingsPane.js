@@ -20,18 +20,19 @@ const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', '
 const STYLES = [['classic', 'Classic'], ['glass', 'Glass'], ['neon', 'Neon'], ['minimal', 'Minimal'], ['bold', 'Bold'], ['cyberpunk', 'Cyber'], ['comic', 'Comic'], ['retro', 'Retro'], ['future', 'Future']];
 const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate', 'Slate'], ['phosphor', 'Phosphor']];
 
-// A real section break, not just another field: a rule above (skipped on the
-// first section, which already sits right under Pane's own toolbar) and a
-// heading sized well past Field's tiny() labels so it actually reads as a
-// group title rather than blending into the field noise around it.
-function Section({ t, label, first }) {
+const SECTIONS = [['dashboard', 'Dashboard'], ['overlay', 'Overlay appearance'], ['sound', 'Sound & integrations']];
+
+function SectionTabs({ t, active, onChange }) {
     return (
-        <div style={{ marginTop: first ? 0 : 10, paddingTop: first ? 0 : 20, borderTop: first ? 'none' : `1px solid ${t.hair}` }}>
-            <span style={{
-                fontFamily: t.modern ? 'var(--font-sans)' : 'var(--font-mono)',
-                fontSize: t.modern ? 15 : 13.5, fontWeight: 800,
-                letterSpacing: t.modern ? '-.01em' : '.1em', color: t.accent,
-            }}>{L(t, label)}</span>
+        <div style={{ display: 'flex', gap: 1 }}>
+            {SECTIONS.map(([id, label]) => (
+                <button key={id} onClick={() => onChange(id)}
+                    style={{
+                        flex: 1, height: 32, appearance: 'none', cursor: 'pointer', border: `1px solid ${active === id ? t.accent : t.hair}`,
+                        background: active === id ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
+                        color: active === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, ...bevel(t)
+                    }}>{L(t, label)}</button>
+            ))}
         </div>
     );
 }
@@ -98,6 +99,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
 
     const previewMessage = { id: 'preview', username: user?.displayName || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: user?.photoURL, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
     const canHide = activeMessage && (user?.uid === effectiveUid || isModeratorMode);
+    const [activeSection, setActiveSection] = useState('dashboard');
 
     const previewBoxRef = useRef(null);
     const [previewBoxSize, setPreviewBoxSize] = useState({ width: 0, height: 0 });
@@ -129,7 +131,9 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
 
-                <Section t={t} label="Dashboard" first />
+                <SectionTabs t={t} active={activeSection} onChange={setActiveSection} />
+
+                {activeSection === 'dashboard' && <>
                 <Field t={t} label="Appearance" hint="Applies to this dashboard immediately — your stream overlay is unaffected.">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                         {TREATMENT_IDS.map(([id, label]) => {
@@ -195,8 +199,9 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToggleSwitch t={t} checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
                     <ToggleSwitch t={t} checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
                 </div>
+                </>}
 
-                <Section t={t} label="Overlay appearance" />
+                {activeSection === 'overlay' && <>
                 <Field t={t} label="Bubble style">
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
                         {STYLES.map(([id, label]) => <StyleTile key={id} t={t} id={id} label={label} selected={settings.bubbleStyle === id} onClick={() => updateSetting('bubbleStyle', id)} />)}
@@ -218,7 +223,9 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                 <RangeSlider t={t} label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
                 <ToggleSwitch t={t} checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's circular avatar next to their name." />
                 {settings.showAvatar && <RangeSlider t={t} label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
-                <Section t={t} label="Sound & integrations" />
+                </>}
+
+                {activeSection === 'sound' && <>
                 <ToggleSwitch t={t} checked={settings.soundEnabled} onChange={v => updateSetting('soundEnabled', v)} label="Enable Sound" description="Play a sound when a message appears." />
                 {settings.soundEnabled && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
@@ -235,6 +242,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     </div>
                 )}
                 <ToggleSwitch t={t} checked={settings.karafunEnabled} onChange={v => updateAppearanceSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar. Takes effect immediately — the KaraFun tab appears or disappears as soon as you toggle this." />
+                </>}
             </Pane>
 
             <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector + 40} minWidth={210} maxWidth={520} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, minHeight: 0, overflowY: 'auto' }}>
