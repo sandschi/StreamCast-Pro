@@ -39,7 +39,10 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                 {!partyId ? (
                     <EmptyState icon={<Music size={32} />} title="No Party ID set." hint="Save your KaraFun Party ID in the panel on the right to start tracking the queue." />
                 ) : (
-                    <>
+                    // One wrapper so this is Pane's only flush child — Pane's own content
+                    // gap would otherwise land between every row (on top of each row's
+                    // own divider below it), pushing each row's content down unevenly.
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: d.pad, borderBottom: `1px solid ${t.edge}`, background: t.inset }}>
                             <div style={{ ...tiny(t), color: t.faint }}>{L(t, 'Now playing')}</div>
                             {queueData?.currentSong ? (
@@ -72,7 +75,7 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                                 {song.singer && <span style={{ flex: 'none', maxWidth: 170, fontFamily: MONO, fontSize: 11, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{song.singer}</span>}
                             </div>
                         ))}
-                    </>
+                    </div>
                 )}
             </Pane>
             <ResizableWidth t={t} storageKey="sc-inspector-w" defaultWidth={d.inspector} minWidth={210} maxWidth={480} style={{ display: 'flex', flexDirection: 'column', gap: d.gutter, overflowY: 'auto', minHeight: 0 }}>
