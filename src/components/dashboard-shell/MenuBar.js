@@ -14,13 +14,13 @@ export const MENUS = {
 };
 
 // While access isn't verified (Access Pending / Access Denied) there is no
-// functional workspace behind Overlay/Chat's actions, so those categories are
-// dropped entirely and File is trimmed to just Sign Out — everything else in
-// this component (Window/Help) is chrome-level and stays available either way.
+// functional workspace behind most of this: Overlay/Chat/Window are dropped
+// entirely (Window's density/fullscreen toggles have nothing to apply to
+// without a workspace either), File is trimmed to just Sign Out, and Help
+// loses Remote API Reference since it points at a tab that isn't reachable.
 const RESTRICTED_MENUS = {
     File: ['Sign Out'],
-    Window: MENUS.Window,
-    Help: MENUS.Help,
+    Help: MENUS.Help.filter(item => item !== 'Remote API Reference'),
 };
 
 export default function MenuBar({ t, d, onSelect, restricted = false }) {
