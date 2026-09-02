@@ -5,7 +5,6 @@ import { MessageSquare, RefreshCw, XCircle, HandHelping, Zap, Send, ScreenShare,
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
-import { useChatData } from '@/hooks/useChatData';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
 import { bevel, lbl, tiny, L, Dot, CONN } from './treatments';
@@ -21,7 +20,11 @@ const DEFAULT_SETTINGS = {
 
 const ACTION_BTN = (t) => ({ display: 'flex', alignItems: 'center', gap: 9, height: 30, padding: '0 9px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: t.text, fontFamily: 'var(--font-sans)', fontSize: 12.5, textAlign: 'left', width: '100%', ...bevel(t) });
 
-export default function ChatPane({ t, d, targetUid, userRole }) {
+// Accepts the return value of useChatData as `chat` — lifted to the dashboard
+// shell so the connection it opens survives tab switches (this pane is kept
+// mounted, just hidden, exactly like the classic Chat.js was) and so the
+// title/status bar chrome can show the same real connection state.
+export default function ChatPane({ t, d, userRole, chat, hidden = false, muted = false }) {
     const { user } = useAuth();
     const {
         effectiveUid,
@@ -35,7 +38,7 @@ export default function ChatPane({ t, d, targetUid, userRole }) {
         approveSuggestion,
         denySuggestion,
         reconnect,
-    } = useChatData({ targetUid, userRole });
+    } = chat;
 
     const [overlaySettings, setOverlaySettings] = useState(DEFAULT_SETTINGS);
     useEffect(() => {
@@ -59,7 +62,7 @@ export default function ChatPane({ t, d, targetUid, userRole }) {
     });
 
     return (
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: hidden ? 'none' : 'flex', gap: d.gutter }}>
             <Pane t={t} d={d} icon={<MessageSquare size={13} />} title={`Twitch Chat · #${channelName || '…'}`} flush
                 actions={<>
                     <span style={{ ...lbl(t), color: t.faint }}>{L(t, `${displayMessages.length} msg`)}</span>
@@ -78,7 +81,7 @@ export default function ChatPane({ t, d, targetUid, userRole }) {
                         {conn === 'disconnected' && <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={reconnect}>Reconnect</ToolBtn>}
                     </div>
                 )}
-                {userRole !== 'viewer' && suggestions.length > 0 && (
+                {userRole !== 'viewer' && !muted && suggestions.length > 0 && (
                     <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: `1px solid ${t.edge}`, background: t.glow ? 'rgba(7,252,3,.06)' : t.inset, overflowX: 'auto', overflowY: 'hidden' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 10, borderRight: `1px solid ${t.hair}`, ...tiny(t), color: t.accent, whiteSpace: 'nowrap' }}>
                             <HandHelping size={12} /> {L(t, 'Suggestions')}

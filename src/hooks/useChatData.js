@@ -10,9 +10,9 @@ import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, d
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
 // tmi.js/Firestore wiring rather than duplicating it. No behavior changes.
-export function useChatData({ targetUid, userRole }) {
+export function useChatData({ targetUid, userRole, enabled = true }) {
     const { user } = useAuth();
-    const effectiveUid = useMemo(() => targetUid || user?.uid, [targetUid, user?.uid]);
+    const effectiveUid = useMemo(() => (enabled ? (targetUid || user?.uid) : null), [enabled, targetUid, user?.uid]);
 
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({ sevenTV: [], bttv: [], ffz: [] });
@@ -214,6 +214,11 @@ export function useChatData({ targetUid, userRole }) {
         } catch (e) { console.error(e); }
     };
 
+    // Local-only: the live chat log is ephemeral React state, not persisted
+    // anywhere (a page reload already clears it), so clearing it needs no
+    // Firestore write.
+    const clearMessages = () => setMessages([]);
+
     return {
         effectiveUid,
         displayMessages,
@@ -226,5 +231,6 @@ export function useChatData({ targetUid, userRole }) {
         approveSuggestion,
         denySuggestion,
         reconnect,
+        clearMessages,
     };
 }

@@ -11,9 +11,12 @@ export const NAV = [
 ];
 
 // Which tabs each role can reach. 'waiting' sees no dashboard at all.
+// 'karafun' (needs karafunEnabled + broadcaster/admin) and 'broadcasters' (master
+// admin only) are conditionally appended by the page, not listed here — matching
+// the real access rules in dashboard/page.js rather than the design mockup's guess.
 export const ROLE_TABS = {
-    broadcaster: NAV.map(n => n.id),
-    mod: ['chat', 'history', 'users', 'karafun'],
+    broadcaster: ['chat', 'history', 'users', 'settings', 'api'],
+    mod: ['chat', 'history', 'users'],
     viewer: ['chat'],
     waiting: [],
 };
