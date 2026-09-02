@@ -16,7 +16,7 @@ import ToggleSwitch from '@/components/ui/ToggleSwitch';
 import StyleTile from '@/components/ui/StyleTile';
 import MessageBubble from '@/components/overlay/MessageBubble';
 
-const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton'];
+const FONTS = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Oswald', 'Ubuntu', 'Raleway', 'Playfair Display', 'Bangers', 'Pacifico', 'Monoton', 'Press Start 2P'];
 const STYLES = [['classic', 'Classic'], ['glass', 'Glass'], ['neon', 'Neon'], ['minimal', 'Minimal'], ['bold', 'Bold'], ['cyberpunk', 'Cyber'], ['comic', 'Comic'], ['retro', 'Retro'], ['future', 'Future']];
 const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate', 'Slate'], ['phosphor', 'Phosphor']];
 
@@ -188,7 +188,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     </div>
                 </Field>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: d.gap }}>
                     <Field t={t} label="Font family"><Select t={t} value={settings.fontFamily} options={FONTS} onChange={v => updateSetting('fontFamily', v)} /></Field>
                     <Field t={t} label="Text colour">
                         <div style={{ display: 'flex', gap: 6 }}>
@@ -196,13 +196,21 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '0 10px', fontFamily: 'var(--font-mono)', fontSize: 11.5, textTransform: 'uppercase', color: t.dim, background: t.inset, border: `1px solid ${t.hair}` }}>{settings.textColor}</div>
                         </div>
                     </Field>
+                    <ToggleSwitch t={t} checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's avatar" />
                 </div>
 
-                <RangeSlider t={t} label="Display Duration" value={settings.displayDuration} min={3} max={60} unit="s" onChange={v => updateSetting('displayDuration', v)} hint="How long the message stays on screen (in seconds)." />
-                <RangeSlider t={t} label="Message Text Size" value={settings.fontSize} min={12} max={80} unit="px" onChange={v => updateSetting('fontSize', v)} />
-                <RangeSlider t={t} label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
-                <ToggleSwitch t={t} checked={settings.showAvatar} onChange={v => updateSetting('showAvatar', v)} label="Enable Profile Pictures" description="Show the sender's circular avatar next to their name." />
-                {settings.showAvatar && <RangeSlider t={t} label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                    <RangeSlider t={t} label="Display Duration" value={settings.displayDuration} min={3} max={60} unit="s" onChange={v => updateSetting('displayDuration', v)} hint="How long the message stays on screen (in seconds)." />
+                    <RangeSlider t={t} label="Message Text Size" value={settings.fontSize} min={12} max={80} unit="px" onChange={v => updateSetting('fontSize', v)} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                    <RangeSlider t={t} label="Username Size" value={settings.nameSize} min={8} max={40} unit="px" onChange={v => updateSetting('nameSize', v)} />
+                    {settings.showAvatar && <RangeSlider t={t} label="Avatar Diameter" value={settings.avatarSize} min={20} max={120} unit="px" onChange={v => updateSetting('avatarSize', v)} hint="Tip: Setting this close to text size creates a modern inline look." />}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                    <RangeSlider t={t} label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={v => updateSetting('posX', v)} />
+                    <RangeSlider t={t} label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={v => updateSetting('posY', v)} />
+                </div>
                 </>}
 
                 {activeSection === 'sound' && <>
@@ -242,8 +250,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <div style={{ position: 'relative', aspectRatio: '16/9', backgroundColor: t.app, border: `1px solid ${t.hair}`, backgroundImage: `linear-gradient(${t.hair} 1px,transparent 1px),linear-gradient(90deg,${t.hair} 1px,transparent 1px)`, backgroundSize: '12.5% 16.6%' }}>
                         <div style={{ position: 'absolute', left: settings.posX + '%', top: settings.posY + '%', width: 10, height: 10, marginLeft: -5, marginTop: -5, background: t.accent, boxShadow: t.glow ? '0 0 12px rgba(7,252,3,.8)' : 'none' }} />
                     </div>
-                    <RangeSlider t={t} label="Horizontal (X)" value={settings.posX} unit="%" valueTone="accent" onChange={v => updateSetting('posX', v)} />
-                    <RangeSlider t={t} label="Vertical (Y)" value={settings.posY} unit="%" valueTone="accent" onChange={v => updateSetting('posY', v)} />
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.faint }}>Drag the sliders under Overlay appearance to move this — they were moved off this panel since they were easy to miss below the preview.</span>
                 </Pane>
             </ResizableWidth>
         </div>
