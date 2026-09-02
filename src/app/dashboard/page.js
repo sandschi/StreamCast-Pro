@@ -248,12 +248,17 @@ function DashboardContent() {
     const chat = useChatData({ targetUid: chatEnabled ? targetUid : null, userRole, enabled: chatEnabled });
 
     const allowed = useMemo(() => {
+        // userRole is set to 'broadcaster' optimistically the moment someone reaches
+        // their own dashboard, before broadcasterStatus (waiting/approved/denied) is
+        // known — without this check, a pending or denied broadcaster would see the
+        // full tab strip even though the body correctly shows the gate screen.
+        if (!hasVerifiedAccess) return [];
         const base = ROLE_TABS[userRole] || [];
         const extra = [];
         if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
         if (isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') extra.push('broadcasters');
         return NAV.map(n => n.id).filter(id => base.includes(id) || extra.includes(id));
-    }, [userRole, isMasterAdmin, userSettings?.karafunEnabled, user?.displayName]);
+    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled, user?.displayName]);
 
     // Cmd/Ctrl+1-9 tab switching
     useEffect(() => {
