@@ -3,13 +3,16 @@
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import { pressStart2P } from '@/lib/fonts';
+
+const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
 
 function renderChangelogLine(line, i) {
     if (line.startsWith('## ')) {
-        return <h3 key={i} className="text-lg font-bold text-zinc-100 mt-6 first:mt-0">{line.slice(3)}</h3>;
+        return <h3 key={i} className="text-zinc-100 mt-8 first:mt-0" style={{ fontFamily: ARCADE, fontSize: 16, lineHeight: 1.6 }}>{line.slice(3)}</h3>;
     }
     if (line.startsWith('### ')) {
-        return <h4 key={i} className="text-xs font-black uppercase tracking-[0.15em] text-primary-400 mt-4 mb-1">{line.slice(4)}</h4>;
+        return <h4 key={i} className="text-primary-400 mt-5 mb-2" style={{ fontFamily: ARCADE, fontSize: 12, lineHeight: 1.6, letterSpacing: '.05em' }}>{line.slice(4)}</h4>;
     }
     if (line.startsWith('# ')) {
         return null; // top-level title, already shown in the modal header
@@ -43,7 +46,7 @@ export default function ChangelogModal({ open, onClose }) {
     }, [open, content]);
 
     return (
-        <Modal open={open} onClose={onClose} title="Changelog" icon={<Sparkles size={18} />}>
+        <Modal open={open} onClose={onClose} title="Changelog" icon={<Sparkles size={18} />} width={800}>
             {error && <p className="text-sm text-red-400">{error}</p>}
             {!error && !content && (
                 <p className="text-sm text-zinc-500">Loading...</p>
