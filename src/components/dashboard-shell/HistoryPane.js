@@ -5,7 +5,7 @@ import { History as HistoryIcon, Trash2, ScreenShare, Send, XCircle } from 'luci
 import { useHistoryData } from '@/hooks/useHistoryData';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
-import { MONO, tiny, L } from './treatments';
+import { bevel, MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import Avatar from '@/components/ui/Avatar';
 import { formatTimestamp } from '@/lib/utils';
@@ -51,11 +51,11 @@ export default function HistoryPane({ t, d, targetUid, userRole }) {
                         </span>
                         <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
                             {canModerate && (
-                                <button onClick={() => resendToScreen(msg, true)} title="Show Permanently (∞)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: t.faint, ...tiny(t) }}>
+                                <button onClick={() => resendToScreen(msg, true)} title="Show Permanently (∞)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: t.faint, ...tiny(t), ...bevel(t) }}>
                                     {L(t, 'Send ∞')}
                                 </button>
                             )}
-                            <button onClick={() => resendToScreen(msg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.edge}`, background: 'transparent', color: t.accent, ...tiny(t) }}>
+                            <button onClick={() => resendToScreen(msg)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.edge}`, background: 'transparent', color: t.accent, ...tiny(t), ...bevel(t) }}>
                                 {userRole === 'viewer' ? <Send size={11} /> : <ScreenShare size={11} />}{L(t, userRole === 'viewer' ? 'Suggest' : 'Re-send')}
                             </button>
                         </div>

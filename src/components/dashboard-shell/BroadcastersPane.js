@@ -59,7 +59,7 @@ export default function BroadcastersPane({ t, d }) {
                                             style={{
                                                 flex: 1, height: 22, appearance: 'none', cursor: 'pointer', border: `1px solid ${status === s.id ? t.edge : t.hair}`,
                                                 background: status === s.id ? (t.glow ? 'rgba(7,252,3,.12)' : t.inset) : 'transparent', color: status === s.id ? TONE[s.id] : t.faint,
-                                                ...tiny(t)
+                                                ...tiny(t), ...bevel(t)
                                             }}>{L(t, s.label)}</button>
                                     ))}
                                 </div>

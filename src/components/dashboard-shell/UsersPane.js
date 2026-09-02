@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useUsersData } from '@/hooks/useUsersData';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
-import { MONO, tiny, L } from './treatments';
+import { bevel, MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import Avatar from '@/components/ui/Avatar';
 
@@ -63,7 +63,7 @@ export default function UsersPane({ t, d, targetUid }) {
                                     style={{
                                         flex: 1, height: 22, appearance: 'none', cursor: 'pointer', border: `1px solid ${u.role === r ? t.edge : t.hair}`,
                                         background: u.role === r ? (t.glow ? 'rgba(7,252,3,.14)' : t.inset) : 'transparent', color: u.role === r ? TONE[r] : t.faint,
-                                        ...tiny(t)
+                                        ...tiny(t), ...bevel(t)
                                     }}>{L(t, r)}</button>
                             ))}
                         </div>
