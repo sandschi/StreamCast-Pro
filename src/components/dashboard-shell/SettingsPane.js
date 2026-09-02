@@ -22,17 +22,27 @@ const TREATMENT_IDS = [['carbon', 'Carbon'], ['graphite', 'Graphite'], ['slate',
 
 const SECTIONS = [['dashboard', 'Dashboard'], ['overlay', 'Overlay appearance'], ['sound', 'Sound & integrations']];
 
-function SectionTabs({ t, active, onChange }) {
+// Real tabs (flat strip, top accent bar on the active item, no per-item
+// border box) — the same visual language as the dashboard's own top nav
+// (NavTabStrip.js), not the bordered segmented-button "pill" look used by
+// Navigation/Density/UI Scale further down.
+function SectionTabs({ t, d, active, onChange }) {
     return (
-        <div style={{ display: 'flex', gap: 1 }}>
-            {SECTIONS.map(([id, label]) => (
-                <button key={id} onClick={() => onChange(id)}
-                    style={{
-                        flex: 1, height: 32, appearance: 'none', cursor: 'pointer', border: `1px solid ${active === id ? t.accent : t.hair}`,
-                        background: active === id ? (t.glow ? 'rgba(7,252,3,.1)' : t.inset) : 'transparent',
-                        color: active === id ? t.accent : t.dim, fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, ...bevel(t)
-                    }}>{L(t, label)}</button>
-            ))}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 1, marginTop: -d.pad, marginLeft: -d.pad, marginRight: -d.pad, padding: '0 8px', borderBottom: `1px solid ${t.hair}`, background: t.chrome }}>
+            {SECTIONS.map(([id, label]) => {
+                const on = active === id;
+                return (
+                    <button key={id} onClick={() => onChange(id)}
+                        style={{
+                            display: 'flex', alignItems: 'center', height: 34, padding: '0 14px', appearance: 'none', cursor: 'pointer',
+                            borderLeft: `1px solid ${on ? t.hair : 'transparent'}`, borderRight: `1px solid ${on ? t.hair : 'transparent'}`,
+                            borderTop: `2px solid ${on ? t.accent : 'transparent'}`, borderBottom: 'none',
+                            background: on ? t.pane : 'transparent', color: on ? t.text : t.dim,
+                            fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: on ? 700 : 500,
+                            boxShadow: on && t.glow ? '0 -8px 18px -8px rgba(7,252,3,.35)' : 'none',
+                        }}>{L(t, label)}</button>
+                );
+            })}
         </div>
     );
 }
@@ -131,7 +141,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
 
-                <SectionTabs t={t} active={activeSection} onChange={setActiveSection} />
+                <SectionTabs t={t} d={d} active={activeSection} onChange={setActiveSection} />
 
                 {activeSection === 'dashboard' && <>
                 <Field t={t} label="Appearance" hint="Applies to this dashboard immediately — your stream overlay is unaffected.">
