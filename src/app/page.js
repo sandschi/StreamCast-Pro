@@ -12,6 +12,7 @@ import TwitchIcon from '@/components/TwitchIcon';
 import Button from '@/components/ui/Button';
 import Avatar from '@/components/ui/Avatar';
 import MessageBubble from '@/components/overlay/MessageBubble';
+import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import { pressStart2P } from '@/lib/fonts';
 
 const MONO = 'var(--font-mono)';
@@ -22,6 +23,14 @@ const MONO = 'var(--font-mono)';
 // fine when queried directly). Using next/font/local's own resolved
 // font-family string sidesteps it entirely and is guaranteed correct.
 const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
+
+// href: null means the item opens the Changelog modal instead of navigating.
+const FOOTER_LINKS = [
+    ['Product', [['Overlay styles', '#overlay'], ['Dashboard', '/dashboard'], ['Status', 'https://status.sandschi.xyz']]],
+    ['Community', [['Twitch', 'https://twitch.tv/sandschi'], ['Discord', 'https://d.sandschi.xyz'], ['Changelog', null]]],
+    ['Legal', [['Terms', '/terms'], ['Privacy', '/privacy'], ['Contact', 'mailto:support@sandschi.xyz']]],
+];
+const footerLinkStyle = { fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-muted)' };
 
 /* ---------- atoms ---------- */
 
@@ -132,6 +141,7 @@ export default function Home() {
     const { user, loginWithTwitch, loading } = useAuth();
     const router = useRouter();
     const [style, setStyle] = useState('retro');
+    const [showChangelog, setShowChangelog] = useState(false);
     const active = STYLES.find(s => s[0] === style) || STYLES[0];
 
     useEffect(() => {
@@ -346,12 +356,15 @@ export default function Home() {
                             StreamCast Pro is a Pervtown product. Small tools for small streams, run by the people who use them.
                         </p>
                     </div>
-                    {[['Product', ['Overlay styles', 'Dashboard', 'KaraFun queue', 'Status']],
-                    ['Community', ['Twitch', 'Discord', 'Changelog']],
-                    ['Legal', ['Terms', 'Privacy', 'Contact']]].map(([h, items]) => (
+                    {FOOTER_LINKS.map(([h, items]) => (
                         <div key={h} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
                             <Eyebrow>{h}</Eyebrow>
-                            {items.map(i => <a key={i} href="#overlay" style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-muted)' }}>{i}</a>)}
+                            {items.map(([label, href]) => href === null ? (
+                                <button key={label} type="button" onClick={() => setShowChangelog(true)}
+                                    style={{ ...footerLinkStyle, appearance: 'none', border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer' }}>{label}</button>
+                            ) : (
+                                <a key={label} href={href} style={footerLinkStyle} {...(href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{label}</a>
+                            ))}
                         </div>
                     ))}
                 </div>
@@ -359,6 +372,7 @@ export default function Home() {
                     <span>© 2026 Pervtown</span><span>Built for the Twitch community</span>
                 </div>
             </footer>
+            <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
         </div>
     );
 }
