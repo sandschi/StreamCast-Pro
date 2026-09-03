@@ -41,6 +41,14 @@ export function getBubbleStyles(settings, messageColor) {
     const headerBgColor = messageColor || '#9146FF';
     const headerShadowColor = messageColor || 'rgba(145, 70, 255, 0.7)';
 
+    // Every case below spells out all four border sides explicitly
+    // (borderTop/Right/Bottom/Left) instead of ever mixing the `border`
+    // shorthand with a longhand override in the same object. header/body are
+    // the same two motion.div elements across every bubbleStyle switch, so a
+    // case using `border` shorthand transitioning to/from a case using a
+    // longhand side (e.g. borderBottom) is exactly the mix React warns about
+    // ("don't mix shorthand and non-shorthand properties for the same
+    // value") — it showed up switching between styles during testing.
     switch (settings.bubbleStyle) {
         case 'cyberpunk':
             return {
@@ -49,13 +57,13 @@ export function getBubbleStyles(settings, messageColor) {
                     backgroundColor: '#ff003c',
                     clipPath: 'polygon(0% 15%, 15% 0%, 100% 0%, 100% 85%, 85% 100%, 0% 100%)',
                     boxShadow: `0 0 20px #ff003c`,
-                    border: 'none',
+                    borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                     padding: '10px 20px',
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(0,0,0,0.9)',
-                    border: '2px solid #00f0ff',
+                    borderTop: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderBottom: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff',
                     clipPath: 'polygon(0% 0%, 100% 0%, 100% 85%, 95% 100%, 0% 100%)',
                     boxShadow: `inset 0 0 10px #00f0ff80`,
                 }
@@ -65,7 +73,7 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: headerBgColor,
-                    border: '4px solid #000',
+                    borderTop: '4px solid #000', borderRight: '4px solid #000', borderBottom: '4px solid #000', borderLeft: '4px solid #000',
                     transform: 'rotate(-2deg)',
                     zIndex: 2,
                     marginBottom: '-8px'
@@ -74,7 +82,7 @@ export function getBubbleStyles(settings, messageColor) {
                     ...commonBodyStyles,
                     backgroundColor: '#fff',
                     color: '#000',
-                    border: '4px solid #000',
+                    borderTop: '4px solid #000', borderRight: '4px solid #000', borderBottom: '4px solid #000', borderLeft: '4px solid #000',
                     boxShadow: '8px 8px 0 #000',
                     backgroundImage: 'radial-gradient(#000 10%, transparent 11%)',
                     backgroundSize: '10px 10px',
@@ -90,14 +98,14 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: headerBgColor,
-                    border: '4px solid #fff',
+                    borderTop: '4px solid #fff', borderRight: '4px solid #fff', borderBottom: '4px solid #fff', borderLeft: '4px solid #fff',
                     boxShadow: '4px 4px 0 #000',
                     marginBottom: '4px'
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: '#000',
-                    border: '4px solid #fff',
+                    borderTop: '4px solid #fff', borderRight: '4px solid #fff', borderBottom: '4px solid #fff', borderLeft: '4px solid #fff',
                     boxShadow: '4px 4px 0 #000',
                 }
             };
@@ -106,8 +114,7 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: 'rgba(20, 30, 48, 0.9)',
-                    border: `1px solid ${headerBgColor}`,
-                    borderBottom: 'none',
+                    borderTop: `1px solid ${headerBgColor}`, borderRight: `1px solid ${headerBgColor}`, borderBottom: 'none', borderLeft: `1px solid ${headerBgColor}`,
                     clipPath: 'polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%)',
                     paddingRight: '30px'
                 },
@@ -115,7 +122,7 @@ export function getBubbleStyles(settings, messageColor) {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(11, 22, 34, 0.85)',
                     backdropFilter: 'blur(10px)',
-                    border: `1px solid ${headerBgColor}44`,
+                    borderTop: `1px solid ${headerBgColor}44`, borderRight: `1px solid ${headerBgColor}44`, borderBottom: `1px solid ${headerBgColor}44`, borderLeft: `1px solid ${headerBgColor}44`,
                     boxShadow: `0 0 30px ${headerBgColor}22`,
                     backgroundImage: `linear-gradient(rgba(18, 113, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 113, 255, 0.05) 1px, transparent 1px)`,
                     backgroundSize: '20px 20px',
@@ -130,6 +137,7 @@ export function getBubbleStyles(settings, messageColor) {
                     fontWeight: '900',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
+                    borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                     borderTopLeftRadius: '9999px',
                     borderTopRightRadius: '9999px',
                     borderBottomLeftRadius: '9999px',
@@ -143,7 +151,7 @@ export function getBubbleStyles(settings, messageColor) {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(10, 10, 10, 0.7)',
                     backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(39, 39, 42, 0.4)',
+                    borderTop: '1px solid rgba(39, 39, 42, 0.4)', borderRight: '1px solid rgba(39, 39, 42, 0.4)', borderBottom: '1px solid rgba(39, 39, 42, 0.4)', borderLeft: '1px solid rgba(39, 39, 42, 0.4)',
                     borderTopLeftRadius: '24px',
                     borderTopRightRadius: '24px',
                     borderBottomLeftRadius: '24px',
@@ -158,12 +166,12 @@ export function getBubbleStyles(settings, messageColor) {
                     ...commonHeaderStyles,
                     backgroundColor: headerBgColor,
                     boxShadow: `0 0 15px 5px ${headerShadowColor}`,
-                    borderBottom: 'none',
+                    borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(0,0,0,0.8)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderTop: '1px solid rgba(255,255,255,0.1)', borderRight: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', borderLeft: '1px solid rgba(255,255,255,0.1)',
                     boxShadow: `0 0 10px 3px ${headerShadowColor}80`,
                 }
             };
@@ -172,12 +180,12 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: headerBgColor,
-                    borderBottom: 'none',
+                    borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(0,0,0,0.9)',
-                    border: 'none',
+                    borderTop: 'none', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                 }
             };
         case 'bold':
@@ -185,13 +193,12 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: headerBgColor,
-                    borderBottom: `3px solid ${settings.strokeColor}`,
+                    borderTop: 'none', borderRight: 'none', borderBottom: `3px solid ${settings.strokeColor}`, borderLeft: 'none',
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(0,0,0,0.95)',
-                    border: `3px solid ${settings.strokeColor}`,
-                    borderTop: 'none',
+                    borderTop: 'none', borderRight: `3px solid ${settings.strokeColor}`, borderBottom: `3px solid ${settings.strokeColor}`, borderLeft: `3px solid ${settings.strokeColor}`,
                 }
             };
         case 'classic':
@@ -200,15 +207,14 @@ export function getBubbleStyles(settings, messageColor) {
                 header: {
                     ...commonHeaderStyles,
                     backgroundColor: '#18181b', // Solid Zinc-900 for classic
-                    border: '1px solid rgba(39, 39, 42, 0.5)',
-                    borderBottom: 'none',
+                    borderTop: '1px solid rgba(39, 39, 42, 0.5)', borderRight: '1px solid rgba(39, 39, 42, 0.5)', borderBottom: 'none', borderLeft: '1px solid rgba(39, 39, 42, 0.5)',
                     zIndex: 20
                 },
                 body: {
                     ...commonBodyStyles,
                     backgroundColor: 'rgba(10, 10, 10, 0.6)',
                     backdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(39, 39, 42, 0.3)',
+                    borderTop: '1px solid rgba(39, 39, 42, 0.3)', borderRight: '1px solid rgba(39, 39, 42, 0.3)', borderBottom: '1px solid rgba(39, 39, 42, 0.3)', borderLeft: '1px solid rgba(39, 39, 42, 0.3)',
                     borderTopLeftRadius: '16px',
                     borderTopRightRadius: '16px',
                     borderBottomLeftRadius: '16px',

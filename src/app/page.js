@@ -13,6 +13,8 @@ import Button from '@/components/ui/Button';
 import Avatar from '@/components/ui/Avatar';
 import MessageBubble from '@/components/overlay/MessageBubble';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
+import StatusDot from '@/components/ui/StatusDot';
+import useServiceStatus from '@/hooks/useServiceStatus';
 import { pressStart2P } from '@/lib/fonts';
 
 const MONO = 'var(--font-mono)';
@@ -113,6 +115,24 @@ const STYLES = [
     ['minimal', 'Minimal', 'transparent'],
 ];
 
+// Per-style font pairing for the hero preview only — a demo flourish, not a
+// change to how the real overlay/dashboard picks fonts (broadcasters choose
+// their own font independently of bubble style there, on purpose). 'Press
+// Start 2P' is the app's own local font (loaded site-wide via layout.js);
+// every other entry is a real Google Font loaded on demand, matching the
+// same technique the overlay itself already uses for its fontFamily setting.
+const STYLE_FONTS = {
+    classic: 'Inter',
+    glass: 'Poppins',
+    neon: 'Monoton',
+    cyberpunk: 'Oswald',
+    comic: 'Bangers',
+    retro: 'Press Start 2P',
+    future: 'Ubuntu',
+    bold: 'Montserrat',
+    minimal: 'Raleway',
+};
+
 const CAPS = [
     ['01', <MessageSquare key="i" size={17} />, 'Live chat on stream', 'Twitch messages appear over your video, emotes intact.'],
     ['02', <Shield key="i" size={17} />, 'Approve before it airs', 'Nothing reaches the overlay until you or a moderator clears it.'],
@@ -142,7 +162,22 @@ export default function Home() {
     const router = useRouter();
     const [style, setStyle] = useState('retro');
     const [showChangelog, setShowChangelog] = useState(false);
+    const serviceStatus = useServiceStatus();
     const active = STYLES.find(s => s[0] === style) || STYLES[0];
+    const previewFont = STYLE_FONTS[style] || 'Inter';
+
+    // Load whichever Google Font the current style is paired with, same
+    // technique the real overlay uses for its own fontFamily setting — skip
+    // the network fetch for Press Start 2P, since that one is already loaded
+    // locally site-wide.
+    useEffect(() => {
+        if (previewFont === 'Press Start 2P') return;
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${previewFont.replace(/\s+/g, '+')}:wght@400;700;900&display=swap`;
+        document.head.appendChild(link);
+        return () => { document.head.removeChild(link); };
+    }, [previewFont]);
 
     useEffect(() => {
         if (user && !loading) {
@@ -170,10 +205,8 @@ export default function Home() {
             {/* Title bar — the app's own chrome, not a marketing header */}
             <div style={{ position: 'sticky', top: 0, zIndex: 20, height: 52, background: 'rgba(10,10,10,.86)', backdropFilter: 'var(--blur-md)', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div className="scl-topbar">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Image src="/logo.svg" alt="" width={22} height={22} />
-                        <span style={{ fontFamily: ARCADE, fontSize: 11, color: 'var(--text-heading)' }}>STREAMCAST</span>
-                        <span style={{ padding: '2px 5px', fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: '.1em', color: 'var(--primary-400)', border: '1px solid rgba(7,252,3,.35)' }}>PRO</span>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <Image src="/logo-wordmark.svg" alt="StreamCast Pro" width={93} height={26} />
                     </div>
                     <nav className="scl-nav">
                         <a href="#overlay" style={navLink}>Overlay</a>
@@ -212,9 +245,8 @@ export default function Home() {
                     <Chrome aspect="16/9" title="OBS · Browser Source · 1920×1080"
                         right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10, letterSpacing: '.1em', color: 'var(--danger)' }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', animation: 'sc-blink 1.2s steps(2,end) infinite' }} />LIVE</span>}>
-                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg,#101418,#07090b 60%)', backgroundImage: 'var(--grid-overlay)', backgroundSize: '48px 48px' }} />
-                        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--zinc-800)', fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase' }}>your scene</div>
-                        <div style={{ position: 'absolute', inset: 0 }}>
+                        <Image src="/scene-preview.png" alt="" fill sizes="(max-width: 768px) 100vw, 640px" style={{ objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', inset: 0, fontFamily: style === 'retro' ? pressStart2P.style.fontFamily : `'${previewFont}', sans-serif` }}>
                             <MessageBubble
                                 message={{ id: 'hero-demo', username: 'nightowl', color: active[2], fragments: [{ type: 'text', content: 'the retro bubble style goes hard' }] }}
                                 settings={{
@@ -349,7 +381,7 @@ export default function Home() {
                 <div className="scl-foot">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                            <Image src="/logo.svg" alt="" width={20} height={20} />
+                            <Image src="/logo-icon-transparent.svg" alt="" width={23} height={20} />
                             <span style={{ fontFamily: ARCADE, fontSize: 10, color: 'var(--text-heading)' }}>PERVTOWN</span>
                         </div>
                         <p style={{ margin: 0, font: 'var(--type-body)', fontSize: 12.5, maxWidth: 300, color: 'var(--text-faint)', textWrap: 'pretty' }}>
@@ -370,6 +402,19 @@ export default function Home() {
                 </div>
                 <div className="scl-footbar" style={{ borderTop: '1px solid var(--border-hairline)', display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', fontFamily: MONO, fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--zinc-700)' }}>
                     <span>© 2026 Pervtown</span><span>Built for the Twitch community</span>
+                    <a href="https://status.sandschi.xyz" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--zinc-700)' }}>
+                        {serviceStatus ? (
+                            <>
+                                <StatusDot state={serviceStatus.status === 'Up' ? 'connected' : serviceStatus.status === 'Pending' ? 'connecting' : 'error'} size={6} />
+                                Overlay service {serviceStatus.status}{serviceStatus.ping ? ` · ${serviceStatus.ping}` : ''}
+                            </>
+                        ) : (
+                            <>
+                                <StatusDot state="idle" size={6} />
+                                Overlay service status
+                            </>
+                        )}
+                    </a>
                 </div>
             </footer>
             <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />

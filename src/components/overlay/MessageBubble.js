@@ -51,10 +51,10 @@ export default function MessageBubble({ message, settings }) {
                     </div>
                 )}
                 <span
-                    className={`font-black tracking-tight drop-shadow-lg ${settings.bubbleStyle === 'retro' ? 'uppercase font-mono' : ''}`}
+                    className={`font-black tracking-tight drop-shadow-lg ${settings.bubbleStyle === 'retro' ? 'uppercase' : ''}`}
                     style={{
                         fontSize: `${settings.nameSize}px`,
-                        fontFamily: settings.bubbleStyle === 'retro' ? 'monospace' : 'inherit'
+                        fontFamily: 'inherit'
                     }}
                 >
                     {message.username}
@@ -79,7 +79,7 @@ export default function MessageBubble({ message, settings }) {
 
                 <div className={`flex flex-wrap items-center gap-2 ${settings.bubbleStyle === 'minimal' ? 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : ''}`}>
                     {message.fragments?.map((frag, i) => (
-                        frag.type === 'text' ? <span key={i} className={settings.bubbleStyle === 'retro' ? 'font-mono uppercase tracking-tighter' : ''}>{frag.content}</span> :
+                        frag.type === 'text' ? <span key={i} className={settings.bubbleStyle === 'retro' ? 'uppercase tracking-tighter' : ''}>{frag.content}</span> :
                             <span key={i} className="h-[1.2em] w-[1.2em] relative inline-block align-middle select-none">
                                 <Image src={frag.url} alt={frag.name} fill unoptimized />
                             </span>
