@@ -27,7 +27,7 @@ export default function MenuBar({ t, d, onSelect, restricted = false }) {
     const [open, setOpen] = useState(null);
     const menus = restricted ? RESTRICTED_MENUS : MENUS;
     return (
-        <div onMouseLeave={() => setOpen(null)} style={{ height: d.menu, flex: 'none', position: 'relative', zIndex: 80, display: 'flex', alignItems: 'stretch', padding: '0 6px', background: t.chrome, borderBottom: `1px solid ${t.hair}`, ...scan(t) }}>
+        <div onMouseLeave={() => setOpen(null)} onKeyDown={e => { if (e.key === 'Escape') setOpen(null); }} style={{ height: d.menu, flex: 'none', position: 'relative', zIndex: 80, display: 'flex', alignItems: 'stretch', padding: '0 6px', background: t.chrome, borderBottom: `1px solid ${t.hair}`, ...scan(t) }}>
             {Object.keys(menus).map(m => (
                 <div key={m} style={{ position: 'relative', display: 'flex' }}>
                     <button onClick={() => setOpen(open === m ? null : m)} onMouseEnter={() => open && setOpen(m)}
@@ -39,11 +39,11 @@ export default function MenuBar({ t, d, onSelect, restricted = false }) {
                         <div style={{ position: 'absolute', top: '100%', left: 0, minWidth: 238, padding: 4, background: t.chrome, border: `1px solid ${t.edge}`, boxShadow: '0 18px 40px -12px rgba(0,0,0,.8)', ...bevel(t) }}>
                             {menus[m].map((item, i) => item === '—'
                                 ? <div key={i} style={{ height: 1, margin: '4px 6px', background: t.hair }} />
-                                : <div key={i}
+                                : <button key={i} type="button"
                                     onClick={() => { setOpen(null); onSelect && onSelect(m, item); }}
-                                    style={{ padding: '6px 10px', fontFamily: 'var(--font-sans)', fontSize: 12.5, color: t.text, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                    style={{ display: 'block', width: '100%', textAlign: 'left', appearance: 'none', border: 'none', background: 'transparent', padding: '6px 10px', fontFamily: 'var(--font-sans)', fontSize: 12.5, color: t.text, cursor: 'pointer', whiteSpace: 'nowrap' }}
                                     onMouseEnter={e => e.currentTarget.style.background = t.glow ? 'rgba(7,252,3,.12)' : t.inset}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{item}</div>)}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{item}</button>)}
                         </div>
                     )}
                 </div>
