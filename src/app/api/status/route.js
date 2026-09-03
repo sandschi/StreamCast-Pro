@@ -7,6 +7,20 @@ const BADGES = {
     avgResponse: `${KUMA_BASE}/avg-response/2?suffix=+ms&style=flat`,
     response: `${KUMA_BASE}/response?suffix=+ms&style=flat`,
 };
+const FETCH_TIMEOUT_MS = 5000;
+
+async function fetchBadge(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { next: { revalidate: 30 }, signal: controller.signal });
+        return res.ok ? await res.text() : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 // Uptime Kuma's badge endpoints only return rendered SVGs (badge-maker), not JSON.
 // Each SVG carries its value in a plain `aria-label="Label: Value"` attribute, so we
@@ -21,28 +35,25 @@ function parseBadge(svgText) {
 }
 
 export async function GET() {
-    try {
-        const entries = Object.entries(BADGES);
-        const results = await Promise.all(
-            entries.map(([, url]) => fetch(url, { next: { revalidate: 30 } }).then(r => r.ok ? r.text() : null))
-        );
+    // fetchBadge never rejects (it catches its own network/timeout errors), so
+    // one slow or dead badge endpoint can't take the other three down with it —
+    // only the required `status` badge failing should turn into a 502.
+    const entries = Object.entries(BADGES);
+    const results = await Promise.all(entries.map(([, url]) => fetchBadge(url)));
 
-        const parsed = {};
-        entries.forEach(([key], i) => { parsed[key] = results[i] ? parseBadge(results[i]) : null; });
+    const parsed = {};
+    entries.forEach(([key], i) => { parsed[key] = results[i] ? parseBadge(results[i]) : null; });
 
-        if (!parsed.status) {
-            return NextResponse.json({ ok: false }, { status: 502 });
-        }
-
-        return NextResponse.json({
-            ok: true,
-            status: parsed.status.value,
-            color: parsed.status.color,
-            ping: parsed.ping?.value ?? null,
-            avgResponse: parsed.avgResponse?.value ?? null,
-            response: parsed.response?.value ?? null,
-        });
-    } catch {
+    if (!parsed.status) {
         return NextResponse.json({ ok: false }, { status: 502 });
     }
+
+    return NextResponse.json({
+        ok: true,
+        status: parsed.status.value,
+        color: parsed.status.color,
+        ping: parsed.ping?.value ?? null,
+        avgResponse: parsed.avgResponse?.value ?? null,
+        response: parsed.response?.value ?? null,
+    });
 }

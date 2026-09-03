@@ -73,7 +73,15 @@ export function useKaraFunData({ targetUid, userSettings }) {
     };
 
     useEffect(() => {
-        if (!partyId || !userSettings?.karafunEnabled) return;
+        if (!partyId || !userSettings?.karafunEnabled) {
+            // loading otherwise stays stuck at its initial true forever here -
+            // nothing else ever sets it false, since no socket connection is
+            // even attempted without a Party ID, so the header action stayed
+            // disabled and permanently labeled "Connecting..." instead of
+            // reflecting the real "no Party ID set" state.
+            setLoading(false);
+            return;
+        }
 
         setLoading(true);
         setError(null);

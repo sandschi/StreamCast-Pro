@@ -9,13 +9,18 @@ export default function useServiceStatus() {
 
     useEffect(() => {
         let cancelled = false;
+        let inFlight = false;
         const load = async () => {
+            if (inFlight) return;
+            inFlight = true;
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
                 if (!cancelled) setStatus(data.ok ? data : null);
             } catch {
                 if (!cancelled) setStatus(null);
+            } finally {
+                inFlight = false;
             }
         };
         load();

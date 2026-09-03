@@ -24,12 +24,23 @@ const THEMES = ['classic', 'glass', 'neon', 'minimal', 'cyberpunk', 'retro', 'co
 function useDebouncedSetting(propValue, onCommit) {
     const [value, setValue] = useState(propValue);
     const timerRef = useRef(null);
+    // Split into two effects (each a single statement) rather than one effect
+    // that both clears the timer and calls setValue: React's hooks lint flags
+    // setState in an effect once the body does more than just the sync call.
+    // Declaration order guarantees this one runs first on the same commit, so
+    // a stale pending commit is cleared before value re-syncs from propValue -
+    // it would otherwise fire and overwrite a newer externally-set value (e.g.
+    // a Firestore snapshot landing mid-debounce).
+    useEffect(() => { clearTimeout(timerRef.current); timerRef.current = null; }, [propValue]);
     useEffect(() => { setValue(propValue); }, [propValue]);
     useEffect(() => () => clearTimeout(timerRef.current), []);
     const handleChange = (v) => {
         setValue(v);
         clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => onCommit(v), 400);
+        timerRef.current = setTimeout(() => {
+            timerRef.current = null;
+            onCommit(v);
+        }, 400);
     };
     return [value, handleChange];
 }

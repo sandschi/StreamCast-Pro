@@ -18,7 +18,12 @@ export default function Modal({ open, title, icon, onClose, children, width = 51
     useEffect(() => {
         if (!open) return;
         previouslyFocused.current = document.activeElement;
-        panelRef.current?.focus();
+        // Focus the first focusable control, not the panel itself: the panel
+        // is deliberately left out of FOCUSABLE_SELECTOR (it's not a real tab
+        // stop), so if it were the initial activeElement, an immediate
+        // Shift+Tab wouldn't match `first` below and would escape the dialog.
+        const initialFocusable = panelRef.current?.querySelector(FOCUSABLE_SELECTOR);
+        (initialFocusable || panelRef.current)?.focus();
 
         const onKeyDown = (e) => {
             if (e.key === 'Escape') {
