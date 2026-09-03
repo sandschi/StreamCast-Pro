@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import Pane from './Pane';
@@ -15,11 +16,34 @@ import RangeSlider from '@/components/ui/RangeSlider';
 
 const THEMES = ['classic', 'glass', 'neon', 'minimal', 'cyberpunk', 'retro', 'comic', 'future'];
 
+// Position sliders write to Firestore on every tick otherwise (dozens of
+// writes per drag, when only the settled value matters). Keeps the value in
+// local state for instant visual feedback and commits ~400ms after the last
+// change - a real debounce, not just onMouseUp, so keyboard-driven arrow-key
+// adjustments settle and commit too, not just mouse drags.
+function useDebouncedSetting(propValue, onCommit) {
+    const [value, setValue] = useState(propValue);
+    const timerRef = useRef(null);
+    useEffect(() => { setValue(propValue); }, [propValue]);
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+    const handleChange = (v) => {
+        setValue(v);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => onCommit(v), 400);
+    };
+    return [value, handleChange];
+}
+
 export default function KaraFunPane({ t, d, targetUid, userSettings }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
     } = useKaraFunData({ targetUid, userSettings });
+
+    const [queueX, setQueueX] = useDebouncedSetting(userSettings?.karafunQueuePosX ?? 5, v => handleToggleSetting('karafunQueuePosX', v));
+    const [queueY, setQueueY] = useDebouncedSetting(userSettings?.karafunQueuePosY ?? 5, v => handleToggleSetting('karafunQueuePosY', v));
+    const [nowPlayingX, setNowPlayingX] = useDebouncedSetting(userSettings?.karafunNowPlayingPosX ?? 50, v => handleToggleSetting('karafunNowPlayingPosX', v));
+    const [nowPlayingY, setNowPlayingY] = useDebouncedSetting(userSettings?.karafunNowPlayingPosY ?? 90, v => handleToggleSetting('karafunNowPlayingPosY', v));
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -106,10 +130,10 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                     <Field t={t} label="Theme">
                         <Select t={t} value={userSettings?.karafunOverlayTheme || 'classic'} onChange={(v) => handleToggleSetting('karafunOverlayTheme', v)} options={THEMES} />
                     </Field>
-                    <RangeSlider t={t} label="Queue X" value={userSettings?.karafunQueuePosX ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosX', v)} />
-                    <RangeSlider t={t} label="Queue Y" value={userSettings?.karafunQueuePosY ?? 5} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunQueuePosY', v)} />
-                    <RangeSlider t={t} label="Now Playing X" value={userSettings?.karafunNowPlayingPosX ?? 50} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosX', v)} />
-                    <RangeSlider t={t} label="Now Playing Y" value={userSettings?.karafunNowPlayingPosY ?? 90} unit="%" valueTone="accent" onChange={(v) => handleToggleSetting('karafunNowPlayingPosY', v)} />
+                    <RangeSlider t={t} label="Queue X" value={queueX} unit="%" valueTone="accent" onChange={setQueueX} />
+                    <RangeSlider t={t} label="Queue Y" value={queueY} unit="%" valueTone="accent" onChange={setQueueY} />
+                    <RangeSlider t={t} label="Now Playing X" value={nowPlayingX} unit="%" valueTone="accent" onChange={setNowPlayingX} />
+                    <RangeSlider t={t} label="Now Playing Y" value={nowPlayingY} unit="%" valueTone="accent" onChange={setNowPlayingY} />
                 </Pane>
             </ResizableWidth>
         </div>
