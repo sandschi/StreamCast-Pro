@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, runTransaction } from 'firebase/firestore';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Broadcasters.js.
 export function useBroadcastersData() {
@@ -28,11 +28,29 @@ export function useBroadcastersData() {
         return () => unsubscribe();
     }, []);
 
-    const setStatus = async (userId, status) => {
+    // Plain updateDoc had no protection against two admin sessions (two tabs,
+    // two devices) racing on the same broadcaster's status - whichever write
+    // landed last silently won. expectedCurrentStatus is whatever this
+    // session's own snapshot last saw for this broadcaster; the transaction
+    // re-reads the doc and aborts instead of overwriting if that's gone stale,
+    // rather than trusting a value that might be seconds or minutes old.
+    const setStatus = async (userId, status, expectedCurrentStatus) => {
+        const userRef = doc(db, 'users', userId);
         try {
-            await updateDoc(doc(db, 'users', userId), { status });
+            await runTransaction(db, async (transaction) => {
+                const snap = await transaction.get(userRef);
+                // Match BroadcastersPane's own display fallback (b.status || 'waiting')
+                // so an absent status field compares equal to the 'waiting' the UI
+                // showed, instead of a false stale-rejection on every first decision.
+                const currentStatus = snap.data()?.status || 'waiting';
+                if (expectedCurrentStatus !== undefined && currentStatus !== expectedCurrentStatus) {
+                    throw new Error("This broadcaster's status changed since your list last updated — refresh and try again.");
+                }
+                transaction.update(userRef, { status });
+            });
         } catch (e) {
             console.error('Failed to update status:', e);
+            alert(e.message || 'Failed to update status.');
         }
     };
 

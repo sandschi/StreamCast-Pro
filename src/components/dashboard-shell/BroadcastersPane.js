@@ -63,7 +63,7 @@ export default function BroadcastersPane({ t, d }) {
                                 <span style={{ width: 86, fontFamily: MONO, fontSize: 10, letterSpacing: '.11em', color: TONE[status] || TONE.waiting }}>{status.toUpperCase()}</span>
                                 <div style={{ width: 220, display: 'flex', gap: 1 }}>
                                     {STATUSES.map(s => (
-                                        <button key={s.id} onClick={() => setStatus(b.id, s.id)}
+                                        <button key={s.id} onClick={() => setStatus(b.id, s.id, status)}
                                             style={{
                                                 flex: 1, height: 22, appearance: 'none', cursor: 'pointer', border: `1px solid ${status === s.id ? t.edge : t.hair}`,
                                                 background: status === s.id ? (t.glow ? 'rgba(7,252,3,.12)' : t.inset) : 'transparent', color: status === s.id ? TONE[s.id] : t.faint,
