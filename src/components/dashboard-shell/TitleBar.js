@@ -10,9 +10,6 @@ const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system
 export default function TitleBar({ t, d, conn, channel, role, isMasterAdmin, onVersionClick }) {
     return (
         <div style={{ height: d.title, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', background: t.chrome, borderBottom: `1px solid ${t.edge}`, ...scan(t) }}>
-            <div style={{ display: 'flex', gap: 7, paddingRight: 4 }}>
-                {['#ff5f57', '#febc2e', '#28c840'].map(c => <span key={c} style={{ width: 11, height: 11, borderRadius: '50%', background: c, opacity: .85 }} />)}
-            </div>
             <Image src="/logo.svg" alt="" width={18} height={18} style={{ imageRendering: t.modern ? 'auto' : 'pixelated' }} />
             {t.modern
                 ? <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, letterSpacing: '-.01em', color: t.text }}>StreamCast Pro</span>

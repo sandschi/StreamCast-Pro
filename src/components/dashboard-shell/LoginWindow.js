@@ -13,8 +13,7 @@ export default function LoginWindow({ t, onLogin }) {
     return (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: t.app }}>
             <div style={{ width: '100%', maxWidth: 430, background: t.pane, border: `1px solid ${t.edge}`, boxShadow: '0 30px 70px -20px rgba(0,0,0,.9)', ...bevel(t) }}>
-                <div style={{ height: 34, display: 'flex', alignItems: 'center', gap: 10, padding: '0 11px', background: t.chrome, borderBottom: `1px solid ${t.hair}`, ...scan(t) }}>
-                    <div style={{ display: 'flex', gap: 6 }}>{['#ff5f57', '#febc2e', '#28c840'].map(c => <span key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c, opacity: .7 }} />)}</div>
+                <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 11px', background: t.chrome, borderBottom: `1px solid ${t.hair}`, ...scan(t) }}>
                     <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.15em', color: t.faint }}>SIGN IN</span>
                 </div>
                 <div style={{ padding: '34px 30px 30px', display: 'flex', flexDirection: 'column', gap: 20, textAlign: 'center' }}>
