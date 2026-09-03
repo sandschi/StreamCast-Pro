@@ -33,8 +33,21 @@ service cloud.firestore {
       // this field.
       allow update: if request.auth != null && request.auth.uid == userId
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'twitchUsername']);
-      allow create: if request.auth != null && request.auth.uid == userId;
-      
+      // The update lock above only protects a doc that already exists — it did
+      // nothing to stop a user from bypassing the app UI and calling setDoc
+      // directly on their own (not-yet-existing) doc with status: 'approved' as
+      // their very first write, self-approving before the update rule ever
+      // applies. Require the initial status to be absent or 'waiting'; it can
+      // only ever become 'approved'/'denied' afterward via the master-admin
+      // bypass above.
+      // twitchUsername is still client-settable on create (the real Twitch OAuth
+      // response, written client-side — there's no trusted backend path for it
+      // yet) so a similar cosmetic spoof is technically still possible here;
+      // closing that fully is what the custom-claims migration is for, see
+      // https://github.com/sandschi/StreamCast-Pro/issues/19.
+      allow create: if request.auth != null && request.auth.uid == userId
+        && (!('status' in request.resource.data) || request.resource.data.status == 'waiting');
+
       match /settings/{document=**} {
         allow read: if true; // Public for overlay
         allow write: if request.auth != null && request.auth.uid == userId;
