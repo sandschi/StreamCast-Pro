@@ -35,7 +35,7 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
             <Pane t={t} d={d} icon={<Music size={13} />} title={partyId ? `Song Queue · Party ${partyId}` : 'Song Queue'} flush
-                actions={<ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleReconnect}>{loading && !lastUpdated ? 'Connecting…' : 'Refresh'}</ToolBtn>}>
+                actions={<ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleReconnect} disabled={loading && !lastUpdated}>{loading && !lastUpdated ? 'Connecting…' : 'Refresh'}</ToolBtn>}>
                 {!partyId ? (
                     <EmptyState icon={<Music size={32} />} title="No Party ID set." hint="Save your KaraFun Party ID in the panel on the right to start tracking the queue." />
                 ) : (
@@ -85,7 +85,7 @@ export default function KaraFunPane({ t, d, targetUid, userSettings }) {
                             <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
                         </div>
                     </Field>
-                    <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
+                    <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
                     <Field t={t} label="Overlay visibility">
                         {/* This inspector column can be as narrow as 210px (ResizableWidth
                             minWidth below) — a rigid 2-column grid left no room for the

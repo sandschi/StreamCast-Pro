@@ -22,7 +22,7 @@ export default function AlertBar({ t, d, alert, onAction, onDismiss }) {
             </div>
             <span style={{ flex: 1 }} />
             <ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={onAction}>{a.action}</ToolBtn>
-            <button onClick={onDismiss} style={{ width: 24, height: 24, display: 'grid', placeItems: 'center', appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}><X size={14} /></button>
+            <button type="button" onClick={onDismiss} aria-label="Dismiss alert" style={{ width: 24, height: 24, display: 'grid', placeItems: 'center', appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}><X size={14} /></button>
         </div>
     );
 }

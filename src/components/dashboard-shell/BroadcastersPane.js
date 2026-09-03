@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, Send, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Shield, Send, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useBroadcastersData } from '@/hooks/useBroadcastersData';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
@@ -19,7 +19,15 @@ const STATUSES = [
 ];
 
 export default function BroadcastersPane({ t, d }) {
-    const { broadcasters, testingWebhook, setStatus, testWebhook } = useBroadcastersData();
+    const { broadcasters, error, testingWebhook, setStatus, testWebhook } = useBroadcastersData();
+
+    if (error) {
+        return (
+            <Pane t={t} d={d} icon={<Shield size={13} />} title="Broadcaster Access · Master Admin">
+                <EmptyState icon={<AlertTriangle size={32} />} title="Couldn't load broadcasters." hint={error} />
+            </Pane>
+        );
+    }
 
     if (broadcasters.length === 0) {
         return (
@@ -35,7 +43,7 @@ export default function BroadcastersPane({ t, d }) {
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
             <Pane t={t} d={d} icon={<Shield size={13} />} title="Broadcaster Access · Master Admin" flush
-                actions={<ToolBtn t={t} icon={<Send size={12} />} onClick={testWebhook}>{testingWebhook ? 'Sending…' : 'Test Webhook'}</ToolBtn>}>
+                actions={<ToolBtn t={t} icon={<Send size={12} />} onClick={testWebhook} disabled={testingWebhook}>{testingWebhook ? 'Sending…' : 'Test Webhook'}</ToolBtn>}>
                 {/* One wrapper so this is Pane's only flush child — Pane's own content
                     gap would otherwise land between every row (on top of each row's
                     own divider below it), pushing each row's content down unevenly. */}

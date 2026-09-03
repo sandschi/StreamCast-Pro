@@ -110,7 +110,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     {canHide && <ToolBtn t={t} icon={<XCircle size={12} />} onClick={hideOverlay}>Hide</ToolBtn>}
                     <ToolBtn t={t} icon={<Send size={12} />} onClick={() => sendTestOverlay(false)}>Test</ToolBtn>
                     <ToolBtn t={t} icon={<Send size={12} />} onClick={() => sendTestOverlay(true)}>Send ∞</ToolBtn>
-                    <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
+                    <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</ToolBtn>
                 </>}>
 
                 {activeSection === 'dashboard' && <>

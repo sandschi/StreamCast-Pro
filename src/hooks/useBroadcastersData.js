@@ -8,6 +8,7 @@ import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 export function useBroadcastersData() {
     const [broadcasters, setBroadcasters] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [testingWebhook, setTestingWebhook] = useState(false);
 
     useEffect(() => {
@@ -17,6 +18,11 @@ export function useBroadcastersData() {
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(u => u.twitchUsername);
             setBroadcasters(list);
+            setError(null);
+            setLoading(false);
+        }, (err) => {
+            console.error('Failed to load broadcasters:', err);
+            setError(err.message || 'Failed to load broadcasters.');
             setLoading(false);
         });
         return () => unsubscribe();
@@ -61,5 +67,5 @@ export function useBroadcastersData() {
         }
     };
 
-    return { broadcasters, loading, testingWebhook, setStatus, testWebhook };
+    return { broadcasters, loading, error, testingWebhook, setStatus, testWebhook };
 }

@@ -1,9 +1,17 @@
 'use client';
 
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import IconButton from './IconButton';
 
 export default function Modal({ open, title, icon, onClose, children, width = 512 }) {
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = (e) => { if (e.key === 'Escape') onClose?.(); };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [open, onClose]);
+
     if (!open) return null;
 
     return (
@@ -14,6 +22,9 @@ export default function Modal({ open, title, icon, onClose, children, width = 51
         >
             <div
                 onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="modal-title"
                 className="w-full flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
                 style={{
                     maxWidth: width,
@@ -34,7 +45,7 @@ export default function Modal({ open, title, icon, onClose, children, width = 51
                                 {icon}
                             </div>
                         )}
-                        <h2 className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>{title}</h2>
+                        <h2 id="modal-title" className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>{title}</h2>
                     </div>
                     <IconButton icon={<X size={18} />} title="Close" onClick={onClose} />
                 </div>

@@ -68,7 +68,7 @@ export default function UsersPane({ t, d, targetUid }) {
                             ))}
                         </div>
                         <span style={{ width: 60, fontFamily: MONO, fontSize: 11, color: t.faint, fontVariantNumeric: 'tabular-nums' }}>
-                            {u.lastSeen ? new Date(u.lastSeen.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {typeof u.lastSeen?.seconds === 'number' ? new Date(u.lastSeen.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </span>
                         <button onClick={() => removePermission(u.id)} title="Reset" style={{ width: 26, height: 22, display: 'grid', placeItems: 'center', appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}><Trash2 size={13} /></button>
                     </div>

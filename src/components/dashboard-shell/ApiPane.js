@@ -11,7 +11,7 @@ import TextInput from '@/components/ui/TextInput';
 import EmptyState from '@/components/ui/EmptyState';
 
 export default function ApiPane({ t, d, targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole }) {
-    const { generatingToken, copyState, handleGenerateToken, copyApiCommand, copyTokenOnly } = useApiSettingsData({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole });
+    const { generatingToken, copyState, error, handleGenerateToken, copyApiCommand, copyTokenOnly } = useApiSettingsData({ targetUid, user, privateConfig, setPrivateConfig, isMasterAdmin, userRole });
 
     if (!privateConfig?.apiToken) {
         return (
@@ -20,6 +20,7 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
                 <button onClick={handleGenerateToken} disabled={generatingToken} style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 8, height: 32, padding: '0 14px', appearance: 'none', cursor: 'pointer', border: 'none', background: t.accent, color: 'var(--primary-ink)', fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, marginTop: 12, ...bevel(t) }}>
                     <Key size={14} />{generatingToken ? 'Generating…' : 'Generate API Token'}
                 </button>
+                {error && <span style={{ alignSelf: 'center', marginTop: 8, fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--danger)' }}>{error}</span>}
             </Pane>
         );
     }
@@ -55,10 +56,11 @@ export default function ApiPane({ t, d, targetUid, user, privateConfig, setPriva
                         <TextInput t={t} mono readOnly value={privateConfig.apiToken} />
                     </Field>
                     <div style={{ display: 'flex', gap: 8 }}>
-                        <ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleGenerateToken}>{generatingToken ? 'Revoking…' : 'Regenerate'}</ToolBtn>
+                        <ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleGenerateToken} disabled={generatingToken}>{generatingToken ? 'Revoking…' : 'Regenerate'}</ToolBtn>
                         <ToolBtn t={t} icon={<Copy size={12} />} primary onClick={copyTokenOnly}>Copy</ToolBtn>
                     </div>
                     <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.faint }}>Regenerating invalidates every existing remote URL.</span>
+                    {error && <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--danger)' }}>{error}</span>}
                 </Pane>
             </ResizableWidth>
         </div>

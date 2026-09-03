@@ -306,7 +306,11 @@ function DashboardContent() {
             const q = query(collection(db, 'users', targetUid, 'history'), orderBy('timestamp', 'desc'), limit(200));
             const snap = await getDocs(q);
             const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+            // The query above only ever returns the newest 200 messages — say so
+            // in the file itself, since a broadcaster with more history than that
+            // would otherwise get a silently incomplete export with no indication.
+            const exportPayload = { exportedAt: new Date().toISOString(), note: 'Newest 200 messages only.', messages: rows };
+            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
