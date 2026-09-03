@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, query, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
 
 import { TREATMENTS } from '@/components/dashboard-shell/treatments';
 import { NAV, ROLE_TABS } from '@/components/dashboard-shell/nav';
@@ -303,13 +303,25 @@ function DashboardContent() {
     const exportHistory = async () => {
         if (!targetUid) return;
         try {
-            const q = query(collection(db, 'users', targetUid, 'history'), orderBy('timestamp', 'desc'), limit(200));
-            const snap = await getDocs(q);
-            const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            // The query above only ever returns the newest 200 messages — say so
-            // in the file itself, since a broadcaster with more history than that
-            // would otherwise get a silently incomplete export with no indication.
-            const exportPayload = { exportedAt: new Date().toISOString(), note: 'Newest 200 messages only.', messages: rows };
+            // Page through the whole collection instead of capping at one
+            // batch — a broadcaster's history can run well past a single
+            // query's worth, and a silently truncated export is worse than a
+            // few extra round trips.
+            const PAGE_SIZE = 500;
+            const historyRef = collection(db, 'users', targetUid, 'history');
+            const rows = [];
+            let cursor = null;
+            for (; ;) {
+                const q = cursor
+                    ? query(historyRef, orderBy('timestamp', 'desc'), startAfter(cursor), limit(PAGE_SIZE))
+                    : query(historyRef, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
+                const snap = await getDocs(q);
+                if (snap.empty) break;
+                rows.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (snap.docs.length < PAGE_SIZE) break;
+                cursor = snap.docs[snap.docs.length - 1];
+            }
+            const exportPayload = { exportedAt: new Date().toISOString(), messageCount: rows.length, messages: rows };
             const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
