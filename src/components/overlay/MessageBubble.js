@@ -10,7 +10,6 @@ export default function MessageBubble({ message, settings }) {
 
     return (
         <motion.div
-            key={message.id || message.timestamp?.seconds || 'default-message-key'}
             variants={getAnimationVariants(settings)}
             initial="initial" animate="animate" exit="exit"
             className="absolute flex flex-col gap-0 max-w-2xl"

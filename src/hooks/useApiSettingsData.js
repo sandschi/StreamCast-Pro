@@ -48,7 +48,7 @@ export function useApiSettingsData({ targetUid, user, privateConfig, setPrivateC
                 apiToken: token
             }, { merge: true });
             if (setPrivateConfig) {
-                setPrivateConfig({ apiToken: token });
+                setPrivateConfig(prev => ({ ...prev, apiToken: token }));
             }
         } catch (err) {
             console.error('Error generating token:', err);

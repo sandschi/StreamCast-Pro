@@ -336,7 +336,7 @@ export default function OverlayPage() {
         >
             <AnimatePresence mode="wait">
                 {activeMessage && (
-                    <MessageBubble message={activeMessage} settings={effectiveSettings} />
+                    <MessageBubble key={activeMessage.id || activeMessage.timestamp?.seconds || 'default-message-key'} message={activeMessage} settings={effectiveSettings} />
                 )}
             </AnimatePresence>
 

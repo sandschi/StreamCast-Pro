@@ -78,9 +78,13 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
         const unsubscribeConfig = onSnapshot(configRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
-                // Migration: If old positionVertical/Horizontal exists, map them to percentages
-                if (!data.posX && data.positionHorizontal) {
+                // Migration: If old positionVertical/Horizontal exists, map them to percentages.
+                // posX/posY of 0 is a valid position (the literal left/top edge) — check for
+                // null/undefined specifically, not falsiness, or a saved 0 gets overwritten.
+                if (data.posX == null && data.positionHorizontal) {
                     data.posX = data.positionHorizontal === 'right' ? 95 : data.positionHorizontal === 'center' ? 50 : 5;
+                }
+                if (data.posY == null && data.positionVertical) {
                     data.posY = data.positionVertical === 'top' ? 5 : data.positionVertical === 'center' ? 50 : 90;
                 }
                 setSettings(prev => ({ ...prev, ...data }));

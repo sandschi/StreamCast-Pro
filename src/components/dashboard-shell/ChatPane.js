@@ -125,7 +125,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                         <button onClick={sendTestMessage} style={ACTION_BTN(t)}>
                             <Send size={14} /><span style={{ flex: 1 }}>Send Test Message</span>
                         </button>
-                        {activeMessage && !activeMessage.permanent && (
+                        {activeMessage && activeMessage.duration !== -1 && (
                             <button onClick={() => sendToScreen(activeMessage, true)} style={ACTION_BTN(t)}>
                                 <ScreenShare size={14} /><span style={{ flex: 1 }}>Show Permanently  ∞</span>
                             </button>
