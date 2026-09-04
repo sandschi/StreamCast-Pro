@@ -45,7 +45,7 @@ function VerifyingBlock({ t }) {
 }
 
 function DashboardContent() {
-    const { user, userData, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
+    const { user, userData, loginWithTwitch, logout, isMasterAdmin, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -128,18 +128,15 @@ function DashboardContent() {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     let status = data?.status;
-                    // Master-admin detection uses twitchUsername (Firestore), not
-                    // user.displayName — Firebase's OIDC integration never actually
-                    // populates displayName for the Twitch provider (confirmed always
-                    // null at runtime), so that check silently failed on every
-                    // returning session. twitchUsername is set once from the raw OAuth
-                    // response at login and locked from further client writes in
-                    // firestore.rules, so it's safe to trust here.
+                    // isSandschi here only ever feeds the auto-approval decision
+                    // below - isMasterAdmin itself comes from AuthContext's custom-
+                    // claim check (see AuthContext.js / #19), not from this
+                    // twitchUsername field. This listener used to also call
+                    // setIsMasterAdmin(isSandschi) here, which would silently
+                    // overwrite that correct claim-derived value with a stale
+                    // twitchUsername-based one on every snapshot of this user's own
+                    // doc (i.e. constantly, since it re-fires on every settings save).
                     const isSandschi = data?.twitchUsername?.toLowerCase() === 'sandschi';
-
-                    console.log('Admin Security Check (Dashboard):', { isSandschi, twitchUsername: data?.twitchUsername });
-
-                    setIsMasterAdmin(isSandschi);
 
                     if (!status || (isSandschi && status !== 'approved')) {
                         status = isSandschi ? 'approved' : 'waiting';
@@ -185,7 +182,7 @@ function DashboardContent() {
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
-    }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin, targetUid]);
+    }, [user, hostParam, isModeratorMode, isMasterAdmin, targetUid]);
 
     // Stable Settings Listener
     useEffect(() => {

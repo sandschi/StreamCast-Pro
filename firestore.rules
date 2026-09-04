@@ -2,9 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Master Admin check
+    // Master Admin check. request.auth.token.isMasterAdmin is a custom claim,
+    // set server-side (src/app/api/set-admin-claim/route.js) after this same
+    // account logs in - never client-writable. The hardcoded UID stays as an
+    // OR fallback rather than being replaced outright: these rules would
+    // otherwise depend on that account having already logged in at least once
+    // since the claim was introduced, which isn't guaranteed at the moment
+    // this file deploys. Both checks are keyed to the identical UID either way,
+    // so this changes nothing about who can become admin, only removes the
+    // remaining dependency client-side UI had on the freeze-prone
+    // twitchUsername Firestore field (see #19).
     function isMasterAdmin() {
-      return request.auth != null && request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2';
+      return request.auth != null &&
+        (request.auth.token.isMasterAdmin == true || request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2');
     }
 
     // Master Admin Bypass
