@@ -24,6 +24,11 @@ function syncWithZarazConsent() {
                 person_profiles: 'identified_only',
                 capture_pageview: false // Disable automatic pageview capture, as we use manual capture below
             });
+            // PostHogPageview's own effect may have already run and no-op'd
+            // (posthog-js silently drops capture() calls made before init()),
+            // so the first pageview needs to be captured here instead - it
+            // won't fire again just because consent arrived later.
+            posthog.capture('$pageview', { $current_url: window.location.href });
         } else {
             posthog.opt_in_capturing(); // consent was re-granted after being revoked mid-session
         }
