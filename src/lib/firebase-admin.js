@@ -2,16 +2,18 @@ import admin from 'firebase-admin';
 
 let initPromise = null;
 
-export async function getAdminDb() {
+// Shared by getAdminDb and getAdminAuth - both just need the app initialized
+// once, then read off whichever admin.* namespace they need.
+async function ensureInitialized() {
     // 1. If already initialized, return immediately
     if (admin.apps.length) {
-        return admin.firestore();
+        return;
     }
 
     // 2. If initialization is currently in progress, wait for it
     if (initPromise) {
         await initPromise;
-        return admin.firestore();
+        return;
     }
 
     // 3. Otherwise, claim the initialization lock
@@ -90,6 +92,14 @@ export async function getAdminDb() {
             initPromise = null;
         }
     }
+}
 
+export async function getAdminDb() {
+    await ensureInitialized();
     return admin.firestore();
+}
+
+export async function getAdminAuth() {
+    await ensureInitialized();
+    return admin.auth();
 }

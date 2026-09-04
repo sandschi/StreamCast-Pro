@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import posthog from 'posthog-js';
 
 const AuthContext = createContext();
 
@@ -35,16 +36,15 @@ export function AuthProvider({ children }) {
                 const userSnapshot = await getDoc(userRef);
                 const existingData = userSnapshot.data();
 
-                // Determine initial status
-                // Master-admin detection uses twitchUsername (Firestore), not
-                // currentUser.displayName — Firebase's generic OIDC integration
-                // never actually populates displayName for the Twitch provider, so
-                // that check silently evaluated false on every returning session
-                // (confirmed via the Admin Security Check log: displayName is
-                // always null here, even for the real master admin). twitchUsername
-                // is populated once from the raw OAuth response at login
-                // (loginWithTwitch, below) and locked from further client writes in
-                // firestore.rules, so it's safe to trust here.
+                // Determine initial status. isSandschi (twitchUsername-based) only
+                // ever drives the auto-approval decision below, not the client
+                // isMasterAdmin flag (see the custom-claims block further down) -
+                // twitchUsername is populated once from the raw OAuth response at
+                // login (loginWithTwitch) and locked from further client writes in
+                // firestore.rules, so it's stale-but-safe to trust for this one
+                // purpose: a returning already-approved user's status is left alone
+                // regardless (see the condition below), so a stale twitchUsername
+                // here can only ever affect a not-yet-approved account.
                 let status = existingData?.status;
                 const isSandschi = existingData?.twitchUsername?.toLowerCase() === 'sandschi';
 
@@ -52,7 +52,26 @@ export function AuthProvider({ children }) {
                     status = isSandschi ? 'approved' : 'waiting';
                 }
 
-                setIsMasterAdmin(isSandschi); // Set master admin status
+                // Master-admin UI/rules detection: a Firebase custom claim, set
+                // server-side by this same account after login, instead of the
+                // twitchUsername field above — claims survive a Twitch handle
+                // rename (twitchUsername freezes at whatever it was on first
+                // write; see #19), and are never client-writable at all, unlike a
+                // Firestore field that's merely rules-locked from update.
+                // Safe/cheap to call every session: the route is a no-op for
+                // every UID except the one hardcoded master-admin account.
+                try {
+                    const idToken = await currentUser.getIdToken();
+                    await fetch('/api/set-admin-claim', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${idToken}` },
+                    });
+                    const tokenResult = await currentUser.getIdTokenResult(true); // force refresh to pick up a just-set claim
+                    setIsMasterAdmin(tokenResult.claims.isMasterAdmin === true);
+                } catch (e) {
+                    console.error('Error resolving master-admin claim:', e);
+                    setIsMasterAdmin(false);
+                }
                 const updateData = {
                     twitchId: currentUser.providerData[0].uid,
                     lastLogin: new Date().toISOString(),
@@ -74,6 +93,10 @@ export function AuthProvider({ children }) {
                 console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
                 setUserData(userDoc.data());
                 setUser(currentUser);
+                // Ties every event this session sends to a real person instead of an
+                // anonymous browser distinct_id - runs on every session restore, not
+                // just an interactive login, since onAuthStateChanged fires for both.
+                posthog.identify(currentUser.uid);
             } else {
                 setIsMasterAdmin(false);
                 setUser(null);
@@ -109,7 +132,9 @@ export function AuthProvider({ children }) {
                 // integration never populates displayName for this provider, so
                 // checking it here would always be false.
                 const isSandschi = cleanUsername === 'sandschi';
-                setIsMasterAdmin(isSandschi); // Set master admin status on login
+                // isMasterAdmin itself is no longer set here — onAuthStateChanged
+                // (which signInWithPopup triggers right after this resolves) derives
+                // the authoritative value from the custom claim instead.
 
                 const userData = {
                     twitchUsername: cleanUsername,
@@ -163,10 +188,15 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const logout = () => signOut(auth);
+    const logout = () => {
+        // Otherwise the next person to sign in on this device/browser would
+        // keep getting merged into the previous user's PostHog identity.
+        posthog.reset();
+        return signOut(auth);
+    };
 
     return (
-        <AuthContext.Provider value={{ user, userData, twitchToken, isMasterAdmin, setIsMasterAdmin, loading, loginWithTwitch, logout }}>
+        <AuthContext.Provider value={{ user, userData, twitchToken, isMasterAdmin, loading, loginWithTwitch, logout }}>
             {children}
         </AuthContext.Provider>
     );

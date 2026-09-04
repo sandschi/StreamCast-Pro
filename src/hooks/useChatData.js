@@ -5,7 +5,8 @@ import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, orderBy, runTransaction } from 'firebase/firestore';
+import posthog from 'posthog-js';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
@@ -13,6 +14,12 @@ import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, d
 export function useChatData({ targetUid, userRole, enabled = true }) {
     const { user } = useAuth();
     const effectiveUid = useMemo(() => (enabled ? (targetUid || user?.uid) : null), [enabled, targetUid, user?.uid]);
+    // One explicit predicate for every queue read/write/expiry/promotion below,
+    // instead of each site separately excluding just 'viewer' - that left
+    // 'denied' (and any future non-moderator role) able to subscribe to and
+    // interact with the queue even though queueMessage() itself already
+    // excludes both.
+    const canManageQueue = userRole === 'broadcaster' || userRole === 'mod';
 
     const [messages, setMessages] = useState([]);
     const [thirdPartyEmotes, setThirdPartyEmotes] = useState({ sevenTV: [], bttv: [], ffz: [] });
@@ -20,6 +27,9 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const [channelName, setChannelName] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
     const [activeMessage, setActiveMessage] = useState(null);
+    const [queuedMessages, setQueuedMessages] = useState([]);
+    const [displayDuration, setDisplayDuration] = useState(5);
+    const promotingRef = useRef(false);
 
     const clientRef = useRef(null);
     const connectingRef = useRef(false);
@@ -145,6 +155,99 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         return () => unsub();
     }, [effectiveUid]);
 
+    // Listen for the pending "show next" queue, oldest first.
+    useEffect(() => {
+        if (!effectiveUid || !canManageQueue) return;
+        const q = query(collection(db, 'users', effectiveUid, 'message_queue'), orderBy('queuedAt', 'asc'));
+        const unsub = onSnapshot(q, (snapshot) => {
+            setQueuedMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [effectiveUid, canManageQueue]);
+
+    // Needed to know when a timed (non-permanent) active message will
+    // naturally finish its on-screen time, so this client can expire it and
+    // advance the queue - see the two effects below.
+    useEffect(() => {
+        if (!effectiveUid) return;
+        const ref = doc(db, 'users', effectiveUid, 'settings', 'config');
+        const unsub = onSnapshot(ref, (snap) => {
+            if (snap.exists() && typeof snap.data().displayDuration === 'number') {
+                setDisplayDuration(snap.data().displayDuration);
+            }
+        });
+        return () => unsub();
+    }, [effectiveUid]);
+
+    // Expire the active message once its on-screen time is up. The overlay
+    // has no write access (it's intentionally unauthenticated - see
+    // firestore.rules), so it can only ever hide a message locally/visually;
+    // this dashboard-side client is the only place that can actually clear
+    // active_message/current in Firestore, which is what lets the queue below
+    // know it's time to advance.
+    useEffect(() => {
+        if (!effectiveUid || !activeMessage || !canManageQueue) return;
+        const duration = activeMessage.duration !== undefined ? activeMessage.duration : displayDuration;
+        if (!(duration > 0)) return; // -1/undefined duration means "permanent" - stays until replaced or hidden
+        const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+        const expiringId = activeMessage.activeId;
+        const timer = setTimeout(async () => {
+            try {
+                // With two dashboard clients open, another client's replacement
+                // could land in the window between this timer firing and the
+                // delete committing - re-check activeId inside a transaction
+                // instead of deleting unconditionally, so a stale timer from the
+                // OLD message can never delete a message that replaced it.
+                await runTransaction(db, async (transaction) => {
+                    const snap = await transaction.get(activeMsgRef);
+                    if (snap.exists() && snap.data().activeId === expiringId) {
+                        transaction.delete(activeMsgRef);
+                    }
+                });
+            } catch (e) { console.error('Error expiring active message:', e); }
+        }, duration * 1000 + 500);
+        return () => clearTimeout(timer);
+    }, [effectiveUid, activeMessage, displayDuration, canManageQueue]);
+
+    // Promote the next queued message once the screen is clear.
+    useEffect(() => {
+        if (!effectiveUid || activeMessage || queuedMessages.length === 0 || promotingRef.current || !canManageQueue) return;
+        promotingRef.current = true;
+        const { id: queueDocId, queuedAt, ...rest } = queuedMessages[0];
+        const payload = { ...rest, activeId: crypto.randomUUID() };
+        (async () => {
+            try {
+                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+                const queueRef = doc(db, 'users', effectiveUid, 'message_queue', queueDocId);
+                // Pre-generated ref (rather than addDoc) so this write can join
+                // the same transaction as the others below.
+                const historyRef = doc(collection(db, 'users', effectiveUid, 'history'));
+
+                // With two dashboard clients open, both can see the same empty
+                // active slot and the same queued item at once and each start
+                // promoting it - re-check both inside a transaction instead of
+                // the separate setDoc/addDoc/deleteDoc calls this used to be, so
+                // only one client's promotion actually commits.
+                const promoted = await runTransaction(db, async (transaction) => {
+                    const activeSnap = await transaction.get(activeMsgRef);
+                    const queueSnap = await transaction.get(queueRef);
+                    const slotTaken = activeSnap.exists() && Object.keys(activeSnap.data()).length > 0;
+                    if (slotTaken || !queueSnap.exists()) return false;
+                    transaction.set(activeMsgRef, payload);
+                    transaction.set(historyRef, payload);
+                    transaction.delete(queueRef);
+                    return true;
+                });
+
+                if (promoted) posthog.capture('message_shown', { source: 'queue' });
+            } catch (e) {
+                console.error('Error promoting queued message:', e);
+            } finally {
+                promotingRef.current = false;
+            }
+        })();
+    }, [effectiveUid, activeMessage, queuedMessages, canManageQueue]);
+
     const hideOverlay = async () => {
         if (!effectiveUid) return;
         try {
@@ -182,19 +285,55 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
                 const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
                 const historyRef = collection(db, 'users', effectiveUid, 'history');
 
-                const finalPayload = { ...payload };
+                const finalPayload = { ...payload, activeId: crypto.randomUUID() };
                 if (!permanent) delete finalPayload.duration;
 
                 await setDoc(activeMsgRef, finalPayload);
                 await addDoc(historyRef, finalPayload);
+                posthog.capture('message_sent', { permanent });
                 console.log('Sent to Screen ✅');
             }
         } catch (e) { console.error(e); }
     };
 
+    // Mods/broadcaster only (viewers already have "suggest" for the
+    // not-direct-to-screen case). Adds to message_queue instead of writing
+    // active_message/current directly - the queue-advance effect above shows
+    // it immediately if nothing's currently on screen, or once the current
+    // message's time is up.
+    const queueMessage = async (msg, permanent = false) => {
+        if (!user || !canManageQueue) return;
+
+        const payload = {
+            username: msg.username,
+            login: msg.login,
+            avatarUrl: msg.avatarUrl,
+            color: msg.color,
+            fragments: msg.fragments,
+            timestamp: serverTimestamp(),
+            queuedAt: serverTimestamp(),
+            suggestedBy: user.uid,
+            suggestedByName: user.displayName,
+        };
+        if (permanent) payload.duration = -1;
+
+        try {
+            await addDoc(collection(db, 'users', effectiveUid, 'message_queue'), payload);
+            posthog.capture('message_queued', { permanent });
+            console.log('Queued ✅');
+        } catch (e) { console.error(e); }
+    };
+
+    const removeFromQueue = async (queueId) => {
+        if (!effectiveUid || !canManageQueue) return;
+        try {
+            await deleteDoc(doc(db, 'users', effectiveUid, 'message_queue', queueId));
+        } catch (e) { console.error('Error removing from queue:', e); }
+    };
+
     const approveSuggestion = async (sug) => {
         try {
-            const payload = { ...sug, timestamp: serverTimestamp() };
+            const payload = { ...sug, timestamp: serverTimestamp(), activeId: crypto.randomUUID() };
             delete payload.id; // Remove the suggestion doc ID from payload
 
             const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
@@ -226,8 +365,11 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         channelName,
         suggestions,
         activeMessage,
+        queuedMessages,
         hideOverlay,
         sendToScreen,
+        queueMessage,
+        removeFromQueue,
         approveSuggestion,
         denySuggestion,
         reconnect,

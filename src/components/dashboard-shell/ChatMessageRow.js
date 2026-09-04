@@ -1,12 +1,12 @@
 'use client';
 
 import Image from 'next/image';
-import { Send, ScreenShare } from 'lucide-react';
+import { Send, ScreenShare, ListPlus } from 'lucide-react';
 import Avatar from '@/components/ui/Avatar';
 import { bevel, MONO, tiny, L } from './treatments';
 import { formatTimestamp } from '@/lib/utils';
 
-export default function ChatMessageRow({ t, msg, userRole, onShow, onShowPermanent }) {
+export default function ChatMessageRow({ t, msg, userRole, onShow, onShowPermanent, onQueue }) {
     const canModerate = userRole === 'broadcaster' || userRole === 'mod';
     return (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -20,6 +20,11 @@ export default function ChatMessageRow({ t, msg, userRole, onShow, onShowPermane
                     <span style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint, fontVariantNumeric: 'tabular-nums' }}>{formatTimestamp(msg.timestamp)}</span>
                     <span style={{ flex: 1 }} />
                     <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
+                        {canModerate && (
+                            <button onClick={onQueue} title="Show next, once the current message clears" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 7px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: t.faint, ...tiny(t), ...bevel(t) }}>
+                                <ListPlus size={11} />{L(t, 'Queue')}
+                            </button>
+                        )}
                         {canModerate && (
                             <button onClick={onShowPermanent} title="Show Permanently (∞)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 7px', appearance: 'none', cursor: 'pointer', border: `1px solid ${t.hair}`, background: 'transparent', color: t.faint, ...tiny(t), ...bevel(t) }}>
                                 {L(t, 'Send ∞')}

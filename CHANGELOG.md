@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.5] - 2026-09-04
+
+### Added
+- A "Queue" action alongside Send: hold a message to show automatically once the current one clears, instead of only being able to show something immediately. The dashboard now shows what's pending, with a one-click remove.
+- The dashboard is installable as a standalone app (its own window, no browser chrome) instead of only running as a browser tab.
+- A live "Overlay service" status (from Uptime Kuma) in the dashboard status bar and the landing page footer.
+- Product analytics behind a real "Cookie preferences" control (dashboard status bar and landing page footer) — nothing is sent until you actually consent, and you can change your choice at any time.
+
+### Changed
+- Master-admin detection now uses a Firebase custom claim instead of a Firestore field that froze at whatever value was first written and couldn't self-correct after a Twitch handle rename.
+
+### Fixed
+- Clicking Send while a message was already on screen silently queued it instead of replacing it immediately — the actual bug behind "why didn't that show up."
+- Sending several messages in quick succession, or from two moderator accounts at once, could back the overlay up with a visible delay instead of just showing the latest one.
+- Two dashboard sessions open at the same time (e.g. a broadcaster and a mod both moderating) could race each other into deleting a message that had just been replaced, or both promoting the same queued item and double-logging it to history.
+- Broadcasters, mods, and the message queue could be read or written by any signed-in user who knew a channel's ID, not just that channel's own owner or invited moderators.
+- A broadcaster or mod's own settings changes were treated the same as everyone else's for the message queue and on-stream controls, even for an account whose access had been denied.
+- KaraFun's connection status could get stuck showing "Connecting…" forever when no Party ID was set, and its position sliders could occasionally have a stale drag value overwrite a newer one from another session.
+
 ## [0.5.0] - 2026-09-03
 
 ### Added

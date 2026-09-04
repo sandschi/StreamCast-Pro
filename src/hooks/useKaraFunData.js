@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
+import posthog from 'posthog-js';
 
 // Extracted verbatim from the original inline logic in components/dashboard/KaraFun.js.
 export function useKaraFunData({ targetUid, userSettings }) {
@@ -89,6 +90,16 @@ export function useKaraFunData({ targetUid, userSettings }) {
         // Unique login per session — avoids duplicate-name rejection on reconnects
         const suffix = Math.floor(1000 + Math.random() * 9000);
         const loginName = `StreamCastPro${suffix}`;
+        // 'connect' only confirms the transport-level socket connected, not that
+        // this is actually a valid KaraFun party (serverUnreacheable can still
+        // follow it) - captured once, on the first real payload proving the
+        // authenticated connection actually works.
+        let hasCapturedConnected = false;
+        const captureConnectedOnce = () => {
+            if (hasCapturedConnected) return;
+            hasCapturedConnected = true;
+            posthog.capture('karafun_connected');
+        };
 
         // KaraFun uses Socket.IO v2 at https://www.karafun.com
         // The party is identified by the query parameter: remote=kf[partyId]
@@ -135,6 +146,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         // Real queue items have top-level: { title, artist, singer, songId, queueId, status }
         socket.on('queue', (items) => {
             console.log('KaraFun Sync: Queue received', items);
+            captureConnectedOnce();
             const transformed = (items || []).map(item => ({
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
@@ -153,6 +165,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         // Real-time playback status
         socket.on('status', (status) => {
             console.log('KaraFun Sync: Status received (full):', JSON.stringify(status));
+            captureConnectedOnce();
             setLoading(false);
             setError(null);
             setLastUpdated(new Date());

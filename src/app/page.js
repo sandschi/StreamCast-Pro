@@ -15,6 +15,7 @@ import MessageBubble from '@/components/overlay/MessageBubble';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import StatusDot from '@/components/ui/StatusDot';
 import useServiceStatus from '@/hooks/useServiceStatus';
+import { openConsentModal } from '@/lib/zarazConsent';
 import { pressStart2P } from '@/lib/fonts';
 
 const MONO = 'var(--font-mono)';
@@ -26,11 +27,13 @@ const MONO = 'var(--font-mono)';
 // font-family string sidesteps it entirely and is guaranteed correct.
 const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
 
-// href: null means the item opens the Changelog modal instead of navigating.
+// href: null means the item opens the Changelog modal; 'zaraz-consent' means
+// it reopens Zaraz's consent modal (zaraz.consent.modal = true) instead of
+// navigating.
 const FOOTER_LINKS = [
     ['Product', [['Overlay styles', '#overlay'], ['Dashboard', '/dashboard'], ['Status', 'https://status.sandschi.xyz']]],
     ['Community', [['Twitch', 'https://twitch.tv/sandschi'], ['Discord', 'https://d.sandschi.xyz'], ['Changelog', null]]],
-    ['Legal', [['Terms', '/terms'], ['Privacy', '/privacy'], ['Contact', 'mailto:support@sandschi.xyz']]],
+    ['Legal', [['Terms', '/terms'], ['Privacy', '/privacy'], ['Contact', 'mailto:support@sandschi.xyz'], ['Cookie preferences', 'zaraz-consent']]],
 ];
 const footerLinkStyle = { fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-muted)' };
 
@@ -393,6 +396,9 @@ export default function Home() {
                             <Eyebrow>{h}</Eyebrow>
                             {items.map(([label, href]) => href === null ? (
                                 <button key={label} type="button" onClick={() => setShowChangelog(true)}
+                                    style={{ ...footerLinkStyle, appearance: 'none', border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer' }}>{label}</button>
+                            ) : href === 'zaraz-consent' ? (
+                                <button key={label} type="button" onClick={openConsentModal}
                                     style={{ ...footerLinkStyle, appearance: 'none', border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer' }}>{label}</button>
                             ) : (
                                 <a key={label} href={href} style={footerLinkStyle} {...(href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{label}</a>

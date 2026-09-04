@@ -18,12 +18,17 @@ export const metadata = {
   description: "Advanced broadcast tools for Streamers",
   icons: {
     icon: "/logo.svg",
-    apple: "/logo.svg",
+    apple: "/icon-192.png",
   },
+};
+
+export const viewport = {
+  themeColor: "#0d0d10",
 };
 
 import { AuthProvider } from "@/context/AuthContext";
 import { PostHogProvider } from "@/providers/PostHogProvider";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 export default function RootLayout({ children }) {
   return (
@@ -36,6 +41,7 @@ export default function RootLayout({ children }) {
             {children}
           </AuthProvider>
         </PostHogProvider>
+        <ServiceWorkerRegister />
         <SpeedInsights />
       </body>
     </html>
