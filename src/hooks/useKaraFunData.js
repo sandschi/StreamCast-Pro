@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
+import posthog from 'posthog-js';
 
 // Extracted verbatim from the original inline logic in components/dashboard/KaraFun.js.
 export function useKaraFunData({ targetUid, userSettings }) {
@@ -104,6 +105,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         socket.on('connect', () => {
             console.log('KaraFun Sync: Connected to party', partyId);
             setError(null);
+            posthog.capture('karafun_connected');
 
             // KaraFun requires an authenticate event before it pushes any data
             console.log('KaraFun Sync: Authenticating as', loginName);

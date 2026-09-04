@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, runTransaction } from 'firebase/firestore';
+import posthog from 'posthog-js';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Broadcasters.js.
 export function useBroadcastersData() {
@@ -48,6 +49,8 @@ export function useBroadcastersData() {
                 }
                 transaction.update(userRef, { status });
             });
+            if (status === 'approved') posthog.capture('broadcaster_approved', { userId });
+            else if (status === 'denied') posthog.capture('broadcaster_denied', { userId });
         } catch (e) {
             console.error('Failed to update status:', e);
             alert(e.message || 'Failed to update status.');

@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, orderBy } from 'firebase/firestore';
+import posthog from 'posthog-js';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
@@ -199,6 +200,7 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
                 await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), payload);
                 await addDoc(collection(db, 'users', effectiveUid, 'history'), payload);
                 await deleteDoc(doc(db, 'users', effectiveUid, 'message_queue', queueDocId));
+                posthog.capture('message_shown', { source: 'queue' });
             } catch (e) {
                 console.error('Error promoting queued message:', e);
             } finally {
@@ -249,6 +251,7 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
 
                 await setDoc(activeMsgRef, finalPayload);
                 await addDoc(historyRef, finalPayload);
+                posthog.capture('message_sent', { permanent });
                 console.log('Sent to Screen ✅');
             }
         } catch (e) { console.error(e); }
@@ -277,6 +280,7 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
 
         try {
             await addDoc(collection(db, 'users', effectiveUid, 'message_queue'), payload);
+            posthog.capture('message_queued', { permanent });
             console.log('Queued ✅');
         } catch (e) { console.error(e); }
     };

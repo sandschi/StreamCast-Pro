@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
+import posthog from 'posthog-js';
 
 export const SOUNDS = {
     pop: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
@@ -60,6 +61,10 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
     const [twitchUsername, setTwitchUsername] = useState('');
     const [saving, setSaving] = useState(false);
     const [activeMessage, setActiveMessage] = useState(null);
+    // Last Firestore-synced bubbleStyle, so handleSave can tell whether this
+    // save actually changed it (bubbleStyle is staged locally via updateSetting
+    // and only committed on Save, so most edits here don't touch it at all).
+    const lastSyncedBubbleStyleRef = useRef(null);
 
     useEffect(() => {
         if (!settings.fontFamily) return;
@@ -87,6 +92,7 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
                 if (data.posY == null && data.positionVertical) {
                     data.posY = data.positionVertical === 'top' ? 5 : data.positionVertical === 'center' ? 50 : 90;
                 }
+                if (data.bubbleStyle) lastSyncedBubbleStyleRef.current = data.bubbleStyle;
                 setSettings(prev => ({ ...prev, ...data }));
             }
         });
@@ -126,6 +132,10 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
             // OAuth-verified Twitch login (AuthContext.js) and only ever read
             // here, never written back.
             await setDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), settings, { merge: true });
+            if (settings.bubbleStyle && settings.bubbleStyle !== lastSyncedBubbleStyleRef.current) {
+                posthog.capture('bubble_style_changed', { style: settings.bubbleStyle });
+                lastSyncedBubbleStyleRef.current = settings.bubbleStyle;
+            }
         } catch (e) {
             console.error(e);
             alert('Error saving. Check Firestore connection.');
