@@ -14,9 +14,40 @@ service cloud.firestore {
 
     // Allow users to read/write their own data
     match /users/{userId} {
-      allow read: if true; // Overlay needs to read active_message by userId
-      allow write: if request.auth != null && request.auth.uid == userId;
-      
+      // Split from a blanket "allow read: if true": any signed-in user may still
+      // fetch one specific broadcaster's profile by ID (needed so mods/viewers can
+      // resolve the channel name to connect chat in someone else's dashboard), but
+      // only the real master admin may list/query the whole users collection — the
+      // Broadcasters admin panel used to be reachable by anyone who could get the
+      // client to believe it was the master admin (e.g. by setting their own
+      // twitchUsername to "sandschi"), exposing every broadcaster's profile data.
+      allow get: if request.auth != null;
+      allow list: if isMasterAdmin();
+      // A user may update their own document, but never their own approval status
+      // or twitchUsername (once set) — status must only change via the
+      // master-admin bypass above (self-approval otherwise), and twitchUsername
+      // drives the client-side "is this the master admin" UI check (see
+      // AuthContext.js/dashboard/page.js), so letting it change after creation
+      // would let a user cosmetically spoof that UI, even though every real
+      // permission check (isMasterAdmin() above) is keyed to the Auth UID, not
+      // this field.
+      allow update: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'twitchUsername']);
+      // The update lock above only protects a doc that already exists — it did
+      // nothing to stop a user from bypassing the app UI and calling setDoc
+      // directly on their own (not-yet-existing) doc with status: 'approved' as
+      // their very first write, self-approving before the update rule ever
+      // applies. Require the initial status to be absent or 'waiting'; it can
+      // only ever become 'approved'/'denied' afterward via the master-admin
+      // bypass above.
+      // twitchUsername is still client-settable on create (the real Twitch OAuth
+      // response, written client-side — there's no trusted backend path for it
+      // yet) so a similar cosmetic spoof is technically still possible here;
+      // closing that fully is what the custom-claims migration is for, see
+      // https://github.com/sandschi/StreamCast-Pro/issues/19.
+      allow create: if request.auth != null && request.auth.uid == userId
+        && (!('status' in request.resource.data) || request.resource.data.status == 'waiting');
+
       match /settings/{document=**} {
         allow read: if true; // Public for overlay
         allow write: if request.auth != null && request.auth.uid == userId;

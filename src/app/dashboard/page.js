@@ -2,70 +2,94 @@
 export const dynamic = 'force-dynamic';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
-import TwitchAvatar from '@/components/TwitchAvatar';
-import React, { useState, Suspense, useEffect } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import Chat from '@/components/dashboard/Chat';
-import History from '@/components/dashboard/History';
-import Settings from '@/components/dashboard/Settings';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import tmi from 'tmi.js';
-import {
-    LayoutDashboard,
-    MessageSquare,
-    History as HistoryIcon,
-    Settings as SettingsIcon,
-    LogOut,
-    ExternalLink,
-    ShieldAlert,
-    Shield,
-    RefreshCw,
-    Copy,
-    Check,
-    Link as LinkIcon,
-    Users,
-    Clock,
-    Music,
-    Terminal,
-    Key,
-    Power,
-    EyeOff
-} from 'lucide-react';
-import UsersTab from '@/components/dashboard/Users';
-import Broadcasters from '@/components/dashboard/Broadcasters';
-import KaraFunTab from '@/components/dashboard/KaraFun';
-import ApiSettings from '@/components/dashboard/ApiSettings';
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, query, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+
+import { TREATMENTS } from '@/components/dashboard-shell/treatments';
+import { NAV, ROLE_TABS } from '@/components/dashboard-shell/nav';
+import TitleBar from '@/components/dashboard-shell/TitleBar';
+import MenuBar from '@/components/dashboard-shell/MenuBar';
+import NavTabStrip from '@/components/dashboard-shell/NavTabStrip';
+import NavRail from '@/components/dashboard-shell/NavRail';
+import NavList from '@/components/dashboard-shell/NavList';
+import StatusBar from '@/components/dashboard-shell/StatusBar';
+import AlertBar from '@/components/dashboard-shell/AlertBar';
+import LoginWindow from '@/components/dashboard-shell/LoginWindow';
+import ReviewWindow from '@/components/dashboard-shell/ReviewWindow';
+import ChatPane from '@/components/dashboard-shell/ChatPane';
+import HistoryPane from '@/components/dashboard-shell/HistoryPane';
+import UsersPane from '@/components/dashboard-shell/UsersPane';
+import KaraFunPane from '@/components/dashboard-shell/KaraFunPane';
+import SettingsPane from '@/components/dashboard-shell/SettingsPane';
+import SectionTabs from '@/components/dashboard-shell/SectionTabs';
+import ApiPane from '@/components/dashboard-shell/ApiPane';
+import BroadcastersPane from '@/components/dashboard-shell/BroadcastersPane';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
-import { APP_VERSION } from '@/lib/version';
-import { onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
-import Link from 'next/link';
+import { useChatData } from '@/hooks/useChatData';
+
+const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
+
+function VerifyingBlock({ t }) {
+    return (
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', placeItems: 'center', gap: 12, textAlign: 'center', padding: 24 }}>
+            <div style={{ width: 40, height: 40, border: `3px solid ${t.hair}`, borderTopColor: t.accent, borderRadius: '50%', animation: 'sc-spin 0.8s linear infinite' }} />
+            <div>
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 700, color: t.text }}>Verifying Security…</div>
+                <div style={{ marginTop: 4, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: t.dim }}>Performing deep identity handshake with Twitch.</div>
+            </div>
+            <style>{`@keyframes sc-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+    );
+}
 
 function DashboardContent() {
-    const { user, userData, twitchToken, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
+    const { user, userData, loginWithTwitch, logout, isMasterAdmin, setIsMasterAdmin, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    // URL-based Tab State
     const activeTab = searchParams.get('tab') || 'chat';
     const hostParam = searchParams.get('host');
 
-    // Helper to update URL without losing other params (like host)
     const setActiveTab = (tab) => {
         const params = new URLSearchParams(searchParams);
         params.set('tab', tab);
         router.push(`?${params.toString()}`);
     };
 
-    const [copyState, setCopyState] = useState(null); // 'overlay' | 'mod'
-    const [isModAuthorized, setIsModAuthorized] = useState(false); // Default to false for security
-    const [userRole, setUserRole] = useState(null); // 'broadcaster', 'mod', 'viewer', 'denied'
-    const [broadcasterStatus, setBroadcasterStatus] = useState('waiting'); // 'waiting', 'approved', 'denied'
+    const [copyState, setCopyState] = useState(null);
+    const [isModAuthorized, setIsModAuthorized] = useState(false);
+    const [userRole, setUserRole] = useState(null);
+    const [broadcasterStatus, setBroadcasterStatus] = useState('waiting');
     const [verifyingMod, setVerifyingMod] = useState(true);
     const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
     const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
     const [showChangelog, setShowChangelog] = useState(false);
+    const [suggestionsMuted, setSuggestionsMuted] = useState(false);
+    const [settingsSection, setSettingsSection] = useState('dashboard');
+
+    // A viewer's own legibility preference (like their browser zoom level),
+    // not a broadcaster-wide style choice, so it lives in localStorage rather
+    // than settings/config alongside treatment/nav/density.
+    const [uiScale, setUiScaleState] = useState(100);
+    useEffect(() => {
+        try {
+            const saved = window.localStorage.getItem('sc-ui-scale');
+            if (saved) {
+                const n = parseInt(saved, 10);
+                if (!Number.isNaN(n)) setUiScaleState(n);
+            }
+        } catch (e) { /* storage unavailable — keep default */ }
+    }, []);
+    const setUiScale = (n) => {
+        setUiScaleState(n);
+        try { window.localStorage.setItem('sc-ui-scale', String(n)); } catch (e) { /* ignore */ }
+    };
+    useEffect(() => {
+        document.documentElement.style.zoom = uiScale !== 100 ? `${uiScale}%` : '';
+        return () => { document.documentElement.style.zoom = ''; };
+    }, [uiScale]);
 
     const targetUid = hostParam || user?.uid;
     const isModeratorMode = hostParam && hostParam !== user?.uid;
@@ -73,28 +97,25 @@ function DashboardContent() {
     const hasVerifiedAccess = isMasterAdmin ||
         (userRole === 'broadcaster' && broadcasterStatus === 'approved') ||
         (userRole === 'mod' && isModAuthorized) ||
-        (userRole === 'viewer'); // Viewers see suggestion mode chat
+        (userRole === 'viewer');
 
     // Verifying Moderator Permissions
     useEffect(() => {
         if (!user) return;
-        let ignore = false;
         let unsubscribeRole = () => { };
         let unsubscribeBroadcasterStatus = () => { };
 
-        // Master Admin bypass
         if (isMasterAdmin) {
             console.log('Permission Check: Master Admin detected. Full Access Granted.');
             setTimeout(() => {
                 setIsModAuthorized(true);
-                setUserRole('broadcaster'); // Master admin effectively has broadcaster rights
+                setUserRole('broadcaster');
                 setVerifyingMod(false);
-                setBroadcasterStatus('approved'); // Master admin is always approved
+                setBroadcasterStatus('approved');
             }, 0);
-            return; // Skip further permission checks
+            return;
         }
 
-        // Broadcaster check: If no host param or I am the owner of this UID
         if (!isModeratorMode || !hostParam || hostParam === user.uid) {
             console.log('Permission Check: Broadcaster/Local detected. Access Granted.');
             setTimeout(() => {
@@ -103,35 +124,37 @@ function DashboardContent() {
                 setVerifyingMod(false);
             }, 0);
 
-            // Listen for broadcaster status if it's the user's own dashboard
             unsubscribeBroadcasterStatus = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // Determine initial status
                     let status = data?.status;
-                    const isSandschiName = user.displayName?.toLowerCase() === 'sandschi';
-                    const isSandschiTwitch = data?.twitchUsername?.toLowerCase() === 'sandschi';
-                    const isSandschi = isSandschiName || isSandschiTwitch;
+                    // Master-admin detection uses twitchUsername (Firestore), not
+                    // user.displayName — Firebase's OIDC integration never actually
+                    // populates displayName for the Twitch provider (confirmed always
+                    // null at runtime), so that check silently failed on every
+                    // returning session. twitchUsername is set once from the raw OAuth
+                    // response at login and locked from further client writes in
+                    // firestore.rules, so it's safe to trust here.
+                    const isSandschi = data?.twitchUsername?.toLowerCase() === 'sandschi';
 
-                    console.log('Admin Security Check (Dashboard):', { isSandschi, name: user.displayName, twitch: data?.twitchUsername });
+                    console.log('Admin Security Check (Dashboard):', { isSandschi, twitchUsername: data?.twitchUsername });
 
                     setIsMasterAdmin(isSandschi);
 
                     if (!status || (isSandschi && status !== 'approved')) {
                         status = isSandschi ? 'approved' : 'waiting';
                     }
-                    setBroadcasterStatus(status || 'waiting'); // Default to 'waiting'
+                    setBroadcasterStatus(status || 'waiting');
                 } else {
-                    setBroadcasterStatus('waiting'); // User doc doesn't exist, default to waiting
+                    setBroadcasterStatus('waiting');
                 }
             });
         } else {
-            // NEW: Permission Listener (Manual Roles) for moderator mode
             setTimeout(() => setVerifyingMod(true), 0);
             const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
             unsubscribeRole = onSnapshot(roleRef, (doc) => {
                 const data = doc.data();
-                const role = data?.role || 'viewer'; // Default to viewer if invited
+                const role = data?.role || 'viewer';
                 setUserRole(role);
                 setIsModAuthorized(role === 'mod' || role === 'broadcaster');
                 setVerifyingMod(false);
@@ -139,12 +162,10 @@ function DashboardContent() {
             });
         }
 
-        // NEW: Presence Heartbeat (Track logged-in users)
         let heartbeatInterval;
         if (user && hostParam) {
             const presenceRef = doc(db, 'users', hostParam, 'online', user.uid);
             const updatePresence = async () => {
-                // Fetch own profile for best name data
                 const myProfile = await getDoc(doc(db, 'users', user.uid));
                 const myData = myProfile.data();
 
@@ -156,33 +177,29 @@ function DashboardContent() {
                 }, { merge: true });
             };
             updatePresence();
-            heartbeatInterval = setInterval(updatePresence, 30000); // 30s heartbeat
+            heartbeatInterval = setInterval(updatePresence, 30000);
         }
 
         return () => {
-            ignore = true;
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
     }, [user, hostParam, isModeratorMode, isMasterAdmin, setIsMasterAdmin, targetUid]);
 
-    // NEW Stable Settings Listener
+    // Stable Settings Listener
     useEffect(() => {
         if (!targetUid) return;
 
-        // 1. Listen to public settings
         const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
         const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
             if (docSnap.exists()) {
-                const data = docSnap.data();
-                setUserSettings(data);
+                setUserSettings(docSnap.data());
             } else {
                 setUserSettings({ karafunEnabled: false });
             }
         });
 
-        // 2. Fetch private config (apiToken) securely
         const fetchPrivateConfig = async () => {
             if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) {
                 setPrivateConfig({ apiToken: null });
@@ -229,6 +246,134 @@ function DashboardContent() {
         }
     };
 
+    // Chat is lifted to this level (instead of living inside ChatPane) so the
+    // tmi.js connection survives tab switches, exactly like the classic
+    // Chat.js stayed mounted (hidden via CSS) regardless of active tab — and
+    // so the title/status bar chrome can show its real connection state.
+    const chatEnabled = hasVerifiedAccess && !verifyingMod;
+    const chat = useChatData({ targetUid: chatEnabled ? targetUid : null, userRole, enabled: chatEnabled });
+
+    const allowed = useMemo(() => {
+        // userRole is set to 'broadcaster' optimistically the moment someone reaches
+        // their own dashboard, before broadcasterStatus (waiting/approved/denied) is
+        // known — without this check, a pending or denied broadcaster would see the
+        // full tab strip even though the body correctly shows the gate screen.
+        if (!hasVerifiedAccess) return [];
+        const base = ROLE_TABS[userRole] || [];
+        const extra = [];
+        if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
+        if (isMasterAdmin) extra.push('broadcasters');
+        return NAV.map(n => n.id).filter(id => base.includes(id) || extra.includes(id));
+    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled]);
+
+    // Cmd/Ctrl+1-9 tab switching
+    useEffect(() => {
+        const h = (e) => {
+            if (!(e.metaKey || e.ctrlKey)) return;
+            const n = parseInt(e.key, 10);
+            if (n >= 1 && n <= allowed.length) { e.preventDefault(); setActiveTab(allowed[n - 1]); }
+        };
+        window.addEventListener('keydown', h);
+        return () => window.removeEventListener('keydown', h);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allowed]);
+
+    const treatment = userSettings?.dashboardTreatment || 'carbon';
+    const t = TREATMENTS[treatment] || TREATMENTS.carbon;
+    const navVariant = userSettings?.dashboardNav || 'tabs';
+    const density = userSettings?.dashboardDensity || 'compact';
+    const compact = density === 'compact';
+    const menubar = userSettings?.dashboardMenubar !== false;
+    const statusbar = userSettings?.dashboardStatusbar !== false;
+    const d = {
+        compact, title: 38, menu: menubar ? 29 : 0, tabs: 34, status: statusbar ? 25 : 0,
+        rail: compact ? 46 : 52, list: compact ? 178 : 202, toolbar: compact ? 29 : 34, row: compact ? 28 : 34,
+        pad: compact ? 12 : 16, gap: compact ? 12 : 16, gutter: compact ? 8 : 12, inspector: compact ? 250 : 290,
+    };
+
+    const conn = chat.connectionStatus === 'connected' ? 'connected' : chat.connectionStatus === 'connecting' ? 'reconnecting' : 'disconnected';
+
+    const updateAppearance = async (key, value) => {
+        if (!targetUid) return;
+        try {
+            await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { [key]: value }, { merge: true });
+        } catch (e) { console.error(`Error saving ${key}:`, e); }
+    };
+
+    const exportHistory = async () => {
+        if (!targetUid) return;
+        try {
+            // Page through the whole collection instead of capping at one
+            // batch — a broadcaster's history can run well past a single
+            // query's worth, and a silently truncated export is worse than a
+            // few extra round trips.
+            const PAGE_SIZE = 500;
+            const historyRef = collection(db, 'users', targetUid, 'history');
+            const rows = [];
+            let cursor = null;
+            for (; ;) {
+                const q = cursor
+                    ? query(historyRef, orderBy('timestamp', 'desc'), startAfter(cursor), limit(PAGE_SIZE))
+                    : query(historyRef, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
+                const snap = await getDocs(q);
+                if (snap.empty) break;
+                rows.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (snap.docs.length < PAGE_SIZE) break;
+                cursor = snap.docs[snap.docs.length - 1];
+            }
+            const exportPayload = { exportedAt: new Date().toISOString(), messageCount: rows.length, messages: rows };
+            const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `streamcast-history-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) { console.error('Error exporting history:', e); }
+    };
+
+    const showLastMessage = async () => {
+        if (!targetUid) return;
+        try {
+            const q = query(collection(db, 'users', targetUid, 'history'), orderBy('timestamp', 'desc'), limit(1));
+            const snap = await getDocs(q);
+            if (snap.empty) return;
+            const last = { ...snap.docs[0].data() };
+            delete last.id;
+            await setDoc(doc(db, 'users', targetUid, 'active_message', 'current'), { ...last, timestamp: serverTimestamp() });
+        } catch (e) { console.error('Error showing last message:', e); }
+    };
+
+    const handleMenuSelect = (menu, item) => {
+        switch (item) {
+            case 'Copy Overlay URL': return copyToClipboard('overlay');
+            case 'Copy Moderator Link': return copyToClipboard('mod');
+            case 'Export Message History…': return exportHistory();
+            case 'Sign Out': return logout();
+            case 'Show Last Message': return showLastMessage();
+            case 'Show Permanently  ∞': return chat.activeMessage && chat.sendToScreen(chat.activeMessage, true);
+            case 'Hide Overlay': return chat.hideOverlay();
+            case 'Send Test Message': return chat.sendToScreen({
+                username: user?.displayName || 'Test User', login: 'test', color: '#07fc03', avatarUrl: user?.photoURL || null,
+                fragments: [{ type: 'text', content: 'This is a test message from the dashboard.' }],
+            });
+            case 'Save Settings': return setActiveTab('settings');
+            case 'Reconnect to Twitch': return chat.reconnect();
+            case 'Clear Log': return chat.clearMessages();
+            case 'Approve All Suggestions': return chat.suggestions.forEach(s => chat.approveSuggestion(s));
+            case 'Mute Suggestions': return setSuggestionsMuted(m => !m);
+            case 'Compact Density': return updateAppearance('dashboardDensity', 'compact');
+            case 'Comfortable Density': return updateAppearance('dashboardDensity', 'comfortable');
+            case 'Full Screen': return document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+            case 'Changelog': return setShowChangelog(true);
+            case 'Remote API Reference': return setActiveTab('api');
+            case 'About StreamCast Pro': return setShowChangelog(true);
+            default: return;
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -238,311 +383,75 @@ function DashboardContent() {
     }
 
     if (!user) {
-        return (
-            <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary-900/20 via-zinc-950 to-zinc-950">
-                <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 p-8 rounded-2xl shadow-2xl text-center space-y-6">
-                    <div className="w-20 h-20 bg-primary-600/20 flex items-center justify-center rounded-2xl mx-auto border border-primary-500/20">
-                        <LayoutDashboard className="w-10 h-10 text-primary-500" />
-                    </div>
-                    <div className="space-y-2">
-                        <h1 className="text-3xl font-bold text-zinc-100">StreamCast Pro</h1>
-                        <p className="text-zinc-400">The ultimate message overlay for elite streamers. Connect your Twitch to get started.</p>
-                    </div>
-                    <button
-                        onClick={loginWithTwitch}
-                        className="w-full py-4 px-6 bg-[#9146FF] hover:bg-[#7c3aeb] text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-3 active:scale-95"
-                    >
-                        <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" /></svg>
-                        Connect with Twitch
-                    </button>
-                </div>
-            </div>
-        );
+        return <LoginWindow t={TREATMENTS.carbon} onLogin={loginWithTwitch} />;
+    }
+
+    const current = allowed.includes(activeTab) ? activeTab : (allowed[0] || activeTab);
+    const Body = PANES[current];
+    const isVerifying = verifyingMod && isModeratorMode && !isMasterAdmin;
+    const showChrome = hasVerifiedAccess && !verifyingMod;
+
+    const navUser = { photoURL: userData?.photoURL || user?.photoURL, username: userData?.twitchUsername || user?.displayName };
+
+    let gate = null;
+    if (!hasVerifiedAccess && !isVerifying) {
+        if (userRole === 'broadcaster' && !isModeratorMode && broadcasterStatus === 'waiting') {
+            gate = { tone: 'waiting', title: 'Access Pending', status: 'Waiting for approval', body: <>Your application as a broadcaster is currently under review by <strong style={{ color: t.text }}>Sandschi</strong>. You will have access once approved.</> };
+        } else if (userRole === 'broadcaster' && !isModeratorMode && broadcasterStatus === 'denied') {
+            gate = { tone: 'denied', title: 'Access Denied', status: 'Access restricted', body: 'Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others.' };
+        } else if (userRole === 'denied') {
+            gate = { tone: 'denied', title: 'Access Denied', status: 'Access restricted', body: 'Your access to this dashboard has been restricted by the broadcaster.' };
+        }
     }
 
     return (
-        <div className="h-screen bg-zinc-950 text-zinc-100 flex font-sans overflow-hidden">
-            {/* Sidebar */}
-            <aside className="w-20 md:w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col p-4">
-                <div className="flex items-center gap-3 px-2 mb-10">
-                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg shadow-primary-500/20 shrink-0 relative overflow-hidden">
-                        <Image src="/logo.svg" alt="StreamCast Logo" fill style={{ objectFit: 'cover' }} priority sizes="40px" />
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: t.app, color: t.text, fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
+            <TitleBar t={t} d={d} conn={conn} channel={chat.channelName || navUser.username || 'Not connected'}
+                role={showChrome ? (isMasterAdmin ? 'Master admin' : (userRole || '')) : ''} isMasterAdmin={isMasterAdmin}
+                onVersionClick={() => setShowChangelog(true)} />
+            {menubar && <MenuBar t={t} d={d} onSelect={handleMenuSelect} restricted={!hasVerifiedAccess} />}
+            {navVariant === 'tabs' && <NavTabStrip t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} />}
+            <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                {navVariant === 'rail' && <NavRail t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} onSignOut={logout} />}
+                {navVariant === 'list' && <NavList t={t} d={d} tab={current} set={setActiveTab} allowed={allowed} role={isMasterAdmin ? 'Master admin' : (userRole || '')} user={navUser} />}
+                <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    {showChrome && current === 'settings' && (
+                        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', padding: `0 ${d.pad}px`, height: compact ? 34 : 40, borderBottom: `1px solid ${t.hair}` }}>
+                            <SectionTabs t={t} active={settingsSection} onChange={setSettingsSection} />
+                        </div>
+                    )}
+                    <AlertBar t={t} d={d} alert="none" />
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', padding: d.gutter }}>
+                        {isVerifying ? (
+                            <VerifyingBlock t={t} />
+                        ) : gate ? (
+                            <ReviewWindow t={t} d={d} {...gate} />
+                        ) : (
+                            <>
+                                <ChatPane t={t} d={d} userRole={userRole} chat={chat} hidden={current !== 'chat'} muted={suggestionsMuted} />
+                                {current !== 'chat' && Body && (
+                                    <Body
+                                        t={t} d={d} targetUid={targetUid} userRole={userRole} user={user}
+                                        userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
+                                        isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
+                                        uiScale={uiScale} setUiScale={setUiScale}
+                                        activeSection={settingsSection}
+                                    />
+                                )}
+                            </>
+                        )}
                     </div>
-                    <span className="hidden md:block font-bold text-xl tracking-tight">STREAMCAST</span>
                 </div>
-
-                <nav className="flex-1 space-y-2">
-                    {hasVerifiedAccess && (
-                        <>
-                            <button
-                                onClick={() => setActiveTab('chat')}
-                                className={`nav-item ${activeTab === 'chat' ? 'nav-item-active' : ''}`}
-                            >
-                                <MessageSquare size={18} />
-                                <span>Live Chat</span>
-                            </button>
-
-                            {isModAuthorized && (
-                                <button
-                                    onClick={() => setActiveTab('history')}
-                                    className={`nav-item ${activeTab === 'history' ? 'nav-item-active' : ''}`}
-                                >
-                                    <HistoryIcon size={18} />
-                                    <span>History</span>
-                                </button>
-                            )}
-
-                            {isModAuthorized && (
-                                <button
-                                    onClick={() => setActiveTab('users')}
-                                    className={`nav-item ${activeTab === 'users' ? 'nav-item-active' : ''}`}
-                                >
-                                    <Users size={18} />
-                                    <span>Users</span>
-                                </button>
-                            )}
-
-                            {((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && (
-                                <button
-                                    onClick={() => setActiveTab('karafun')}
-                                    className={`nav-item ${activeTab === 'karafun' ? 'nav-item-active' : ''}`}
-                                >
-                                    <Music size={18} />
-                                    <span>KaraFun</span>
-                                </button>
-                            )}
-
-                            {(userRole === 'broadcaster' || isMasterAdmin) && (
-                                <>
-                                    <button
-                                        onClick={() => setActiveTab('settings')}
-                                        className={`nav-item ${activeTab === 'settings' ? 'nav-item-active' : ''}`}
-                                    >
-                                        <SettingsIcon size={18} />
-                                        <span>Settings</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('api')}
-                                        className={`nav-item ${activeTab === 'api' ? 'nav-item-active' : ''}`}
-                                    >
-                                        <Terminal size={18} />
-                                        <span>API controls</span>
-                                    </button>
-                                </>
-                            )}
-                        </>
-                    )}
-
-                    {(isMasterAdmin || user?.displayName?.toLowerCase() === 'sandschi') && (
-                        <button
-                            onClick={() => setActiveTab('broadcasters')}
-                            className={`nav-item ${activeTab === 'broadcasters' ? 'nav-item-active' : ''}`}
-                        >
-                            <Shield size={18} />
-                            <span>Broadcasters</span>
-                        </button>
-                    )}
-
-                    {/* Quick Tools Section */}
-                    {hasVerifiedAccess && (userRole === 'broadcaster' || isMasterAdmin) && (
-                        <div className="pt-6 space-y-2">
-                            <div className="pb-2 px-3 hidden md:block border-t border-zinc-800/50 pt-6">
-                                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Toolkit</p>
-                            </div>
-
-                            <button
-                                onClick={() => copyToClipboard('overlay')}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                            >
-                                <div className="shrink-0">
-                                    {copyState === 'overlay' ? <Check size={20} className="text-green-500" /> : <ExternalLink size={20} />}
-                                </div>
-                                <span className="hidden md:block text-sm font-medium">
-                                    {copyState === 'overlay' ? 'Copied!' : 'Copy Overlay URL'}
-                                </span>
-                            </button>
-                            <button
-                                onClick={() => copyToClipboard('mod')}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl transition-all text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                            >
-                                <div className="shrink-0">
-                                    {copyState === 'mod' ? <Check size={20} className="text-green-500" /> : <LinkIcon size={20} />}
-                                </div>
-                                <span className="hidden md:block text-sm font-medium">
-                                    {copyState === 'mod' ? 'Copied!' : 'Copy Mod Link'}
-                                </span>
-                            </button>
-                        </div>
-                    )}
-                </nav>
-
-                <div className="mt-auto space-y-4">
-                    <button
-                        onClick={logout}
-                        className="w-full flex items-center gap-3 p-3 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-xl transition-all"
-                    >
-                        <LogOut size={20} />
-                        <span className="hidden md:block text-sm font-medium">Logout</span>
-                    </button>
-
-                    <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 px-2">
-                        <div className="relative w-9 h-9 shrink-0 flex items-center justify-center overflow-hidden rounded-full border border-zinc-700 bg-zinc-800">
-                            <TwitchAvatar photoURL={userData?.photoURL || user?.photoURL} username={userData?.twitchUsername || user.displayName} alt="Profile" iconSize={16} />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-zinc-900 rounded-full z-10" />
-                        </div>
-                        <div className="hidden md:block overflow-hidden">
-                            <p className="text-[11px] font-bold truncate text-zinc-100">{userData?.twitchUsername || user?.displayName}</p>
-                            <p className={`text-[9px] font-black truncate uppercase tracking-[0.1em] ${userRole === 'broadcaster' ? 'text-primary-400' :
-                                userRole === 'mod' ? 'text-emerald-400' :
-                                    userRole === 'denied' ? 'text-red-400' :
-                                        'text-zinc-500'
-                                }`}>
-                                {verifyingMod ? 'Verifying...' : userRole}
-                            </p>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={() => setShowChangelog(true)}
-                        className="w-full text-center text-[9px] font-bold text-zinc-600 hover:text-zinc-400 transition-colors tracking-wider"
-                    >
-                        v{APP_VERSION}
-                    </button>
-                </div>
-            </aside>
-
+            </div>
+            {statusbar && (
+                <StatusBar
+                    t={t} d={d} tab={current} onAir={chat.activeMessage} conn={conn}
+                    role={isMasterAdmin ? 'broadcaster' : (userRole || 'waiting')}
+                    queueDepth={chat.suggestions?.length || 0} partyId={userSettings?.karafunPartyId}
+                    blocked={isVerifying || !!gate}
+                />
+            )}
             <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
-
-            {/* Main Content */}
-            <main className="flex-1 p-6 md:p-10 flex flex-col min-h-0">
-                {hasVerifiedAccess && (
-                    <header className="mb-8 flex justify-between items-start">
-                        <div>
-                            <h2 className="text-2xl font-bold md:text-3xl text-zinc-100 mb-2">
-                                {activeTab === 'chat' && 'Moderation Dashboard'}
-                                {activeTab === 'history' && 'Message History'}
-                                {activeTab === 'users' && 'Manage Users'}
-                                {activeTab === 'karafun' && 'KaraFun Queue'}
-                                {activeTab === 'settings' && 'Overlay Customization'}
-                                {activeTab === 'api' && 'Remote API Controls'}
-                                {activeTab === 'broadcasters' && 'Manage Broadcasters'}
-                            </h2>
-                            <p className="text-zinc-500 text-sm md:text-base">
-                                {activeTab === 'chat' && 'Listen to your Twitch chat and send messages to your stream overlay.'}
-                                {activeTab === 'history' && 'Review and re-send previous messages to the screen.'}
-                                {activeTab === 'users' && 'Manage moderators, viewers, and restricted accounts.'}
-                                {activeTab === 'karafun' && 'Live song queue from your KaraFun party.'}
-                                {activeTab === 'settings' && 'Configure colors, animations, and display behavior.'}
-                                {activeTab === 'api' && 'Generate secure URLs for stream tools like Stream Deck.'}
-                                {activeTab === 'broadcasters' && 'Approve or deny broadcaster access to StreamCast.'}
-                            </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            {isMasterAdmin && (
-                                <div className="px-3 py-1 bg-primary-600/10 border border-primary-500/20 rounded-full flex items-center gap-2">
-                                    <Shield size={12} className="text-primary-400" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary-400">Master Admin</span>
-                                </div>
-                            )}
-                            <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 text-[10px] md:text-xs font-black transition-all ${userRole === 'broadcaster' ? 'bg-primary-500 text-black border-primary-500 shadow-[0_0_15px_rgba(7,252,3,0.4)]' :
-                                userRole === 'mod' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                    'bg-zinc-900/50 text-zinc-400 border-zinc-800'
-                                }`}>
-                                {!verifyingMod && userRole === 'broadcaster' && <LayoutDashboard size={14} />}
-                                {!verifyingMod && userRole === 'mod' && <Shield size={14} />}
-                                {!verifyingMod && userRole === 'viewer' && <Users size={14} />}
-                                {(verifyingMod || userRole === 'denied') && <ShieldAlert size={14} />}
-                                <span className="uppercase tracking-[0.2em] whitespace-nowrap">
-                                    {verifyingMod ? 'Verifying...' : `${userRole}`}
-                                </span>
-                            </div>
-                        </div>
-                    </header>
-                )}
-
-                <div className="w-full flex-1 min-h-0 flex flex-col">
-                    {/* Verifying Moderator Permissions UI */}
-                    {isModeratorMode && verifyingMod && !isMasterAdmin && (
-                        <div className="flex flex-col items-center justify-center p-20 space-y-4">
-                            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mb-4"></div>
-                            <h2 className="text-xl font-bold">Verifying Security...</h2>
-                            <p className="text-zinc-500">Performing deep identity handshake with Twitch.</p>
-                        </div>
-                    )}
-
-                    {/* Suggestion Mode Header Strip (Viewers only) */}
-                    {userRole === 'viewer' && !verifyingMod && !isMasterAdmin && (
-                        <div className="mb-4 bg-primary-600/10 border border-primary-500/20 rounded-xl p-3 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-700">
-                            <div className="flex items-center gap-3">
-                                <div className="p-1.5 bg-primary-500/20 rounded-lg">
-                                    <Users size={16} className="text-primary-400" />
-                                </div>
-                                <p className="text-xs text-primary-100/80">
-                                    <span className="font-bold text-primary-400">Suggestion Mode</span> – Your messages will be sent to the moderation pool for review.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'waiting' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-yellow-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto border border-yellow-500/20">
-                                <Clock size={40} className="text-yellow-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Pending</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your application as a broadcaster is currently under review by Sandschi. You will have access once approved.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {userRole === 'broadcaster' && !isModeratorMode && !verifyingMod && broadcasterStatus === 'denied' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
-                                <ShieldAlert size={40} className="text-red-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="2xl font-bold">Access Denied</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your broadcaster access has been restricted. You can still use the dashboard as a viewer if invited by others.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {userRole === 'denied' && !isMasterAdmin && (
-                        <div className="bg-zinc-900 border border-red-500/20 rounded-3xl p-12 text-center space-y-6 shadow-2xl">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
-                                <ShieldAlert size={40} className="text-red-500" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-bold">Access Denied</h3>
-                                <p className="text-zinc-500 max-w-sm mx-auto">
-                                    Your access to this dashboard has been restricted by the broadcaster.
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Dashboard Content - only shown if Verified Access (Approved Broadcaster, Authorized Mod, or Viewer in Suggestion Mode) */}
-                    {hasVerifiedAccess && !verifyingMod && (
-                        <>
-                            <div className={activeTab === 'chat' ? 'contents' : 'hidden'}>
-                                <Chat targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />
-                            </div>
-                            {activeTab === 'history' && <History targetUid={targetUid} isModeratorMode={isModeratorMode} isModAuthorized={isModAuthorized} userRole={userRole} />}
-                            {activeTab === 'users' && isModAuthorized && <UsersTab targetUid={targetUid} user={user} />}
-                            {activeTab === 'karafun' && ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) && <KaraFunTab targetUid={targetUid} userSettings={userSettings} />}
-                            {activeTab === 'settings' && (userRole === 'broadcaster' || isMasterAdmin) && <Settings targetUid={targetUid} isModeratorMode={isModeratorMode} />}
-                            {activeTab === 'api' && (userRole === 'broadcaster' || isMasterAdmin) && <ApiSettings targetUid={targetUid} user={user} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig} isMasterAdmin={isMasterAdmin} userRole={userRole} />}
-                            {activeTab === 'broadcasters' && isMasterAdmin && <Broadcasters />}
-                        </>
-                    )}
-                </div>
-            </main>
         </div>
     );
 }

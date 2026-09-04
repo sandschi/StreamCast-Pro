@@ -1,14 +1,18 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
+import { pressStart2P } from '@/lib/fonts';
+
+const ARCADE = `${pressStart2P.style.fontFamily}, var(--font-geist-sans), system-ui, sans-serif`;
 
 function renderChangelogLine(line, i) {
     if (line.startsWith('## ')) {
-        return <h3 key={i} className="text-lg font-bold text-zinc-100 mt-6 first:mt-0">{line.slice(3)}</h3>;
+        return <h3 key={i} className="text-zinc-100 mt-8 first:mt-0" style={{ fontFamily: ARCADE, fontSize: 16, lineHeight: 1.6 }}>{line.slice(3)}</h3>;
     }
     if (line.startsWith('### ')) {
-        return <h4 key={i} className="text-xs font-black uppercase tracking-[0.15em] text-primary-400 mt-4 mb-1">{line.slice(4)}</h4>;
+        return <h4 key={i} className="text-primary-400 mt-5 mb-2" style={{ fontFamily: ARCADE, fontSize: 12, lineHeight: 1.6, letterSpacing: '.05em' }}>{line.slice(4)}</h4>;
     }
     if (line.startsWith('# ')) {
         return null; // top-level title, already shown in the modal header
@@ -41,44 +45,17 @@ export default function ChangelogModal({ open, onClose }) {
             .catch(() => setError('Failed to load changelog.'));
     }, [open, content]);
 
-    if (!open) return null;
-
     return (
-        <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-            onClick={onClose}
-        >
-            <div
-                className="bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-primary-500/20 p-2 rounded-lg">
-                            <Sparkles className="text-primary-400" size={18} />
-                        </div>
-                        <h2 className="text-lg font-bold text-zinc-100">Changelog</h2>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
-                    >
-                        <X size={18} />
-                    </button>
+        <Modal open={open} onClose={onClose} title="Changelog" icon={<Sparkles size={18} />} width={800}>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            {!error && !content && (
+                <p className="text-sm text-zinc-500">Loading...</p>
+            )}
+            {content && (
+                <div className="space-y-1">
+                    {content.split('\n').map(renderChangelogLine)}
                 </div>
-
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                    {error && <p className="text-sm text-red-400">{error}</p>}
-                    {!error && !content && (
-                        <p className="text-sm text-zinc-500">Loading...</p>
-                    )}
-                    {content && (
-                        <div className="space-y-1">
-                            {content.split('\n').map(renderChangelogLine)}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
+            )}
+        </Modal>
     );
 }

@@ -36,10 +36,17 @@ export function AuthProvider({ children }) {
                 const existingData = userSnapshot.data();
 
                 // Determine initial status
+                // Master-admin detection uses twitchUsername (Firestore), not
+                // currentUser.displayName — Firebase's generic OIDC integration
+                // never actually populates displayName for the Twitch provider, so
+                // that check silently evaluated false on every returning session
+                // (confirmed via the Admin Security Check log: displayName is
+                // always null here, even for the real master admin). twitchUsername
+                // is populated once from the raw OAuth response at login
+                // (loginWithTwitch, below) and locked from further client writes in
+                // firestore.rules, so it's safe to trust here.
                 let status = existingData?.status;
-                const isSandschi =
-                    currentUser.displayName?.toLowerCase() === 'sandschi' ||
-                    existingData?.twitchUsername?.toLowerCase() === 'sandschi';
+                const isSandschi = existingData?.twitchUsername?.toLowerCase() === 'sandschi';
 
                 if (!status || (isSandschi && status !== 'approved')) {
                     status = isSandschi ? 'approved' : 'waiting';
@@ -97,15 +104,27 @@ export function AuthProvider({ children }) {
             if (username) {
                 const cleanUsername = username.toLowerCase();
                 console.log('Syncing Identity:', cleanUsername);
-                const isSandschi = result.user.displayName?.toLowerCase() === 'sandschi' || cleanUsername === 'sandschi';
+                // cleanUsername comes straight from the raw Twitch OAuth response
+                // (profile.login), not currentUser.displayName — Firebase's OIDC
+                // integration never populates displayName for this provider, so
+                // checking it here would always be false.
+                const isSandschi = cleanUsername === 'sandschi';
                 setIsMasterAdmin(isSandschi); // Set master admin status on login
 
                 const userData = {
                     twitchUsername: cleanUsername,
                     displayName: result.user.displayName,
                     photoURL: extractedPhotoURL,
-                    status: isSandschi ? 'approved' : 'waiting'
                 };
+                // Only ever set status for a brand-new user (isNewUser, below) or the
+                // real master admin — a returning broadcaster's status was previously
+                // recomputed here on every login with no regard for an existing
+                // approval, silently resetting already-approved broadcasters back to
+                // "waiting" (racing with the correct, preserving logic in
+                // onAuthStateChanged above, so the outcome was non-deterministic).
+                if (isNewUser || isSandschi) {
+                    userData.status = isSandschi ? 'approved' : 'waiting';
+                }
 
                 await setDoc(doc(db, 'users', result.user.uid), userData, { merge: true });
 
