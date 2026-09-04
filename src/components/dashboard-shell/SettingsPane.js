@@ -230,6 +230,7 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     </div>
                 )}
                 <ToggleSwitch t={t} checked={settings.karafunEnabled} onChange={v => updateAppearanceSetting('karafunEnabled', v)} label="Enable KaraFun" description="Show song queue and current song in the sidebar. Takes effect immediately — the KaraFun tab appears or disappears as soon as you toggle this." />
+                <ToggleSwitch t={t} checked={settings.karaokeEnabled} onChange={v => updateAppearanceSetting('karaokeEnabled', v)} label="Enable Karaoke Requests" description="Open the Karaoke tab to everyone — viewers can request songs, singers can add their own. Separate from KaraFun above, so you can run the overlay without opening requests, or vice versa." />
                 </>}
             </Pane>
 

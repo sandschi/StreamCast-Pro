@@ -1,10 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import io from 'socket.io-client';
 import posthog from 'posthog-js';
+
+// Public, unauthenticated - identical to what the real karafun.com/{partyId}
+// remote client itself calls, confirmed by driving that page directly and
+// reading its network traffic (see #27). No backend proxy needed.
+export async function searchKaraFunSongs(partyId, query) {
+    if (!partyId || !query) return [];
+    const res = await fetch(`https://www.karafun.com/${partyId}/?type=search&q=${encodeURIComponent(query)}&types=karaoke`);
+    if (!res.ok) throw new Error('KaraFun search failed');
+    return res.json();
+}
 
 // Extracted verbatim from the original inline logic in components/dashboard/KaraFun.js.
 export function useKaraFunData({ targetUid, userSettings }) {
@@ -15,6 +25,10 @@ export function useKaraFunData({ targetUid, userSettings }) {
     const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
     const [isSavingId, setIsSavingId] = useState(false);
     const [reconnectKey, setReconnectKey] = useState(0);
+    // Emitters below (queueAdd/queueMove/... - see #27) read from this ref
+    // rather than closing over the effect's local `socket` const, since they're
+    // called from outside that effect and need whichever connection is current.
+    const socketRef = useRef(null);
 
     const handleReconnect = () => {
         setQueueData(null);
@@ -111,6 +125,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
             reconnectionDelay: 3000,
             reconnectionAttempts: Infinity,
         });
+        socketRef.current = socket;
 
         socket.on('connect', () => {
             console.log('KaraFun Sync: Connected to party', partyId);
@@ -151,6 +166,10 @@ export function useKaraFunData({ targetUid, userSettings }) {
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
+                // Needed to target queueMove/queueRemove at a specific entry (see
+                // #27) - not used by the read-only display, only by KaraokePane's
+                // mod reorder panel.
+                queueId: item.queueId,
             }));
             setQueueData(prev => ({
                 ...prev,
@@ -195,11 +214,40 @@ export function useKaraFunData({ targetUid, userSettings }) {
         return () => {
             console.log('KaraFun Sync: Cleaning up socket');
             socket.disconnect();
+            if (socketRef.current === socket) socketRef.current = null;
         };
     }, [partyId, userSettings?.karafunEnabled, reconnectKey]);
+
+    // Queue/playback actions (see #27) - all verified live against KaraFun's
+    // real protocol by driving the actual remote client and capturing its
+    // socket frames, not assumed from any documentation. Every emit is a
+    // silent no-op if there's no live connection yet, matching how KaraFun's
+    // own remote client behaves when a control is used before it's ready.
+    const emit = (event, payload) => { if (socketRef.current) socketRef.current.emit(event, payload); };
+    const addToQueue = (songId, singer, pos = 99999) => emit('queueAdd', { songId, pos, singer });
+    const moveInQueue = (queueId, from, to) => emit('queueMove', { queueId, from, to });
+    const removeFromQueue = (queueId) => emit('queueRemove', queueId);
+    // pitch/tempo are relative steps (±1 / ±5 per press), not absolute values -
+    // confirmed live: clicking + twice moved the displayed value from 0 to +2,
+    // sending the same delta both times.
+    const adjustPitch = (delta) => emit('pitch', delta);
+    const adjustTempo = (delta) => emit('tempo', delta);
+    const setVolume = (value) => emit('volume', value);
+    const setBackingVocalsVolume = (value) => emit('volumeBv', value);
+    // filename distinguishes which lead-vocal stem this is - solo songs have
+    // one ("1"), duets have two ("1" and "2"); render one slider per stem the
+    // song actually reports, not a fixed count.
+    const setLeadVocalVolume = (filename, value) => emit('volumeLd', { filename, volume: value });
+    const playSong = () => emit('play', null);
+    // Also the only way to clear the currently active/playing song - it has no
+    // drag handle in KaraFun's own remote client and can't be targeted by
+    // queueMove/queueRemove, confirmed live.
+    const skipSong = () => emit('next', null);
 
     return {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
+        addToQueue, moveInQueue, removeFromQueue, adjustPitch, adjustTempo,
+        setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     };
 }

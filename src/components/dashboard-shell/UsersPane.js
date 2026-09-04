@@ -9,8 +9,8 @@ import { bevel, MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import Avatar from '@/components/ui/Avatar';
 
-const TONE = { mod: 'var(--success)', viewer: 'var(--primary-500)', denied: 'var(--danger)' };
-const ROLES = ['mod', 'viewer', 'denied'];
+const TONE = { mod: 'var(--success)', viewer: 'var(--primary-500)', singer: '#a855f7', denied: 'var(--danger)' };
+const ROLES = ['mod', 'viewer', 'singer', 'denied'];
 
 export default function UsersPane({ t, d, targetUid }) {
     const { user } = useAuth();
@@ -30,7 +30,7 @@ export default function UsersPane({ t, d, targetUid }) {
 
     return (
         <Pane t={t} d={d} icon={<UsersIcon size={13} />} title={`Users · ${userList.length} registered · ${onlineCount} online`} flush
-            actions={<ToolBtn t={t} icon={<LinkIcon size={12} />} onClick={copy}>Copy Mod Link</ToolBtn>}>
+            actions={<ToolBtn t={t} icon={<LinkIcon size={12} />} onClick={copy}>Copy Dashboard Link</ToolBtn>}>
             {/* One wrapper so this is Pane's only flush child — Pane's own content
                 gap would otherwise land between every row (on top of each row's
                 own divider below it), pushing each row's content down unevenly. */}

@@ -22,6 +22,7 @@ import ChatPane from '@/components/dashboard-shell/ChatPane';
 import HistoryPane from '@/components/dashboard-shell/HistoryPane';
 import UsersPane from '@/components/dashboard-shell/UsersPane';
 import KaraFunPane from '@/components/dashboard-shell/KaraFunPane';
+import KaraokePane from '@/components/dashboard-shell/KaraokePane';
 import SettingsPane from '@/components/dashboard-shell/SettingsPane';
 import SectionTabs from '@/components/dashboard-shell/SectionTabs';
 import ApiPane from '@/components/dashboard-shell/ApiPane';
@@ -29,7 +30,7 @@ import BroadcastersPane from '@/components/dashboard-shell/BroadcastersPane';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import { useChatData } from '@/hooks/useChatData';
 
-const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
+const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, karaoke: KaraokePane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
 
 function VerifyingBlock({ t }) {
     return (
@@ -63,7 +64,7 @@ function DashboardContent() {
     const [userRole, setUserRole] = useState(null);
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting');
     const [verifyingMod, setVerifyingMod] = useState(true);
-    const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
+    const [userSettings, setUserSettings] = useState({ karafunEnabled: false, karaokeEnabled: false });
     const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
     const [showChangelog, setShowChangelog] = useState(false);
     const [suggestionsMuted, setSuggestionsMuted] = useState(false);
@@ -97,7 +98,8 @@ function DashboardContent() {
     const hasVerifiedAccess = isMasterAdmin ||
         (userRole === 'broadcaster' && broadcasterStatus === 'approved') ||
         (userRole === 'mod' && isModAuthorized) ||
-        (userRole === 'viewer');
+        (userRole === 'viewer') ||
+        (userRole === 'singer');
 
     // Verifying Moderator Permissions
     useEffect(() => {
@@ -193,7 +195,7 @@ function DashboardContent() {
             if (docSnap.exists()) {
                 setUserSettings(docSnap.data());
             } else {
-                setUserSettings({ karafunEnabled: false });
+                setUserSettings({ karafunEnabled: false, karaokeEnabled: false });
             }
         });
 
@@ -259,9 +261,12 @@ function DashboardContent() {
         const base = ROLE_TABS[userRole] || [];
         const extra = [];
         if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
+        // Open to every role (unlike 'karafun', which is broadcaster/admin-only
+        // settings) - viewers and singers are exactly who this tab is for.
+        if (userSettings?.karaokeEnabled) extra.push('karaoke');
         if (isMasterAdmin) extra.push('broadcasters');
         return NAV.map(n => n.id).filter(id => base.includes(id) || extra.includes(id));
-    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled]);
+    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled, userSettings?.karaokeEnabled]);
 
     // Cmd/Ctrl+1-9 tab switching
     useEffect(() => {

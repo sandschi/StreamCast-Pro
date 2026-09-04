@@ -112,7 +112,47 @@ service cloud.firestore {
         // clause instead let ANY user self-write their own entry into ANY
         // broadcaster's permissions - i.e. self-grant mod access to a channel
         // that never invited them, with no legitimate app flow relying on it.
-        allow write: if isChannelModerator(userId);
+        // A singer may additionally update only their own `participating`
+        // field on a doc that already exists (a mod/broadcaster always creates
+        // it first via UsersPane's role buttons) - everything else, role
+        // itself included, stays mod/broadcaster only, same reasoning as the
+        // users/{userId} status/twitchUsername lock. Split from create/delete
+        // rather than one `allow write` so this never has to evaluate
+        // resource.data against a not-yet-existing document.
+        allow create, delete: if isChannelModerator(userId);
+        allow update: if isChannelModerator(userId) || (
+          request.auth != null && request.auth.uid == permissionId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participating'])
+        );
+      }
+
+      // Karaoke song requests (see #27). Read is open to any signed-in user -
+      // the Karaoke tab needs to show public requests to every online singer,
+      // not just the two people involved. requestedBy/targetSingerUid may
+      // each act on the fields that concern them; mods get full control
+      // (force-public, decline) via isChannelModerator. Duet invites live on
+      // karaoke_staging_queue instead (see below), not on a request doc.
+      match /karaoke_requests/{requestId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.resource.data.requestedBy == request.auth.uid;
+        allow update, delete: if isChannelModerator(userId)
+          || request.auth.uid == resource.data.requestedBy
+          || request.auth.uid == resource.data.targetSingerUid;
+      }
+
+      // Rotation-ordered staging list of accepted/self-added songs waiting to
+      // be pushed into KaraFun's real queue (see #27) - not KaraFun's own
+      // queue, which has no concept of "whose turn is next". The invited
+      // co-singer also needs write access to accept/decline their own duet
+      // invite - duetInvite is only ever a map or explicitly null, checked
+      // that way rather than via .get() chaining (calling .get() on a
+      // present-but-null field throws, unlike a genuinely absent key).
+      match /karaoke_staging_queue/{entryId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.resource.data.singerUid == request.auth.uid;
+        allow update, delete: if isChannelModerator(userId)
+          || request.auth.uid == resource.data.singerUid
+          || (resource.data.duetInvite != null && request.auth.uid == resource.data.duetInvite.invitedUid);
       }
 
       match /online/{onlineId} {
@@ -129,6 +169,19 @@ service cloud.firestore {
         allow read: if true;
         allow write: if request.auth != null && request.auth.uid == userId;
       }
+    }
+
+    // Twitch-username -> uid lookup so karaoke.sandschi.xyz/{username} (see #27)
+    // can resolve a human-readable link to the right broadcaster's dashboard
+    // without querying/listing the whole users collection. Public read (the
+    // route itself is hit by logged-out viewers before they sign in); a user
+    // may only ever create the single mapping for their own uid, and it's
+    // create-only (no update/delete) so a username can't be reassigned once
+    // claimed - matches twitchUsername being locked after creation on the
+    // users/{userId} doc itself.
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
     }
   }
 }
