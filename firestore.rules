@@ -17,6 +17,20 @@ service cloud.firestore {
         (request.auth.token.isMasterAdmin == true || request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2');
     }
 
+    // The channel owner, or someone the owner explicitly granted a
+    // permissions/{their-own-uid} doc to (an invited mod - see UsersPane.js /
+    // useUsersData.js, which only ever writes permissions from the owner's own
+    // session). Existence alone is enough here, without reading the role
+    // field: a viewer never gets a permissions doc written for them at all
+    // (dashboard/page.js treats a missing doc as role 'viewer' by default), so
+    // any doc existing at this path is itself proof of an owner-granted invite.
+    function isChannelModerator(userId) {
+      return request.auth != null && (
+        request.auth.uid == userId ||
+        exists(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid))
+      );
+    }
+
     // Master Admin Bypass
     match /{document=**} {
       allow read, write: if isMasterAdmin();
@@ -69,25 +83,36 @@ service cloud.firestore {
       
       match /active_message/{document=**} {
         allow read: if true; // Public for overlay
-        allow write: if request.auth != null; // Host Mode (Moderators)
+        // Scoped to the owner/invited moderators, same as message_queue below -
+        // "Host Mode" previously meant any authenticated user could overwrite
+        // what's live on ANY broadcaster's stream just by knowing their UID.
+        allow write: if isChannelModerator(userId);
       }
-      
+
       match /history/{document=**} {
-        allow read, write: if request.auth != null; // Host Mode (Moderators)
+        allow read, write: if isChannelModerator(userId);
       }
 
       // Pending "show next" queue. Not public: unlike active_message, the
       // overlay never reads or writes this directly (it has no auth, and
       // advancing the queue requires a write) — the dashboard alone owns the
       // full lifecycle: queueing, expiring the active message, and promoting
-      // the next queued item. See useChatData.js.
+      // the next queued item. See useChatData.js. Scoped to the owner/invited
+      // moderators (isChannelModerator) rather than any authenticated user -
+      // "Host Mode" previously meant literally anyone who knew the UID.
       match /message_queue/{document=**} {
-        allow read, write: if request.auth != null; // Host Mode (Moderators)
+        allow read, write: if isChannelModerator(userId);
       }
 
       match /permissions/{permissionId} {
         allow read: if request.auth != null;
-        allow write: if request.auth != null && (request.auth.uid == userId || request.auth.uid == permissionId);
+        // Owner or an already-invited mod (ROLE_TABS.mod includes 'users' -
+        // UsersPane.js/useUsersData.js let mods manage the user list too, not
+        // just the owner). The previous `|| request.auth.uid == permissionId`
+        // clause instead let ANY user self-write their own entry into ANY
+        // broadcaster's permissions - i.e. self-grant mod access to a channel
+        // that never invited them, with no legitimate app flow relying on it.
+        allow write: if isChannelModerator(userId);
       }
 
       match /online/{onlineId} {

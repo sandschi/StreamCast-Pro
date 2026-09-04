@@ -37,6 +37,7 @@ export function useBroadcastersData() {
     // rather than trusting a value that might be seconds or minutes old.
     const setStatus = async (userId, status, expectedCurrentStatus) => {
         const userRef = doc(db, 'users', userId);
+        let statusActuallyChanged = false;
         try {
             await runTransaction(db, async (transaction) => {
                 const snap = await transaction.get(userRef);
@@ -47,10 +48,15 @@ export function useBroadcastersData() {
                 if (expectedCurrentStatus !== undefined && currentStatus !== expectedCurrentStatus) {
                     throw new Error("This broadcaster's status changed since your list last updated — refresh and try again.");
                 }
+                statusActuallyChanged = currentStatus !== status;
                 transaction.update(userRef, { status });
             });
-            if (status === 'approved') posthog.capture('broadcaster_approved', { userId });
-            else if (status === 'denied') posthog.capture('broadcaster_denied', { userId });
+            // Re-clicking Approve on an already-approved broadcaster shouldn't
+            // fire the event again - only a real transition is worth counting.
+            if (statusActuallyChanged) {
+                if (status === 'approved') posthog.capture('broadcaster_approved', { userId });
+                else if (status === 'denied') posthog.capture('broadcaster_denied', { userId });
+            }
         } catch (e) {
             console.error('Failed to update status:', e);
             alert(e.message || 'Failed to update status.');

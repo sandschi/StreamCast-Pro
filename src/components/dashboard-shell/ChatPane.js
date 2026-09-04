@@ -55,7 +55,10 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
     }, [effectiveUid]);
 
     const conn = connectionStatus === 'connected' ? 'connected' : connectionStatus === 'connecting' ? 'reconnecting' : 'disconnected';
-    const showInspector = userRole !== 'viewer';
+    // The whole inspector column (queue, on-stream preview, Hide/quick actions)
+    // is moderator/broadcaster-only - excluded 'viewer' but not 'denied', so a
+    // denied user's own dashboard rendered these controls too.
+    const showInspector = userRole === 'broadcaster' || userRole === 'mod';
 
     const copy = (text) => { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => { }); };
     const origin = typeof window !== 'undefined' ? window.location.origin : '';

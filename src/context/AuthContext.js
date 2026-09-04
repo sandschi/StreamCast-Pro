@@ -188,7 +188,12 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const logout = () => signOut(auth);
+    const logout = () => {
+        // Otherwise the next person to sign in on this device/browser would
+        // keep getting merged into the previous user's PostHog identity.
+        posthog.reset();
+        return signOut(auth);
+    };
 
     return (
         <AuthContext.Provider value={{ user, userData, twitchToken, isMasterAdmin, loading, loginWithTwitch, logout }}>

@@ -64,7 +64,11 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
     // Last Firestore-synced bubbleStyle, so handleSave can tell whether this
     // save actually changed it (bubbleStyle is staged locally via updateSetting
     // and only committed on Save, so most edits here don't touch it at all).
-    const lastSyncedBubbleStyleRef = useRef(null);
+    // Initialized to the same default as settings.bubbleStyle above, not null -
+    // otherwise a brand-new broadcaster with no saved config yet would have
+    // their very first Save (even without touching the style picker) treated
+    // as a change, since 'classic' !== null.
+    const lastSyncedBubbleStyleRef = useRef('classic');
 
     useEffect(() => {
         if (!settings.fontFamily) return;
@@ -147,6 +151,7 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
         try {
             const testMessage = {
                 id: 'test-message-' + Date.now(),
+                activeId: crypto.randomUUID(),
                 username: 'TestUser',
                 fragments: [{ type: 'text', content: permanent ? 'This message will stay until hidden! 📌' : 'This is a test message from your settings!' }],
                 timestamp: Date.now(),
