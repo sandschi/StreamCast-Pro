@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, RefreshCw, XCircle, HandHelping, Zap, Send, ScreenShare, EyeOff, ExternalLink, Link as LinkIcon } from 'lucide-react';
+import { MessageSquare, RefreshCw, XCircle, HandHelping, Zap, Send, ScreenShare, EyeOff, ExternalLink, Link as LinkIcon, ListOrdered, X } from 'lucide-react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -34,8 +34,11 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
         channelName,
         suggestions,
         activeMessage,
+        queuedMessages,
         hideOverlay,
         sendToScreen,
+        queueMessage,
+        removeFromQueue,
         approveSuggestion,
         denySuggestion,
         reconnect,
@@ -99,7 +102,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                     )}
                     {displayMessages.map((msg) => (
                         <div key={msg.id} style={{ padding: d.compact ? '7px 10px' : '10px 12px', borderBottom: `1px solid ${t.hair}`, minWidth: 0 }}>
-                            <ChatMessageRow t={t} msg={msg} userRole={userRole} onShow={() => sendToScreen(msg)} onShowPermanent={() => sendToScreen(msg, true)} />
+                            <ChatMessageRow t={t} msg={msg} userRole={userRole} onShow={() => sendToScreen(msg)} onShowPermanent={() => sendToScreen(msg, true)} onQueue={() => queueMessage(msg)} />
                         </div>
                     ))}
                 </div>
@@ -121,6 +124,22 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                                 </div>}
                         </div>
                     </div>
+                    {queuedMessages.length > 0 && (
+                        <Pane t={t} d={d} icon={<ListOrdered size={13} />} title={`Queue · ${queuedMessages.length}`}>
+                            {queuedMessages.map((qm, i) => (
+                                <div key={qm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < queuedMessages.length - 1 ? `1px solid ${t.hair}` : 'none' }}>
+                                    <span style={{ ...tiny(t), color: t.faint, flex: 'none', width: 14, textAlign: 'right' }}>{i + 1}</span>
+                                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, color: qm.color || t.text, flex: 'none' }}>{qm.username}</span>
+                                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.dim, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {qm.fragments?.find(f => f.type === 'text')?.content || ''}
+                                    </span>
+                                    <button onClick={() => removeFromQueue(qm.id)} title="Remove from queue" style={{ display: 'grid', placeItems: 'center', width: 18, height: 18, flex: 'none', appearance: 'none', cursor: 'pointer', border: 'none', background: 'transparent', color: t.faint }}>
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                        </Pane>
+                    )}
                     <Pane t={t} d={d} icon={<Zap size={13} />} title="Quick Actions">
                         <button onClick={sendTestMessage} style={ACTION_BTN(t)}>
                             <Send size={14} /><span style={{ flex: 1 }}>Send Test Message</span>

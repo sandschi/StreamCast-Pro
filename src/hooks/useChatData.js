@@ -5,7 +5,7 @@ import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, orderBy } from 'firebase/firestore';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
@@ -20,6 +20,9 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const [channelName, setChannelName] = useState(null);
     const [suggestions, setSuggestions] = useState([]);
     const [activeMessage, setActiveMessage] = useState(null);
+    const [queuedMessages, setQueuedMessages] = useState([]);
+    const [displayDuration, setDisplayDuration] = useState(5);
+    const promotingRef = useRef(false);
 
     const clientRef = useRef(null);
     const connectingRef = useRef(false);
@@ -145,6 +148,65 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         return () => unsub();
     }, [effectiveUid]);
 
+    // Listen for the pending "show next" queue, oldest first.
+    useEffect(() => {
+        if (!effectiveUid || userRole === 'viewer') return;
+        const q = query(collection(db, 'users', effectiveUid, 'message_queue'), orderBy('queuedAt', 'asc'));
+        const unsub = onSnapshot(q, (snapshot) => {
+            setQueuedMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [effectiveUid, userRole]);
+
+    // Needed to know when a timed (non-permanent) active message will
+    // naturally finish its on-screen time, so this client can expire it and
+    // advance the queue - see the two effects below.
+    useEffect(() => {
+        if (!effectiveUid) return;
+        const ref = doc(db, 'users', effectiveUid, 'settings', 'config');
+        const unsub = onSnapshot(ref, (snap) => {
+            if (snap.exists() && typeof snap.data().displayDuration === 'number') {
+                setDisplayDuration(snap.data().displayDuration);
+            }
+        });
+        return () => unsub();
+    }, [effectiveUid]);
+
+    // Expire the active message once its on-screen time is up. The overlay
+    // has no write access (it's intentionally unauthenticated - see
+    // firestore.rules), so it can only ever hide a message locally/visually;
+    // this dashboard-side client is the only place that can actually clear
+    // active_message/current in Firestore, which is what lets the queue below
+    // know it's time to advance.
+    useEffect(() => {
+        if (!effectiveUid || !activeMessage || userRole === 'viewer') return;
+        const duration = activeMessage.duration !== undefined ? activeMessage.duration : displayDuration;
+        if (!(duration > 0)) return; // -1/undefined duration means "permanent" - stays until replaced or hidden
+        const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
+        const timer = setTimeout(async () => {
+            try { await deleteDoc(activeMsgRef); } catch (e) { console.error('Error expiring active message:', e); }
+        }, duration * 1000 + 500);
+        return () => clearTimeout(timer);
+    }, [effectiveUid, activeMessage, displayDuration, userRole]);
+
+    // Promote the next queued message once the screen is clear.
+    useEffect(() => {
+        if (!effectiveUid || activeMessage || queuedMessages.length === 0 || promotingRef.current || userRole === 'viewer') return;
+        promotingRef.current = true;
+        const { id: queueDocId, queuedAt, ...payload } = queuedMessages[0];
+        (async () => {
+            try {
+                await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), payload);
+                await addDoc(collection(db, 'users', effectiveUid, 'history'), payload);
+                await deleteDoc(doc(db, 'users', effectiveUid, 'message_queue', queueDocId));
+            } catch (e) {
+                console.error('Error promoting queued message:', e);
+            } finally {
+                promotingRef.current = false;
+            }
+        })();
+    }, [effectiveUid, activeMessage, queuedMessages, userRole]);
+
     const hideOverlay = async () => {
         if (!effectiveUid) return;
         try {
@@ -192,6 +254,40 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         } catch (e) { console.error(e); }
     };
 
+    // Mods/broadcaster only (viewers already have "suggest" for the
+    // not-direct-to-screen case). Adds to message_queue instead of writing
+    // active_message/current directly - the queue-advance effect above shows
+    // it immediately if nothing's currently on screen, or once the current
+    // message's time is up.
+    const queueMessage = async (msg, permanent = false) => {
+        if (!user || userRole === 'denied' || userRole === 'viewer') return;
+
+        const payload = {
+            username: msg.username,
+            login: msg.login,
+            avatarUrl: msg.avatarUrl,
+            color: msg.color,
+            fragments: msg.fragments,
+            timestamp: serverTimestamp(),
+            queuedAt: serverTimestamp(),
+            suggestedBy: user.uid,
+            suggestedByName: user.displayName,
+        };
+        if (permanent) payload.duration = -1;
+
+        try {
+            await addDoc(collection(db, 'users', effectiveUid, 'message_queue'), payload);
+            console.log('Queued ✅');
+        } catch (e) { console.error(e); }
+    };
+
+    const removeFromQueue = async (queueId) => {
+        if (!effectiveUid) return;
+        try {
+            await deleteDoc(doc(db, 'users', effectiveUid, 'message_queue', queueId));
+        } catch (e) { console.error('Error removing from queue:', e); }
+    };
+
     const approveSuggestion = async (sug) => {
         try {
             const payload = { ...sug, timestamp: serverTimestamp() };
@@ -226,8 +322,11 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         channelName,
         suggestions,
         activeMessage,
+        queuedMessages,
         hideOverlay,
         sendToScreen,
+        queueMessage,
+        removeFromQueue,
         approveSuggestion,
         denySuggestion,
         reconnect,

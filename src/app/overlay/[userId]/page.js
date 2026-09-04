@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AnimatePresence } from 'framer-motion';
@@ -26,9 +26,6 @@ const SOUNDS = {
 
 export default function OverlayPage() {
     const { userId } = useParams();
-    const [messageQueue, setMessageQueue] = useState([]);
-    const [processedIds] = useState(() => new Set());
-    const [isProcessing, setIsProcessing] = useState(false);
     const [activeMessage, setActiveMessage] = useState(null);
 
     // KaraFun State
@@ -105,26 +102,18 @@ export default function OverlayPage() {
             if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() }));
         });
 
+        // Directly mirror active_message/current: any change (a new Send, a
+        // queued message getting promoted, a delete) replaces or clears
+        // what's showing immediately. There is deliberately no local queueing
+        // here - the overlay has no write access (it's unauthenticated by
+        // design), so it can't own queue state; that lives in useChatData.js
+        // on the dashboard side, which is the only client that can advance it.
         const activeMsgRef = doc(db, 'users', userId, 'active_message', 'current');
         const unsubscribeMessage = onSnapshot(activeMsgRef, (doc) => {
-            if (doc.exists() && Object.keys(doc.data()).length > 0) {
-                const data = doc.data();
-
-                // If it's a new ID, add to queue
-                if (data.id && !processedIds.has(data.id)) {
-                    processedIds.add(data.id);
-                    setMessageQueue(prev => [...prev, data]);
-                } else if (!data.id) {
-                    // Fallback for messages without IDs (testing)
-                    setMessageQueue(prev => [...prev, data]);
-                }
-            } else if (!doc.exists()) {
-                // Detected deletion (either via onSnapshot removed or doc.exists false)
-                setActiveMessage(null);
-            }
+            setActiveMessage(doc.exists() && Object.keys(doc.data()).length > 0 ? doc.data() : null);
         });
         return () => { unsubscribeSettings(); unsubscribeMessage(); };
-    }, [userId, processedIds]);
+    }, [userId]);
 
     // Listen for manual "show now playing" triggers written via the API
     useEffect(() => {
@@ -166,60 +155,31 @@ export default function OverlayPage() {
         };
     }, [userId]);
 
-    const processNextMessage = useCallback(async () => {
-        setIsProcessing(true);
-        const nextMsg = messageQueue[0];
-
-        // Play Sound
-        if (settings.soundEnabled) {
-            try {
-                const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
-                audio.volume = settings.soundVolume !== undefined ? settings.soundVolume : 0.5;
-                audio.play().catch(e => console.warn('Audio play failed:', e));
-            } catch (e) {
-                console.error("Sound Error:", e);
-            }
-        }
-
-        setActiveMessage(nextMsg);
-        setMessageQueue(prev => prev.slice(1));
-
-        const duration = nextMsg.duration !== undefined ? nextMsg.duration : settings.displayDuration;
-
-        if (duration > 0) {
-            setTimeout(() => {
-                setActiveMessage(null);
-                setIsProcessing(false);
-            }, duration * 1000 + 500); // Add a small buffer for animation
-        } else {
-            // Permanent message - stays until NEXT message arrives in queue
-        }
-    }, [messageQueue, settings.soundEnabled, settings.soundType, settings.soundVolume, settings.displayDuration]);
-
-    // 3. Queue Processor
+    // Local, cosmetic-only auto-hide: stop rendering the active message after
+    // its on-screen time is up. This does NOT touch Firestore (the overlay
+    // can't - see above), so it's a visual safety net that works even if the
+    // dashboard that sent this message is closed; the dashboard separately
+    // deletes the Firestore doc itself once expired, which is what actually
+    // advances the queue for the next viewer/session.
     useEffect(() => {
-        if (messageQueue.length > 0 && !activeMessage && !isProcessing) {
-            // Use setTimeout to avoid synchronous setState inside an effect (lint fix)
-            const timer = setTimeout(() => {
-                processNextMessage();
-            }, 0);
-            return () => clearTimeout(timer);
-        }
-    }, [messageQueue, activeMessage, isProcessing, processNextMessage]);
+        if (!activeMessage) return;
+        const duration = activeMessage.duration !== undefined ? activeMessage.duration : settings.displayDuration;
+        if (!(duration > 0)) return; // -1/undefined duration means "permanent"
+        const timer = setTimeout(() => setActiveMessage(null), duration * 1000 + 500);
+        return () => clearTimeout(timer);
+    }, [activeMessage, settings.displayDuration]);
 
-    // Interrupt permanent messages if new ones arrive
+    // Play the notification sound whenever a new message appears.
     useEffect(() => {
-        if (activeMessage && (activeMessage.duration === -1 || activeMessage.duration === undefined) && messageQueue.length > 0) {
-            // If the current message is permanent (or standard without a timeout set yet) 
-            // and something else is waiting, clear it.
-            // We only do this if it's been showing for at least 3 seconds to avoid flashing.
-            const timer = setTimeout(() => {
-                setActiveMessage(null);
-                setIsProcessing(false);
-            }, 3000);
-            return () => clearTimeout(timer);
+        if (!activeMessage || !settings.soundEnabled) return;
+        try {
+            const audio = new Audio(SOUNDS[settings.soundType || 'pop']);
+            audio.volume = settings.soundVolume !== undefined ? settings.soundVolume : 0.5;
+            audio.play().catch(e => console.warn('Audio play failed:', e));
+        } catch (e) {
+            console.error("Sound Error:", e);
         }
-    }, [messageQueue.length, activeMessage]);
+    }, [activeMessage, settings.soundEnabled, settings.soundType, settings.soundVolume]);
 
     // 4. KaraFun Integration
     useEffect(() => {
