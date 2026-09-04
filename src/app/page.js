@@ -15,6 +15,7 @@ import MessageBubble from '@/components/overlay/MessageBubble';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import StatusDot from '@/components/ui/StatusDot';
 import useServiceStatus from '@/hooks/useServiceStatus';
+import { openConsentModal } from '@/lib/zarazConsent';
 import { pressStart2P } from '@/lib/fonts';
 
 const MONO = 'var(--font-mono)';
@@ -397,7 +398,7 @@ export default function Home() {
                                 <button key={label} type="button" onClick={() => setShowChangelog(true)}
                                     style={{ ...footerLinkStyle, appearance: 'none', border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer' }}>{label}</button>
                             ) : href === 'zaraz-consent' ? (
-                                <button key={label} type="button" onClick={() => { if (window.zaraz?.consent) window.zaraz.consent.modal = true; }}
+                                <button key={label} type="button" onClick={openConsentModal}
                                     style={{ ...footerLinkStyle, appearance: 'none', border: 'none', background: 'transparent', padding: 0, textAlign: 'left', cursor: 'pointer' }}>{label}</button>
                             ) : (
                                 <a key={label} href={href} style={footerLinkStyle} {...(href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{label}</a>

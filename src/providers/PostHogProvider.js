@@ -36,14 +36,15 @@ function syncWithZarazConsent() {
 export function PostHogProvider({ children }) {
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            // Zaraz's own script loads async and may finish before or after this
-            // effect runs, so check immediately in case it's already ready, and
-            // also listen for both "just became ready" and "the visitor changed
-            // their choice" (including granting consent for the first time,
-            // which also fires this event).
-            if (window.zaraz?.consent) syncWithZarazConsent();
+            // Listeners first, unconditionally: if the immediate check below ever
+            // threw (window.zaraz.consent existing doesn't mean APIReady - Zaraz's
+            // own script loads async and may finish before or after this effect
+            // runs), an uncaught error there would abort the rest of this effect
+            // body, silently skipping registration and leaving a later consent
+            // grant with nothing listening for it.
             document.addEventListener('zarazConsentAPIReady', syncWithZarazConsent);
             document.addEventListener('zarazConsentChoicesUpdated', syncWithZarazConsent);
+            if (window.zaraz?.consent?.APIReady) syncWithZarazConsent();
 
             const originalConsole = {
                 warn: console.warn,

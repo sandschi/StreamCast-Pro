@@ -4,6 +4,7 @@ import { Cookie } from 'lucide-react';
 import { MONO, Dot, CONN, scan, L } from './treatments';
 import { NAV } from './nav';
 import useServiceStatus from '@/hooks/useServiceStatus';
+import { openConsentModal } from '@/lib/zarazConsent';
 
 const STATUS_TONE = { Up: 'var(--primary-500)', Pending: 'var(--warning)' };
 
@@ -14,7 +15,7 @@ function CookiePreferencesButton({ t }) {
         <button
             type="button"
             title="Cookie preferences"
-            onClick={() => { if (window.zaraz?.consent) window.zaraz.consent.modal = true; }}
+            onClick={openConsentModal}
             style={{ display: 'grid', placeItems: 'center', width: 24, height: '100%', flex: 'none', appearance: 'none', cursor: 'pointer', border: 'none', background: 'transparent', color: t.faint }}
         >
             <Cookie size={12} />
