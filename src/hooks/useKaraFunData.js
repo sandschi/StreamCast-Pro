@@ -202,12 +202,22 @@ export function useKaraFunData({ targetUid, userSettings }) {
                     playState: status.state,
                 }));
             } else {
-                setQueueData(prev => ({
-                    ...prev,
-                    // Clear current song if state is infoscreen (nothing playing)
-                    currentSong: (status?.state === 'infoscreen' || status?.state === 'stop') ? null : prev?.currentSong,
-                    playState: status?.state,
-                }));
+                setQueueData(prev => {
+                    // 'idle' is ambiguous by itself - KaraFun reports it both when a
+                    // song is loaded but paused (keep showing it - see the Play/Pause
+                    // toggle) AND when the queue has fully emptied with nothing loaded
+                    // at all (the last song finished, no 'infoscreen'/'stop' in
+                    // between). Treat an empty live queue as the tiebreaker: no items
+                    // left to play means 'idle' really is "nothing's loaded", so clear
+                    // the stale singer instead of leaving them "on air" forever.
+                    const queueEmpty = (prev?.upcoming?.length ?? 0) === 0;
+                    const nothingLoaded = status?.state === 'infoscreen' || status?.state === 'stop' || (status?.state === 'idle' && queueEmpty);
+                    return {
+                        ...prev,
+                        currentSong: nothingLoaded ? null : prev?.currentSong,
+                        playState: status?.state,
+                    };
+                });
             }
         });
 
