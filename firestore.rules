@@ -17,17 +17,17 @@ service cloud.firestore {
         (request.auth.token.isMasterAdmin == true || request.auth.uid == 'WPifULbh4NePmKpojiAnKwv0rWY2');
     }
 
-    // The channel owner, or someone the owner explicitly granted a
-    // permissions/{their-own-uid} doc to (an invited mod - see UsersPane.js /
-    // useUsersData.js, which only ever writes permissions from the owner's own
-    // session). Existence alone is enough here, without reading the role
-    // field: a viewer never gets a permissions doc written for them at all
-    // (dashboard/page.js treats a missing doc as role 'viewer' by default), so
-    // any doc existing at this path is itself proof of an owner-granted invite.
+    // The channel owner, or someone the owner explicitly granted mod rights
+    // to (an invited mod - see UsersPane.js / useUsersData.js, which only
+    // ever writes permissions from the owner's own session). Must read the
+    // role field itself, not just check the doc exists: UsersPane now also
+    // writes a permissions doc for 'singer' and 'denied' (see #27's karaoke
+    // roles), so existence alone would silently grant every one of those a
+    // full moderator's access to chat history, message_queue, etc.
     function isChannelModerator(userId) {
       return request.auth != null && (
         request.auth.uid == userId ||
-        exists(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid))
+        get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.role == 'mod'
       );
     }
 
@@ -131,17 +131,36 @@ service cloud.firestore {
       // invite is just a request where requestedBy is the asking singer
       // themselves. Read is open to any signed-in user - the Karaoke tab
       // needs to show public requests to every online singer, not just the
-      // two people involved. requestedBy/targetSingerUid may each act on the
-      // fields that concern them (accept/decline/reinvite/drop); mods get
-      // full control (force-public, decline) via isChannelModerator. Nothing
-      // is staged here before hitting KaraFun's real queue - accept/self-add
-      // push straight into it, then get reordered in place via queueMove.
+      // two people involved. Nothing is staged here before hitting KaraFun's
+      // real queue - accept/self-add push straight into it, then get
+      // reordered in place via queueMove.
       match /karaoke_requests/{requestId} {
         allow read: if request.auth != null;
         allow create: if request.auth != null && request.resource.data.requestedBy == request.auth.uid;
-        allow update, delete: if isChannelModerator(userId)
-          || request.auth.uid == resource.data.requestedBy
-          || request.auth.uid == resource.data.targetSingerUid;
+
+        // Mods: full control (force-public, decline, anything).
+        allow update, delete: if isChannelModerator(userId);
+
+        // The person a request/invite was actually sent to decides its
+        // outcome - acceptRequest/declineAsTarget/respondToDuetInvite all
+        // write as targetSingerUid, so this is deliberately unrestricted in
+        // which fields it may touch (declineAsTarget nulls targetSingerUid
+        // itself and rewrites the response-window timers as part of
+        // dropping back to public).
+        allow update: if request.auth != null && request.auth.uid == resource.data.targetSingerUid;
+
+        // The original requester/asker may only ever drop their own
+        // request (singSoloAfterDecline/dropDeclinedDuet) or re-target a
+        // declined duet invite back to pending (reinviteDuet) - never
+        // approve their own request themselves, and never touch the
+        // response-window timers the Cloud Function's expiry sweep relies
+        // on (functions/index.js's expireKaraokeRequests).
+        allow update: if request.auth != null && request.auth.uid == resource.data.requestedBy
+          && request.resource.data.status in ['dropped', 'pending']
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['respondBy', 'publicExpireBy', 'requestedBy']);
+
+        allow delete: if request.auth != null
+          && (request.auth.uid == resource.data.requestedBy || request.auth.uid == resource.data.targetSingerUid);
       }
 
       match /online/{onlineId} {
@@ -167,10 +186,14 @@ service cloud.firestore {
     // may only ever create the single mapping for their own uid, and it's
     // create-only (no update/delete) so a username can't be reassigned once
     // claimed - matches twitchUsername being locked after creation on the
-    // users/{userId} doc itself.
+    // users/{userId} doc itself. The document id must match that user's own
+    // twitchUsername (already written by loginWithTwitch before this fires) -
+    // without this check, any signed-in user could squat any handle by
+    // writing a mapping doc under an arbitrary username string.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid
+        && username == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.twitchUsername;
     }
   }
 }
