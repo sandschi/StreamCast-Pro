@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
@@ -60,19 +60,9 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, permissions,
+        requests, onlineSingers, rotationOrder, nameFor, getActiveSingerUid,
         modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user });
-
-    // Presence (via onlineSingers), not permissions, is the primary name
-    // source - permissions only gets twitchUsername/displayName written when
-    // a mod assigns a role, and the broadcaster's own permissions doc (only
-    // ever created the first time they toggle Participating) never has one
-    // at all. Falls back to permissions for a currently-offline target.
-    const nameFor = useCallback((uid) => {
-        const online = onlineSingers.find(s => s.id === uid);
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
-    }, [onlineSingers, permissions]);
 
     const [queueX, setQueueX] = useDebouncedSetting(userSettings?.karafunQueuePosX ?? 5, v => handleToggleSetting('karafunQueuePosX', v));
     const [queueY, setQueueY] = useDebouncedSetting(userSettings?.karafunQueuePosY ?? 5, v => handleToggleSetting('karafunQueuePosY', v));
@@ -85,14 +75,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // one source of truth for "position 0" in rotation terms. Not a value we
     // maintain ourselves (an earlier version stored a separate Firestore
     // cursor advanced by a reactive effect, which meant two things could
-    // describe "whose turn" and drift apart); derived fresh every render
-    // instead, matched against rotationOrder the same way the disabled
-    // auto-sort below does.
-    const activeSingerUid = (() => {
-        const primary = (queueData?.currentSong?.singer || '').split(/\s*&\s*/)[0].trim();
-        if (!primary) return null;
-        return rotationOrder.find(uid => nameFor(uid) === primary) || null;
-    })();
+    // describe "whose turn" and drift apart); derived fresh every render via
+    // useKaraokeData's shared getActiveSingerUid instead, so this and the
+    // Karaoke tab always resolve "whose turn" identically (see #27 - they
+    // used to derive it independently and could disagree).
+    const activeSingerUid = getActiveSingerUid(queueData?.currentSong?.singer);
+
+    // A singer who's newly online/participating isn't in the persisted
+    // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
+    // last, jumping them ahead of everyone who's actually been waiting.
+    const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
 
     // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
     // real party, "switching songs around in rapid succession", and had to
@@ -329,7 +321,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
 
                         <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
                             {onlineSingers.length === 0 && <EmptyState icon={<Users size={28} />} title="No participating singers online." />}
-                            {[...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i, arr) => (
+                            {[...onlineSingers].sort((a, b) => rotationRank(a.id) - rotationRank(b.id)).map((s, i, arr) => (
                                 <div key={s.id} style={row(t)}>
                                     <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
                                         {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { db } from '@/lib/firebase';
 import {
-    collection, doc, onSnapshot, addDoc, updateDoc, setDoc,
+    collection, doc, onSnapshot, addDoc, updateDoc, setDoc, runTransaction,
     serverTimestamp, Timestamp, query, orderBy,
 } from 'firebase/firestore';
 
@@ -80,13 +80,34 @@ export function useKaraokeData({ targetUid, user }) {
             .map(p => ({ id: p.id, displayName: p.displayName, twitchUsername: p.twitchUsername, photoURL: p.photoURL }));
     }, [presence, permissions, now, targetUid]);
 
-    const submitRequest = async (song, targetSingerUid) => {
+    // uid -> display name, falling back to the permissions doc for a
+    // participating singer who isn't currently online (e.g. their next-up
+    // slot is showing while they're between songs). Shared by KaraFun Mod
+    // and the Karaoke tab so "whose turn" is resolved the same way in both
+    // places - they used to derive it independently and silently drifted
+    // (KaraFun Mod's version had this fallback, Karaoke's didn't, so a
+    // presence lapse on the active singer could hand turn control to the
+    // wrong person on one tab but not the other; see #27).
+    const nameFor = useCallback((uid) => {
+        const online = onlineSingers.find(s => s.id === uid);
+        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
+    }, [onlineSingers, permissions]);
+
+    // KaraFun's currentSong.singer is a plain string ("Alice" or, for a
+    // duet, "Alice & Bob" per our own queueAdd convention) - resolve its
+    // primary name back to a rotationOrder uid via nameFor above.
+    const getActiveSingerUid = useCallback((currentSongSinger) => {
+        const primary = (currentSongSinger || '').split(/\s*&\s*/)[0].trim();
+        if (!primary) return null;
+        return rotationOrder.find(uid => nameFor(uid) === primary) || null;
+    }, [rotationOrder, nameFor]);
+
+    const submitRequest = async (song, targetSingerUid, requestedByName) => {
         if (!targetUid || !user) return;
-        const requestedByName = user.displayName || 'Someone';
         const now = Date.now();
         await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
             kind: 'song', songId: song.songId, title: song.title, artist: song.artist,
-            requestedBy: user.uid, requestedByName,
+            requestedBy: user.uid, requestedByName: requestedByName || 'Someone',
             targetSingerUid: targetSingerUid || null,
             status: targetSingerUid ? 'pending' : 'public',
             createdAt: serverTimestamp(),
@@ -98,10 +119,25 @@ export function useKaraokeData({ targetUid, user }) {
     // Accept as the originally-targeted singer, or claim an already-public
     // request - same outcome either way. addToQueue is useKaraFunData's live
     // KaraFun emitter, passed in by the caller so this hook stays ignorant of
-    // the socket connection itself.
+    // the socket connection itself. The Firestore write happens FIRST, inside
+    // a transaction that checks the request hasn't already been resolved by
+    // someone else (a mod force-publishing it, another singer claiming a
+    // public request, etc.) - addToQueue only fires once that succeeds, so a
+    // race can no longer queue the same request's song twice.
     const acceptRequest = async (request, singerName, addToQueue) => {
+        const reqRef = doc(db, 'users', targetUid, 'karaoke_requests', request.id);
+        try {
+            await runTransaction(db, async (tx) => {
+                const snap = await tx.get(reqRef);
+                if (!snap.exists() || !['pending', 'public'].includes(snap.data().status)) {
+                    throw new Error('karaoke-request-already-resolved');
+                }
+                tx.update(reqRef, { status: 'accepted' });
+            });
+        } catch {
+            return;
+        }
         addToQueue(request.songId, singerName);
-        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
     };
 
     // Only the targeted singer declining - drops to public, doesn't kill it.
@@ -135,7 +171,13 @@ export function useKaraokeData({ targetUid, user }) {
         await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
             kind: 'duet', songId: song.songId, title: song.title, artist: song.artist,
             requestedBy: user.uid, requestedByName: singerName, targetSingerUid: invitedUid,
-            status: 'pending', createdAt: serverTimestamp(), respondBy: null, publicExpireBy: null,
+            // A real respondBy (same window a targeted song request gets) so an
+            // invitee who never responds doesn't leave this pending forever -
+            // expireKaraokeRequests' respondBy<=now query can't match a null
+            // field at all. The asker can also cancel it directly any time via
+            // dropDeclinedDuet, which works on a still-pending invite too.
+            status: 'pending', createdAt: serverTimestamp(),
+            respondBy: Timestamp.fromMillis(Date.now() + RESPOND_WINDOW_MS), publicExpireBy: null,
         });
     };
 
@@ -167,6 +209,7 @@ export function useKaraokeData({ targetUid, user }) {
 
     return {
         requests, onlineSingers, rotationOrder, permissions,
+        nameFor, getActiveSingerUid,
         submitRequest, acceptRequest, declineAsTarget, modDecline, modForcePublic,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, reinviteDuet,
         setRotationOrder, toggleParticipating,

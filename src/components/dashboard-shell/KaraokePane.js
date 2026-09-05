@@ -83,7 +83,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     } = useKaraFunData({ targetUid, userSettings });
 
     const {
-        requests, onlineSingers, rotationOrder, permissions,
+        requests, onlineSingers, rotationOrder, permissions, getActiveSingerUid, nameFor,
         submitRequest, acceptRequest, declineAsTarget,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
     } = useKaraokeData({ targetUid, user });
@@ -126,6 +126,11 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     const myDuetInvites = requests.filter(r => r.kind === 'duet' && r.targetSingerUid === user?.uid && r.status === 'pending');
     // Duets I asked for that came back declined - my move now: solo, drop, or ask someone else.
     const myDeclinedDuets = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'declined');
+    // A duet invite I sent that's still waiting on the other singer - shown so
+    // it can be cancelled directly instead of only ever timing out on its own
+    // (5 min to expireKaraokeRequests, invisible to the invitee's UI as a
+    // duet the whole time either way).
+    const myPendingDuetInvites = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'pending');
 
     // Best-effort correlation: KaraFun's own queue has no id we get back from
     // queueAdd, so "am I on air" is inferred from the display name we sent
@@ -134,19 +139,22 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     const onAirNames = (queueData?.currentSong?.singer || '').split(/\s*&\s*/).map(s => s.trim()).filter(Boolean);
     const isDuetOnAir = onAirNames.length > 1;
 
-    // Who's actually singing right now, matched against rotationOrder - not
-    // a value tracked in Firestore (that drifted from reality once, see
-    // KaraFun Mod's activeSingerUid), derived fresh from KaraFun's own live
-    // status every render instead. "Next up" is one slot after them.
-    const activeSingerUid = (() => {
-        const primary = onAirNames[0] || null;
-        if (!primary) return null;
-        return onlineSingers.find(s => (s.twitchUsername || s.displayName) === primary)?.id || null;
-    })();
+    // Who's actually singing right now, via useKaraokeData's shared
+    // getActiveSingerUid - not a value tracked in Firestore (that drifted
+    // from reality once), and not derived independently here either
+    // anymore (this and KaraFun Mod used to compute it two different ways
+    // and could disagree when presence lagged; see #27). "Next up" is one
+    // slot after them.
+    const activeSingerUid = getActiveSingerUid(queueData?.currentSong?.singer);
     const nextSingerUid = rotationOrder.length === 0 ? null : (() => {
         const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
         return rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length] || null;
     })();
+
+    // A singer who's newly online/participating isn't in the persisted
+    // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
+    // last, jumping them ahead of everyone who's actually been waiting.
+    const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
     // Access opens up to whoever's turn is next per rotation, not only once
     // KaraFun's own status event confirms something is already playing -
     // otherwise the one person who'd actually need Play (to start their own
@@ -170,7 +178,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     }
 
     const handleSelfAdd = (song, duetUid) => duetUid ? inviteDuet(song, singerName, duetUid) : selfAdd(song, singerName, addToQueue);
-    const handleRequest = (song, targetUid_) => submitRequest(song, targetUid_);
+    const handleRequest = (song, targetUid_) => submitRequest(song, targetUid_, singerName);
 
     if (!userSettings?.karaokeEnabled) {
         return (
@@ -243,7 +251,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
                     {onlineSingers.length === 0 ? (
                         <EmptyState icon={<Users size={28} />} title="No participating singers online." />
-                    ) : [...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i) => (
+                    ) : [...onlineSingers].sort((a, b) => rotationRank(a.id) - rotationRank(b.id)).map((s, i) => (
                         <div key={s.id} style={row(t)}>
                             <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
                                 {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
@@ -319,6 +327,20 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                                     <ToolBtn t={t} icon={<Check size={11} />} onClick={() => respondToDuetInvite(entry, true, singerName, addToQueue)}>Accept</ToolBtn>
                                     <ToolBtn t={t} icon={<X size={11} />} onClick={() => respondToDuetInvite(entry, false, singerName, addToQueue)}>Decline</ToolBtn>
                                 </div>
+                            </div>
+                        ))}
+                    </Pane>
+                )}
+
+                {myPendingDuetInvites.length > 0 && (
+                    <Pane t={t} d={d} icon={<UserPlus size={13} />} title="Duet Invite Sent">
+                        {myPendingDuetInvites.map(entry => (
+                            <div key={entry.id} style={row(t)}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{entry.title}</div>
+                                    <div style={{ ...tiny(t), color: t.faint }}>waiting on {nameFor(entry.targetSingerUid)}</div>
+                                </div>
+                                <ToolBtn t={t} icon={<X size={11} />} onClick={() => dropDeclinedDuet(entry.id)}>Cancel</ToolBtn>
                             </div>
                         ))}
                     </Pane>
