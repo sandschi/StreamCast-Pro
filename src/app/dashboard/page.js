@@ -22,6 +22,7 @@ import ChatPane from '@/components/dashboard-shell/ChatPane';
 import HistoryPane from '@/components/dashboard-shell/HistoryPane';
 import UsersPane from '@/components/dashboard-shell/UsersPane';
 import KaraFunPane from '@/components/dashboard-shell/KaraFunPane';
+import KaraokePane from '@/components/dashboard-shell/KaraokePane';
 import SettingsPane from '@/components/dashboard-shell/SettingsPane';
 import SectionTabs from '@/components/dashboard-shell/SectionTabs';
 import ApiPane from '@/components/dashboard-shell/ApiPane';
@@ -29,7 +30,7 @@ import BroadcastersPane from '@/components/dashboard-shell/BroadcastersPane';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import { useChatData } from '@/hooks/useChatData';
 
-const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
+const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, karaoke: KaraokePane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
 
 function VerifyingBlock({ t }) {
     return (
@@ -63,7 +64,7 @@ function DashboardContent() {
     const [userRole, setUserRole] = useState(null);
     const [broadcasterStatus, setBroadcasterStatus] = useState('waiting');
     const [verifyingMod, setVerifyingMod] = useState(true);
-    const [userSettings, setUserSettings] = useState({ karafunEnabled: false });
+    const [userSettings, setUserSettings] = useState({ karafunEnabled: false, karaokeEnabled: false });
     const [privateConfig, setPrivateConfig] = useState({ apiToken: null });
     const [showChangelog, setShowChangelog] = useState(false);
     const [suggestionsMuted, setSuggestionsMuted] = useState(false);
@@ -97,7 +98,8 @@ function DashboardContent() {
     const hasVerifiedAccess = isMasterAdmin ||
         (userRole === 'broadcaster' && broadcasterStatus === 'approved') ||
         (userRole === 'mod' && isModAuthorized) ||
-        (userRole === 'viewer');
+        (userRole === 'viewer') ||
+        (userRole === 'singer');
 
     // Verifying Moderator Permissions
     useEffect(() => {
@@ -159,30 +161,38 @@ function DashboardContent() {
             });
         }
 
-        let heartbeatInterval;
-        if (user && hostParam) {
-            const presenceRef = doc(db, 'users', hostParam, 'online', user.uid);
-            const updatePresence = async () => {
-                const myProfile = await getDoc(doc(db, 'users', user.uid));
-                const myData = myProfile.data();
-
-                await setDoc(presenceRef, {
-                    lastSeen: serverTimestamp(),
-                    displayName: myData?.displayName || user.displayName,
-                    photoURL: myData?.photoURL || user.photoURL,
-                    twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
-                }, { merge: true });
-            };
-            updatePresence();
-            heartbeatInterval = setInterval(updatePresence, 30000);
-        }
-
         return () => {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
     }, [user, hostParam, isModeratorMode, isMasterAdmin, targetUid]);
+
+    // Presence heartbeat - deliberately its own effect, not folded into the
+    // permission-verification one above: that effect returns early for the
+    // isMasterAdmin branch, which used to skip this heartbeat entirely for a
+    // master admin viewing their own dashboard (silently made them impossible
+    // to mark online/participating for karaoke rotation - see #27). Also was
+    // gated on hostParam alone before, so a broadcaster viewing their own
+    // dashboard (no ?host=) never wrote their own presence doc either;
+    // targetUid covers both cases (self or hosted) the same way.
+    useEffect(() => {
+        if (!user || !targetUid) return;
+        const presenceRef = doc(db, 'users', targetUid, 'online', user.uid);
+        const updatePresence = async () => {
+            const myProfile = await getDoc(doc(db, 'users', user.uid));
+            const myData = myProfile.data();
+
+            await setDoc(presenceRef, {
+                lastSeen: serverTimestamp(),
+                displayName: myData?.displayName || user.displayName,
+                photoURL: myData?.photoURL || user.photoURL,
+                twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
+            }, { merge: true });
+        };
+        updatePresence();
+        const heartbeatInterval = setInterval(updatePresence, 30000);
+        return () => clearInterval(heartbeatInterval);
+    }, [user, targetUid]);
 
     // Stable Settings Listener
     useEffect(() => {
@@ -193,7 +203,7 @@ function DashboardContent() {
             if (docSnap.exists()) {
                 setUserSettings(docSnap.data());
             } else {
-                setUserSettings({ karafunEnabled: false });
+                setUserSettings({ karafunEnabled: false, karaokeEnabled: false });
             }
         });
 
@@ -258,10 +268,17 @@ function DashboardContent() {
         if (!hasVerifiedAccess) return [];
         const base = ROLE_TABS[userRole] || [];
         const extra = [];
-        if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
+        // 'karafun' ("KaraFun Mod") also now hosts karaoke request oversight,
+        // the staging queue, rotation order, and playback controls (gated
+        // separately on karaokeEnabled inside the pane) - open to mod here
+        // too, not just broadcaster, since those are real mod actions.
+        if ((userRole === 'broadcaster' || userRole === 'mod' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
+        // Open to every role (unlike 'karafun', which is broadcaster/mod-only
+        // settings) - viewers and singers are exactly who this tab is for.
+        if (userSettings?.karaokeEnabled) extra.push('karaoke');
         if (isMasterAdmin) extra.push('broadcasters');
         return NAV.map(n => n.id).filter(id => base.includes(id) || extra.includes(id));
-    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled]);
+    }, [hasVerifiedAccess, userRole, isMasterAdmin, userSettings?.karafunEnabled, userSettings?.karaokeEnabled]);
 
     // Cmd/Ctrl+1-9 tab switching
     useEffect(() => {

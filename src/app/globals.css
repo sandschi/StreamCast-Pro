@@ -257,7 +257,7 @@ body {
   }
 
   .toggle-switch {
-    @apply w-[50px] h-[28px] rounded-full transition-colors duration-300 relative cursor-pointer border;
+    @apply w-[36px] h-[20px] rounded-full transition-colors duration-300 relative cursor-pointer border;
   }
 
   .toggle-switch[data-state="checked"] {
@@ -277,11 +277,11 @@ body {
   }
 
   .toggle-thumb {
-    @apply absolute top-1/2 -translate-y-1/2 w-[20px] h-[20px] rounded-full transition-all duration-300 shadow-md;
+    @apply absolute top-1/2 -translate-y-1/2 w-[14px] h-[14px] rounded-full transition-all duration-300 shadow-md;
   }
 
   .toggle-switch[data-state="checked"] .toggle-thumb {
-    @apply bg-[#07fc03] translate-x-[24px] shadow-[0_0_12px_rgba(7,252,3,0.5)];
+    @apply bg-[#07fc03] translate-x-[19px] shadow-[0_0_12px_rgba(7,252,3,0.5)];
   }
 
   .toggle-switch[data-state="unchecked"] .toggle-thumb {
