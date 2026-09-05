@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music, Trash2, ArrowRight } from 'lucide-react';
+import { Mic, Search, UserPlus, Check, X, Play, Pause, SkipForward, Users, Music, Trash2, ArrowRight } from 'lucide-react';
 import { useKaraFunData, searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import { useAuth } from '@/context/AuthContext';
@@ -267,7 +267,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                             something's already playing removed the one control the
                             person whose turn it is actually needs. */}
                         <div style={{ display: 'flex', gap: 8 }}>
-                            <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
+                            <ToolBtn t={t} icon={queueData?.playState === 'playing' ? <Pause size={12} /> : <Play size={12} />} onClick={playSong}>{queueData?.playState === 'playing' ? 'Pause' : 'Play'}</ToolBtn>
                             <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
                         </div>
                         {!queueData?.currentSong ? (

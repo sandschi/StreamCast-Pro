@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
+import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
@@ -271,7 +271,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                                     <ToolBtn t={t} icon={<EyeOff size={12} />} onClick={handleHideNowPlaying}>Dismiss</ToolBtn>
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
-                                    <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
+                                    <ToolBtn t={t} icon={queueData?.playState === 'playing' ? <Pause size={12} /> : <Play size={12} />} onClick={playSong}>{queueData?.playState === 'playing' ? 'Pause' : 'Play'}</ToolBtn>
                                     <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
                                 </div>
                             </div>
