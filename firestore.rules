@@ -149,6 +149,17 @@ service cloud.firestore {
         // dropping back to public).
         allow update: if request.auth != null && request.auth.uid == resource.data.targetSingerUid;
 
+        // Any signed-in singer can "claim" a request that's already public
+        // (no specific target) - the Public Requests panel's Claim button
+        // calls the exact same acceptRequest as a targeted accept, just for
+        // someone who is neither requestedBy nor targetSingerUid, so it
+        // needs its own clause rather than falling under either one above.
+        // Restricted to exactly that one transition, first-come-first-served.
+        allow update: if request.auth != null
+          && resource.data.status == 'public' && resource.data.targetSingerUid == null
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+
         // The original requester/asker may only ever drop their own
         // request (singSoloAfterDecline/dropDeclinedDuet) or re-target a
         // declined duet invite back to pending (reinviteDuet) - never
