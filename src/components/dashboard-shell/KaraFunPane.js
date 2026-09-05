@@ -48,7 +48,7 @@ function useDebouncedSetting(propValue, onCommit) {
     return [value, handleChange];
 }
 
-export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
+export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
@@ -62,7 +62,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     const {
         requests, onlineSingers, rotationOrder, nameFor, getActiveSingerUid,
         modDecline, modForcePublic, setRotationOrder,
-    } = useKaraokeData({ targetUid, user });
+    } = useKaraokeData({ targetUid, user, userRole });
 
     const [queueX, setQueueX] = useDebouncedSetting(userSettings?.karafunQueuePosX ?? 5, v => handleToggleSetting('karafunQueuePosX', v));
     const [queueY, setQueueY] = useDebouncedSetting(userSettings?.karafunQueuePosY ?? 5, v => handleToggleSetting('karafunQueuePosY', v));

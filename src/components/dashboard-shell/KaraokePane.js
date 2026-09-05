@@ -86,7 +86,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
         requests, onlineSingers, rotationOrder, permissions, getActiveSingerUid, nameFor,
         submitRequest, acceptRequest, declineAsTarget,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
-    } = useKaraokeData({ targetUid, user });
+    } = useKaraokeData({ targetUid, user, userRole });
 
     const isMod = userRole === 'broadcaster' || userRole === 'mod';
     const isSinger = userRole === 'singer';

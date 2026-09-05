@@ -24,7 +24,7 @@ const ELIGIBLE_ROTATION_ROLES = ['singer', 'mod', 'broadcaster'];
 // karaoke_staging_queue with a manual "push next" step; dropped per
 // feedback - moving songs around in the actual KaraFun queue is the point,
 // not a parallel holding area.
-export function useKaraokeData({ targetUid, user }) {
+export function useKaraokeData({ targetUid, user, userRole }) {
     const [requests, setRequests] = useState([]);
     const [presence, setPresence] = useState([]);
     const [permissions, setPermissions] = useState({});
@@ -63,6 +63,44 @@ export function useKaraokeData({ targetUid, user }) {
         const id = setInterval(() => setNow(Date.now()), 15_000);
         return () => clearInterval(id);
     }, []);
+
+    // Sweeps timed-out requests (pending -> public after 5 min unanswered,
+    // public -> expired after 10 min unclaimed). This was originally a
+    // Cloud Scheduler function (functions/index.js's expireKaraokeRequests)
+    // so it'd fire even with no dashboard open, but that needs the project
+    // on Firebase's Blaze plan to deploy at all - not available here, so
+    // this client-driven fallback is the same pattern useChatData.js already
+    // uses for active_message expiry, with the same tradeoff: it only runs
+    // while a mod/broadcaster dashboard happens to be open. Gated to
+    // mod/broadcaster because that's the only role firestore.rules lets
+    // transition these fields (isChannelModerator) - a singer/viewer
+    // dashboard attempting this would just get permission-denied.
+    const canExpire = userRole === 'broadcaster' || userRole === 'mod';
+    useEffect(() => {
+        if (!targetUid || !canExpire) return;
+        requests.forEach(r => {
+            if (r.status === 'pending' && r.respondBy && r.respondBy.toMillis() <= now) {
+                const ref = doc(db, 'users', targetUid, 'karaoke_requests', r.id);
+                runTransaction(db, async (tx) => {
+                    const fresh = await tx.get(ref);
+                    const data = fresh.data();
+                    if (!fresh.exists() || data.status !== 'pending' || !(data.respondBy?.toMillis() <= now)) return;
+                    tx.update(ref, {
+                        status: 'public', targetSingerUid: null, respondBy: null,
+                        publicExpireBy: Timestamp.fromMillis(now + PUBLIC_WINDOW_MS),
+                    });
+                }).catch(e => console.error('Error expiring karaoke request:', e));
+            } else if (r.status === 'public' && r.publicExpireBy && r.publicExpireBy.toMillis() <= now) {
+                const ref = doc(db, 'users', targetUid, 'karaoke_requests', r.id);
+                runTransaction(db, async (tx) => {
+                    const fresh = await tx.get(ref);
+                    const data = fresh.data();
+                    if (!fresh.exists() || data.status !== 'public' || !(data.publicExpireBy?.toMillis() <= now)) return;
+                    tx.update(ref, { status: 'expired' });
+                }).catch(e => console.error('Error expiring karaoke request:', e));
+            }
+        });
+    }, [targetUid, canExpire, requests, now]);
 
     // A stale heartbeat (see dashboard/page.js - written every 30s, no
     // onDisconnect) is the closest thing to "closed the tab" this app has;
