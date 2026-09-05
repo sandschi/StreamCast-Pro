@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, X, Trash2 } from 'lucide-react';
+import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
@@ -60,8 +60,8 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, permissions,
-        modDecline, modForcePublic, setRotationOrder,
+        requests, onlineSingers, rotationOrder, rotationCursor, permissions,
+        modDecline, modForcePublic, setRotationOrder, setRotationCursor,
     } = useKaraokeData({ targetUid, user });
 
     // Presence (via onlineSingers), not permissions, is the primary name
@@ -128,34 +128,68 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // and log rather than retry forever.
     const liveRef = useRef({});
     useEffect(() => {
-        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, nameFor, moveInQueue };
-    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, nameFor, moveInQueue]);
+        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue };
+    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue]);
     const stallCountRef = useRef(0);
     const lastMoveSignatureRef = useRef(null);
+
+    // Whose turn is next - advances the moment a genuinely NEW song starts
+    // playing (title+artist+singer changed), to whoever comes after that
+    // song's singer in rotationOrder. Reactive rather than part of the 5s
+    // poll below: this only ever does one idempotent Firestore write per
+    // real transition (multiple mod sessions computing the same value is
+    // harmless), it doesn't repeatedly command an external system the way
+    // queueMove does, so it doesn't carry the same runaway-loop risk.
+    const lastAdvanceKeyRef = useRef(null);
+    useEffect(() => {
+        const cur = queueData?.currentSong;
+        if (!cur || rotationOrder.length === 0) return;
+        const key = `${cur.title}|${cur.artist}|${cur.singer}`;
+        if (key === lastAdvanceKeyRef.current) return;
+        lastAdvanceKeyRef.current = key;
+        const primary = (cur.singer || '').split(/\s*&\s*/)[0].trim();
+        const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
+        if (idx === -1) return;
+        setRotationCursor(rotationOrder[(idx + 1) % rotationOrder.length]);
+    }, [queueData?.currentSong, rotationOrder, nameFor, setRotationCursor]);
 
     useEffect(() => {
         const AUTO_SORT_INTERVAL_MS = 5000;
         const MAX_STALLED_ATTEMPTS = 3;
 
         const tick = () => {
-            const { upcoming, currentSong, rotationOrder, nameFor, moveInQueue } = liveRef.current;
+            const { upcoming, currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue } = liveRef.current;
             if (!moveInQueue || !upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return;
 
             const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
             const playingIdx = upcoming.findIndex(isPlaying);
 
-            const ownerIndex = (singerField) => {
+            const ownerIndexOf = (singerField) => {
                 const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
-                if (!primary) return Infinity;
-                const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
-                return idx === -1 ? Infinity : idx;
+                if (!primary) return -1;
+                return rotationOrder.findIndex(uid => nameFor(uid) === primary);
             };
+            const cursorIdx = Math.max(0, rotationOrder.indexOf(rotationCursor));
 
+            // Round-robin, not a static priority ranking: everyone's FIRST
+            // queued song (round 0) comes before anyone's SECOND (round 1),
+            // so one singer adding several songs in a row can't bury
+            // everyone else - it just claims one slot per lap, starting from
+            // whoever's turn is actually next (the cursor), not always
+            // rotationOrder[0].
+            const seenRounds = {};
             const currentIds = upcoming.map(s => s.queueId);
             const restSorted = upcoming
-                .map((s, i) => ({ queueId: s.queueId, owner: ownerIndex(s.singer), origIndex: i }))
+                .map((s, i) => {
+                    const ownerIdx = ownerIndexOf(s.singer);
+                    if (ownerIdx === -1) return { queueId: s.queueId, round: Infinity, distance: Infinity, origIndex: i };
+                    const round = seenRounds[ownerIdx] || 0;
+                    seenRounds[ownerIdx] = round + 1;
+                    const distance = (ownerIdx - cursorIdx + rotationOrder.length) % rotationOrder.length;
+                    return { queueId: s.queueId, round, distance, origIndex: i };
+                })
                 .filter((_, i) => i !== playingIdx)
-                .sort((a, b) => a.owner - b.owner || a.origIndex - b.origIndex)
+                .sort((a, b) => a.round - b.round || a.distance - b.distance || a.origIndex - b.origIndex)
                 .map(x => x.queueId);
             const desiredIds = [...restSorted];
             if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
@@ -327,6 +361,9 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                             {onlineSingers.length === 0 && <EmptyState icon={<Users size={28} />} title="No participating singers online." />}
                             {[...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i, arr) => (
                                 <div key={s.id} style={row(t)}>
+                                    <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
+                                        {(rotationCursor ? s.id === rotationCursor : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                    </span>
                                     <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                                     <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
                                     <div style={btnRow}>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music, Trash2 } from 'lucide-react';
+import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music, Trash2, ArrowRight } from 'lucide-react';
 import { useKaraFunData, searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import { useAuth } from '@/context/AuthContext';
@@ -83,7 +83,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     } = useKaraFunData({ targetUid, userSettings });
 
     const {
-        requests, onlineSingers, rotationOrder, permissions,
+        requests, onlineSingers, rotationOrder, rotationCursor, permissions,
         submitRequest, acceptRequest, declineAsTarget,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
     } = useKaraokeData({ targetUid, user });
@@ -227,7 +227,9 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                         <EmptyState icon={<Users size={28} />} title="No participating singers online." />
                     ) : [...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i) => (
                         <div key={s.id} style={row(t)}>
-                            <span style={{ width: 16, flex: 'none', ...tiny(t), color: t.faint }}>{i + 1}</span>
+                            <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
+                                {(rotationCursor ? s.id === rotationCursor : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                            </span>
                             <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
                         </div>
