@@ -83,7 +83,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     } = useKaraFunData({ targetUid, userSettings });
 
     const {
-        requests, onlineSingers, rotationOrder, rotationCursor, permissions,
+        requests, onlineSingers, rotationOrder, permissions,
         submitRequest, acceptRequest, declineAsTarget,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
     } = useKaraokeData({ targetUid, user });
@@ -131,14 +131,27 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // queueAdd, so "am I on air" is inferred from the display name we sent
     // as `singer` - "Alice & Bob" for a duet, per our own convention. Mods
     // get playback controls unconditionally in the KaraFun Mod tab instead.
-    // Access also opens up to whoever's turn is next per rotation (the same
-    // cursor Rotation Order's arrow shows), not only once KaraFun's own
-    // status event confirms something is already playing - otherwise the
-    // one person who'd actually need Play (to start their own turn) is
-    // exactly the one person who never sees it.
     const onAirNames = (queueData?.currentSong?.singer || '').split(/\s*&\s*/).map(s => s.trim()).filter(Boolean);
-    const isMyTurn = onAirNames.includes(singerName) || rotationCursor === user?.uid;
     const isDuetOnAir = onAirNames.length > 1;
+
+    // Who's actually singing right now, matched against rotationOrder - not
+    // a value tracked in Firestore (that drifted from reality once, see
+    // KaraFun Mod's activeSingerUid), derived fresh from KaraFun's own live
+    // status every render instead. "Next up" is one slot after them.
+    const activeSingerUid = (() => {
+        const primary = onAirNames[0] || null;
+        if (!primary) return null;
+        return onlineSingers.find(s => (s.twitchUsername || s.displayName) === primary)?.id || null;
+    })();
+    const nextSingerUid = rotationOrder.length === 0 ? null : (() => {
+        const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
+        return rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length] || null;
+    })();
+    // Access opens up to whoever's turn is next per rotation, not only once
+    // KaraFun's own status event confirms something is already playing -
+    // otherwise the one person who'd actually need Play (to start their own
+    // turn) is exactly the one person who never sees it.
+    const isMyTurn = onAirNames.includes(singerName) || nextSingerUid === user?.uid;
 
     const [pitch, setPitch] = useState(0);
     const [tempo, setTempo] = useState(0);
@@ -233,7 +246,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                     ) : [...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i) => (
                         <div key={s.id} style={row(t)}>
                             <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                {(rotationCursor ? s.id === rotationCursor : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
                             </span>
                             <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>

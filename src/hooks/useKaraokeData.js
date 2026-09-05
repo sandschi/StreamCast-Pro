@@ -29,9 +29,6 @@ export function useKaraokeData({ targetUid, user }) {
     const [presence, setPresence] = useState([]);
     const [permissions, setPermissions] = useState({});
     const [rotationOrder, setRotationOrderState] = useState([]);
-    // uid of whoever's turn is next - not the same as "first in rotationOrder"
-    // once anyone has actually sung; see KaraFunPane.js's cursor-advance effect.
-    const [rotationCursor, setRotationCursorState] = useState(null);
 
     useEffect(() => {
         if (!targetUid) return;
@@ -52,7 +49,6 @@ export function useKaraokeData({ targetUid, user }) {
 
         const unsubSettings = onSnapshot(doc(db, 'users', targetUid, 'settings', 'config'), (snap) => {
             setRotationOrderState(snap.exists() ? (snap.data().karaokeRotationOrder || []) : []);
-            setRotationCursorState(snap.exists() ? (snap.data().karaokeRotationCursor || null) : null);
         });
 
         return () => { unsubRequests(); unsubPresence(); unsubPermissions(); unsubSettings(); };
@@ -164,21 +160,15 @@ export function useKaraokeData({ targetUid, user }) {
         await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { karaokeRotationOrder: uidArray }, { merge: true });
     };
 
-    // Whoever's turn is next - advanced automatically (see KaraFunPane.js)
-    // whenever a new song actually starts playing, not set directly by a mod.
-    const setRotationCursor = async (uid) => {
-        await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { karaokeRotationCursor: uid }, { merge: true });
-    };
-
     const toggleParticipating = async (value) => {
         if (!user) return;
         await setDoc(doc(db, 'users', targetUid, 'permissions', user.uid), { participating: value }, { merge: true });
     };
 
     return {
-        requests, onlineSingers, rotationOrder, rotationCursor, permissions,
+        requests, onlineSingers, rotationOrder, permissions,
         submitRequest, acceptRequest, declineAsTarget, modDecline, modForcePublic,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, reinviteDuet,
-        setRotationOrder, setRotationCursor, toggleParticipating,
+        setRotationOrder, toggleParticipating,
     };
 }

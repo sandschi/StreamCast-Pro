@@ -52,7 +52,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
-        moveInQueue, removeFromQueue, adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
+        moveInQueue, removeFromQueue, playSong, skipSong,
     } = useKaraFunData({ targetUid, userSettings });
 
     // Karaoke request oversight (see #27) - deliberately gated on
@@ -60,8 +60,8 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, rotationCursor, permissions,
-        modDecline, modForcePublic, setRotationOrder, setRotationCursor,
+        requests, onlineSingers, rotationOrder, permissions,
+        modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user });
 
     // Presence (via onlineSingers), not permissions, is the primary name
@@ -80,21 +80,19 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     const [nowPlayingY, setNowPlayingY] = useDebouncedSetting(userSettings?.karafunNowPlayingPosY ?? 90, v => handleToggleSetting('karafunNowPlayingPosY', v));
 
     const modQueue = requests.filter(r => r.status === 'pending' || r.status === 'public');
-    const onAirNames = (queueData?.currentSong?.singer || '').split(/\s*&\s*/).map(s => s.trim()).filter(Boolean);
-    const isDuetOnAir = onAirNames.length > 1;
 
-    const [pitch, setPitch] = useState(0);
-    const [tempo, setTempo] = useState(0);
-    const [genVol, setGenVol] = useState(100);
-    const [bvVol, setBvVol] = useState(60);
-    const [leadVol1, setLeadVol1] = useState(0);
-    const [leadVol2, setLeadVol2] = useState(0);
-    const [trackedSongKey, setTrackedSongKey] = useState(queueData?.currentSong?.title);
-    if (trackedSongKey !== queueData?.currentSong?.title) {
-        setTrackedSongKey(queueData?.currentSong?.title);
-        setPitch(0);
-        setTempo(0);
-    }
+    // Who's actually singing right now, per KaraFun's own live status - the
+    // one source of truth for "position 0" in rotation terms. Not a value we
+    // maintain ourselves (an earlier version stored a separate Firestore
+    // cursor advanced by a reactive effect, which meant two things could
+    // describe "whose turn" and drift apart); derived fresh every render
+    // instead, matched against rotationOrder the same way the disabled
+    // auto-sort below does.
+    const activeSingerUid = (() => {
+        const primary = (queueData?.currentSong?.singer || '').split(/\s*&\s*/)[0].trim();
+        if (!primary) return null;
+        return rotationOrder.find(uid => nameFor(uid) === primary) || null;
+    })();
 
     // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
     // real party, "switching songs around in rapid succession", and had to
@@ -128,30 +126,10 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // and log rather than retry forever.
     const liveRef = useRef({});
     useEffect(() => {
-        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue };
-    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue]);
+        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, nameFor, moveInQueue };
+    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, nameFor, moveInQueue]);
     const stallCountRef = useRef(0);
     const lastMoveSignatureRef = useRef(null);
-
-    // Whose turn is next - advances the moment a genuinely NEW song starts
-    // playing (title+artist+singer changed), to whoever comes after that
-    // song's singer in rotationOrder. Reactive rather than part of the 5s
-    // poll below: this only ever does one idempotent Firestore write per
-    // real transition (multiple mod sessions computing the same value is
-    // harmless), it doesn't repeatedly command an external system the way
-    // queueMove does, so it doesn't carry the same runaway-loop risk.
-    const lastAdvanceKeyRef = useRef(null);
-    useEffect(() => {
-        const cur = queueData?.currentSong;
-        if (!cur || rotationOrder.length === 0) return;
-        const key = `${cur.title}|${cur.artist}|${cur.singer}`;
-        if (key === lastAdvanceKeyRef.current) return;
-        lastAdvanceKeyRef.current = key;
-        const primary = (cur.singer || '').split(/\s*&\s*/)[0].trim();
-        const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
-        if (idx === -1) return;
-        setRotationCursor(rotationOrder[(idx + 1) % rotationOrder.length]);
-    }, [queueData?.currentSong, rotationOrder, nameFor, setRotationCursor]);
 
     // DISABLED AGAIN (2026-09-05, second incident): still swapped two
     // songs every ~5s against a real party even after the v2 rewrite above.
@@ -180,7 +158,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         const MAX_STALLED_ATTEMPTS = 3;
 
         const tick = () => {
-            const { upcoming, currentSong, rotationOrder, rotationCursor, nameFor, moveInQueue } = liveRef.current;
+            const { upcoming, currentSong, rotationOrder, nameFor, moveInQueue } = liveRef.current;
             if (!moveInQueue || !upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return;
 
             const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
@@ -191,7 +169,12 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                 if (!primary) return -1;
                 return rotationOrder.findIndex(uid => nameFor(uid) === primary);
             };
-            const cursorIdx = Math.max(0, rotationOrder.indexOf(rotationCursor));
+            // Whoever's actually singing right now (KaraFun's own live status,
+            // not a value we track ourselves - see activeSingerUid above)
+            // decides where round-robin distance is measured from; "next up"
+            // is one slot after them. Nobody currently on air defaults to 0.
+            const activeIdx = ownerIndexOf(currentSong?.singer);
+            const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
 
             // Round-robin, not a static priority ranking: everyone's FIRST
             // queued song (round 0) comes before anyone's SECOND (round 1),
@@ -282,9 +265,15 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                                     {queueData?.playState === 'infoscreen' ? 'Waiting for a song to start…' : error || 'No song playing currently.'}
                                 </div>
                             )}
-                            <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                                <ToolBtn t={t} icon={<Eye size={12} />} onClick={handleShowNowPlaying}>Show</ToolBtn>
-                                <ToolBtn t={t} icon={<EyeOff size={12} />} onClick={handleHideNowPlaying}>Dismiss</ToolBtn>
+                            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <ToolBtn t={t} icon={<Eye size={12} />} onClick={handleShowNowPlaying}>Show</ToolBtn>
+                                    <ToolBtn t={t} icon={<EyeOff size={12} />} onClick={handleHideNowPlaying}>Dismiss</ToolBtn>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
+                                    <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
+                                </div>
                             </div>
                         </div>
                         {upcoming.length === 0 ? (
@@ -322,51 +311,6 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
 
                 {userSettings?.karaokeEnabled && (
                     <>
-                        <Pane t={t} d={d} icon={<Play size={13} />} title={queueData?.currentSong ? `Now: ${queueData.currentSong.title}` : 'Playback Controls'}>
-                            {/* Play/Skip stay visible even with nothing playing - Play is
-                                exactly how you start whatever's next in the queue, so
-                                hiding it precisely when there's nothing playing removed
-                                the one control needed to fix that. */}
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
-                                <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
-                            </div>
-                            {!queueData?.currentSong ? (
-                                <EmptyState icon={<Play size={28} />} title="Nothing playing." hint="Play starts whatever's next in the queue." />
-                            ) : (
-                                <>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
-                                        <Field t={t} label="Key">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <ToolBtn t={t} disabled={pitch <= -6} onClick={() => { adjustPitch(-1); setPitch(p => p - 1); }}>-</ToolBtn>
-                                                <span style={{ ...tiny(t), color: t.text, minWidth: 24, textAlign: 'center' }}>{pitch > 0 ? `+${pitch}` : pitch}</span>
-                                                <ToolBtn t={t} disabled={pitch >= 6} onClick={() => { adjustPitch(1); setPitch(p => p + 1); }}>+</ToolBtn>
-                                            </div>
-                                        </Field>
-                                        <Field t={t} label="Tempo">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <ToolBtn t={t} disabled={tempo <= -50} onClick={() => { adjustTempo(-5); setTempo(v => v - 5); }}>-</ToolBtn>
-                                                <span style={{ ...tiny(t), color: t.text, minWidth: 32, textAlign: 'center' }}>{tempo > 0 ? `+${tempo}%` : `${tempo}%`}</span>
-                                                <ToolBtn t={t} disabled={tempo >= 50} onClick={() => { adjustTempo(5); setTempo(v => v + 5); }}>+</ToolBtn>
-                                            </div>
-                                        </Field>
-                                    </div>
-                                    <RangeSlider t={t} label="General Volume" value={genVol} onChange={v => { setGenVol(v); setVolume(v); }} />
-                                    {isDuetOnAir ? (
-                                        <>
-                                            <RangeSlider t={t} label="Lead Vocal 1" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
-                                            <RangeSlider t={t} label="Lead Vocal 2" value={leadVol2} onChange={v => { setLeadVol2(v); setLeadVocalVolume('2', v); }} />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <RangeSlider t={t} label="Backing Vocals" value={bvVol} onChange={v => { setBvVol(v); setBackingVocalsVolume(v); }} />
-                                            <RangeSlider t={t} label="Lead Vocal" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
-                                        </>
-                                    )}
-                                </>
-                            )}
-                        </Pane>
-
                         <Pane t={t} d={d} icon={<Users size={13} />} title={`All Requests · ${modQueue.length}`}>
                             {modQueue.length === 0 && <EmptyState icon={<Users size={28} />} title="No open requests." />}
                             {modQueue.map(reqst => (
@@ -388,7 +332,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                             {[...onlineSingers].sort((a, b) => rotationOrder.indexOf(a.id) - rotationOrder.indexOf(b.id)).map((s, i, arr) => (
                                 <div key={s.id} style={row(t)}>
                                     <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                        {(rotationCursor ? s.id === rotationCursor : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                        {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
                                     </span>
                                     <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                                     <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
