@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music } from 'lucide-react';
 import { useKaraFunData, searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
+import { useAuth } from '@/context/AuthContext';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
@@ -77,21 +78,24 @@ function SongRow({ t, song, canSelfAdd, onlineSingers, onSelfAdd, onRequest }) {
 // tab rather than mixed into the same sidebar - see #27.
 export default function KaraokePane({ t, d, targetUid, userRole, user, userSettings }) {
     const {
-        queueData, partyId,
+        queueData, partyId, addToQueue,
         adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     } = useKaraFunData({ targetUid, userSettings });
 
     const {
-        requests, stagingQueue, onlineSingers, rotationOrder, permissions,
+        requests, onlineSingers, rotationOrder, permissions,
         submitRequest, acceptRequest, declineAsTarget,
-        selfAdd, respondToDuetInvite, toggleParticipating,
+        selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
     } = useKaraokeData({ targetUid, user });
 
     const isMod = userRole === 'broadcaster' || userRole === 'mod';
     const isSinger = userRole === 'singer';
     const myPerm = permissions[user?.uid];
     const iAmParticipating = !!myPerm?.participating;
-    const singerName = user?.displayName || 'Singer';
+    // Twitch OIDC never populates the Firebase Auth user's displayName (see
+    // AuthContext.js) - the real handle lives on the Firestore user doc.
+    const { userData } = useAuth();
+    const singerName = userData?.twitchUsername || user?.displayName || 'Singer';
     // Broadcaster/mod can always add for themselves - the participating gate
     // only exists for the singer role (opting in/out of being pickable).
     const canSelfAdd = isMod || (isSinger && iAmParticipating);
@@ -117,9 +121,11 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // emptied instead of lagging a render behind.
     const visibleResults = searchTerm ? results : [];
 
-    const myRequests = requests.filter(r => r.targetSingerUid === user?.uid && r.status === 'pending');
-    const publicRequests = requests.filter(r => r.status === 'public');
-    const myDuetInvites = stagingQueue.filter(s => s.duetInvite?.invitedUid === user?.uid && s.duetInvite?.status === 'pending');
+    const myRequests = requests.filter(r => r.kind !== 'duet' && r.targetSingerUid === user?.uid && r.status === 'pending');
+    const publicRequests = requests.filter(r => r.kind !== 'duet' && r.status === 'public');
+    const myDuetInvites = requests.filter(r => r.kind === 'duet' && r.targetSingerUid === user?.uid && r.status === 'pending');
+    // Duets I asked for that came back declined - my move now: solo, drop, or ask someone else.
+    const myDeclinedDuets = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'declined');
 
     // Best-effort correlation: KaraFun's own queue has no id we get back from
     // queueAdd, so "is it my turn" is inferred from the display name we sent
@@ -145,7 +151,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
         setTempo(0);
     }
 
-    const handleSelfAdd = (song, duetUid) => selfAdd(song, singerName, duetUid);
+    const handleSelfAdd = (song, duetUid) => duetUid ? inviteDuet(song, singerName, duetUid) : selfAdd(song, singerName, addToQueue);
     const handleRequest = (song, targetUid_) => submitRequest(song, targetUid_);
 
     if (!userSettings?.karaokeEnabled) {
@@ -268,11 +274,28 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                             <div key={entry.id} style={row(t)}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{entry.title}</div>
-                                    <div style={{ ...tiny(t), color: t.faint }}>with {entry.singerName}</div>
+                                    <div style={{ ...tiny(t), color: t.faint }}>with {entry.requestedByName}</div>
                                 </div>
                                 <div style={btnRow}>
-                                    <ToolBtn t={t} icon={<Check size={11} />} onClick={() => respondToDuetInvite(entry.id, true, singerName)}>Accept</ToolBtn>
-                                    <ToolBtn t={t} icon={<X size={11} />} onClick={() => respondToDuetInvite(entry.id, false)}>Decline</ToolBtn>
+                                    <ToolBtn t={t} icon={<Check size={11} />} onClick={() => respondToDuetInvite(entry, true, singerName, addToQueue)}>Accept</ToolBtn>
+                                    <ToolBtn t={t} icon={<X size={11} />} onClick={() => respondToDuetInvite(entry, false, singerName, addToQueue)}>Decline</ToolBtn>
+                                </div>
+                            </div>
+                        ))}
+                    </Pane>
+                )}
+
+                {myDeclinedDuets.length > 0 && (
+                    <Pane t={t} d={d} icon={<UserPlus size={13} />} title="Duet Declined">
+                        {myDeclinedDuets.map(entry => (
+                            <div key={entry.id} style={row(t)}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{entry.title}</div>
+                                    <div style={{ ...tiny(t), color: t.faint }}>they said no</div>
+                                </div>
+                                <div style={btnRow}>
+                                    <ToolBtn t={t} onClick={() => singSoloAfterDecline(entry, singerName, addToQueue)}>Sing Solo</ToolBtn>
+                                    <ToolBtn t={t} icon={<X size={11} />} onClick={() => dropDeclinedDuet(entry.id)}>Drop</ToolBtn>
                                 </div>
                             </div>
                         ))}
@@ -288,7 +311,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                                     <div style={{ ...tiny(t), color: t.faint }}>requested by {reqst.requestedByName}</div>
                                 </div>
                                 <div style={btnRow}>
-                                    <ToolBtn t={t} icon={<Check size={11} />} onClick={() => acceptRequest(reqst, singerName)}>Accept</ToolBtn>
+                                    <ToolBtn t={t} icon={<Check size={11} />} onClick={() => acceptRequest(reqst, singerName, addToQueue)}>Accept</ToolBtn>
                                     <ToolBtn t={t} icon={<X size={11} />} onClick={() => declineAsTarget(reqst.id)}>Decline</ToolBtn>
                                 </div>
                             </div>
@@ -304,7 +327,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{reqst.title}</div>
                                     <div style={{ ...tiny(t), color: t.faint }}>requested by {reqst.requestedByName}</div>
                                 </div>
-                                <ToolBtn t={t} icon={<Check size={11} />} onClick={() => acceptRequest(reqst, singerName)}>Claim</ToolBtn>
+                                <ToolBtn t={t} icon={<Check size={11} />} onClick={() => acceptRequest(reqst, singerName, addToQueue)}>Claim</ToolBtn>
                             </div>
                         ))}
                     </Pane>

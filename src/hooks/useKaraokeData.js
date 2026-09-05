@@ -3,22 +3,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { db } from '@/lib/firebase';
 import {
-    collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc,
+    collection, doc, onSnapshot, addDoc, updateDoc, setDoc,
     serverTimestamp, Timestamp, query, orderBy,
 } from 'firebase/firestore';
 
 const RESPOND_WINDOW_MS = 5 * 60 * 1000;
 const PUBLIC_WINDOW_MS = 10 * 60 * 1000;
 
-// Song requests, the rotation-ordered staging queue, and the online+
-// participating singer list (see #27). Split from useKaraFunData - that hook
-// owns the live KaraFun socket connection; this one owns our own Firestore
-// data model that sits in front of it. A component wires the two together
-// (e.g. pushing a staging entry into KaraFun's real queue via
-// karaFun.addToQueue once it's that singer's turn).
+// Song requests, duet invites, and the online+participating singer list (see
+// #27). Deliberately does NOT hold songs anywhere before they hit KaraFun's
+// real queue - accept/self-add push straight into it via the addToQueue
+// callback the caller supplies (from useKaraFunData), and fairness is
+// enforced afterward by reordering that same live queue via queueMove
+// (see KaraFunPane.js's auto-sort effect), not by staging songs in our own
+// Firestore collection first. An earlier version held a separate
+// karaoke_staging_queue with a manual "push next" step; dropped per
+// feedback - moving songs around in the actual KaraFun queue is the point,
+// not a parallel holding area.
 export function useKaraokeData({ targetUid, user }) {
     const [requests, setRequests] = useState([]);
-    const [stagingQueue, setStagingQueue] = useState([]);
     const [presence, setPresence] = useState([]);
     const [permissions, setPermissions] = useState({});
     const [rotationOrder, setRotationOrderState] = useState([]);
@@ -26,12 +29,8 @@ export function useKaraokeData({ targetUid, user }) {
     useEffect(() => {
         if (!targetUid) return;
 
-        const unsubRequests = onSnapshot(collection(db, 'users', targetUid, 'karaoke_requests'), (snap) => {
+        const unsubRequests = onSnapshot(query(collection(db, 'users', targetUid, 'karaoke_requests'), orderBy('createdAt', 'asc')), (snap) => {
             setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-
-        const unsubStaging = onSnapshot(query(collection(db, 'users', targetUid, 'karaoke_staging_queue'), orderBy('order', 'asc')), (snap) => {
-            setStagingQueue(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
         const unsubPresence = onSnapshot(collection(db, 'users', targetUid, 'online'), (snap) => {
@@ -48,7 +47,7 @@ export function useKaraokeData({ targetUid, user }) {
             setRotationOrderState(snap.exists() ? (snap.data().karaokeRotationOrder || []) : []);
         });
 
-        return () => { unsubRequests(); unsubStaging(); unsubPresence(); unsubPermissions(); unsubSettings(); };
+        return () => { unsubRequests(); unsubPresence(); unsubPermissions(); unsubSettings(); };
     }, [targetUid]);
 
     // "now" is tracked as state (rather than called inline in the memo below)
@@ -81,7 +80,7 @@ export function useKaraokeData({ targetUid, user }) {
         const requestedByName = user.displayName || 'Someone';
         const now = Date.now();
         await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
-            songId: song.songId, title: song.title, artist: song.artist,
+            kind: 'song', songId: song.songId, title: song.title, artist: song.artist,
             requestedBy: user.uid, requestedByName,
             targetSingerUid: targetSingerUid || null,
             status: targetSingerUid ? 'pending' : 'public',
@@ -91,24 +90,13 @@ export function useKaraokeData({ targetUid, user }) {
         });
     };
 
-    // duetInvite is always written explicitly (map or null), never omitted -
-    // firestore.rules checks it with `!= null`, which throws on a genuinely
-    // absent field rather than treating it like JS's undefined.
-    const pushToStaging = async (requestOrSong, singerUid, singerName) => {
-        const stagingRef = collection(db, 'users', targetUid, 'karaoke_staging_queue');
-        const maxOrder = stagingQueue.reduce((m, s) => Math.max(m, s.order ?? 0), 0);
-        await addDoc(stagingRef, {
-            songId: requestOrSong.songId, title: requestOrSong.title, artist: requestOrSong.artist,
-            singerUid, singerName, coSingerUid: null, coSingerName: null,
-            duetInvite: null, addedAt: serverTimestamp(), order: maxOrder + 1,
-        });
-    };
-
     // Accept as the originally-targeted singer, or claim an already-public
-    // request - same outcome either way, just gated differently by the caller.
-    const acceptRequest = async (request, singerName) => {
+    // request - same outcome either way. addToQueue is useKaraFunData's live
+    // KaraFun emitter, passed in by the caller so this hook stays ignorant of
+    // the socket connection itself.
+    const acceptRequest = async (request, singerName, addToQueue) => {
+        addToQueue(request.songId, singerName);
         await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
-        await pushToStaging(request, user.uid, singerName);
     };
 
     // Only the targeted singer declining - drops to public, doesn't kill it.
@@ -130,41 +118,38 @@ export function useKaraokeData({ targetUid, user }) {
         });
     };
 
-    const selfAdd = async (song, singerName, duetInviteUid) => {
-        const stagingRef = collection(db, 'users', targetUid, 'karaoke_staging_queue');
-        const maxOrder = stagingQueue.reduce((m, s) => Math.max(m, s.order ?? 0), 0);
-        await addDoc(stagingRef, {
-            songId: song.songId, title: song.title, artist: song.artist,
-            singerUid: user.uid, singerName, coSingerUid: null, coSingerName: null,
-            duetInvite: duetInviteUid ? { invitedUid: duetInviteUid, status: 'pending' } : null,
-            addedAt: serverTimestamp(), order: maxOrder + 1,
+    // Solo self-add is a direct queueAdd - nothing to persist, there's no
+    // lifecycle to track once it's already in KaraFun's real queue. A duet
+    // invite is the one case that needs Firestore first: the invitee has to
+    // agree before anything is actually queued, so it's recorded as a
+    // karaoke_requests doc (kind: 'duet') the same shape a viewer's request
+    // uses, just requestedBy === the asking singer themselves.
+    const selfAdd = (song, singerName, addToQueue) => addToQueue(song.songId, singerName);
+
+    const inviteDuet = async (song, singerName, invitedUid) => {
+        await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
+            kind: 'duet', songId: song.songId, title: song.title, artist: song.artist,
+            requestedBy: user.uid, requestedByName: singerName, targetSingerUid: invitedUid,
+            status: 'pending', createdAt: serverTimestamp(), respondBy: null, publicExpireBy: null,
         });
     };
 
-    const respondToDuetInvite = async (entryId, accept, coSingerName) => {
-        const ref = doc(db, 'users', targetUid, 'karaoke_staging_queue', entryId);
+    const respondToDuetInvite = async (request, accept, myName, addToQueue) => {
         if (accept) {
-            await updateDoc(ref, {
-                coSingerUid: user.uid, coSingerName,
-                duetInvite: { invitedUid: user.uid, status: 'accepted' },
-            });
+            addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
+            await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
         } else {
-            await updateDoc(ref, { 'duetInvite.status': 'declined' });
+            await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'declined' });
         }
     };
 
-    // Asker's choice after a decline: sing it solo, drop it, or re-invite someone else.
-    const clearDuetInvite = async (entryId) => updateDoc(doc(db, 'users', targetUid, 'karaoke_staging_queue', entryId), { duetInvite: null });
-    const reInviteDuet = async (entryId, invitedUid) => updateDoc(doc(db, 'users', targetUid, 'karaoke_staging_queue', entryId), { duetInvite: { invitedUid, status: 'pending' } });
-    const dropStagingEntry = async (entryId) => deleteDoc(doc(db, 'users', targetUid, 'karaoke_staging_queue', entryId));
-
-    // Simple index-swap reorder within the staging list - mod drag-and-drop.
-    const reorderStaging = async (fromIndex, toIndex) => {
-        const items = [...stagingQueue];
-        const [moved] = items.splice(fromIndex, 1);
-        items.splice(toIndex, 0, moved);
-        await Promise.all(items.map((item, i) => updateDoc(doc(db, 'users', targetUid, 'karaoke_staging_queue', item.id), { order: i })));
+    // Asker's choices once a duet invite they sent comes back declined.
+    const singSoloAfterDecline = async (request, singerName, addToQueue) => {
+        addToQueue(request.songId, singerName);
+        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'dropped' });
     };
+    const dropDeclinedDuet = async (requestId) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { status: 'dropped' });
+    const reinviteDuet = async (requestId, newInvitedUid) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { targetSingerUid: newInvitedUid, status: 'pending' });
 
     const setRotationOrder = async (uidArray) => {
         await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { karaokeRotationOrder: uidArray }, { merge: true });
@@ -176,9 +161,9 @@ export function useKaraokeData({ targetUid, user }) {
     };
 
     return {
-        requests, stagingQueue, onlineSingers, rotationOrder, permissions,
+        requests, onlineSingers, rotationOrder, permissions,
         submitRequest, acceptRequest, declineAsTarget, modDecline, modForcePublic,
-        selfAdd, respondToDuetInvite, clearDuetInvite, reInviteDuet, dropStagingEntry,
-        reorderStaging, setRotationOrder, toggleParticipating,
+        selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, reinviteDuet,
+        setRotationOrder, toggleParticipating,
     };
 }

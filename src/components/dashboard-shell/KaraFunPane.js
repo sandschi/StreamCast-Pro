@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, Trash2, X } from 'lucide-react';
+import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
@@ -52,7 +52,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
-        addToQueue, adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
+        moveInQueue, adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     } = useKaraFunData({ targetUid, userSettings });
 
     // Karaoke request oversight (see #27) - deliberately gated on
@@ -60,8 +60,8 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, stagingQueue, onlineSingers, rotationOrder, permissions,
-        modDecline, modForcePublic, dropStagingEntry, reorderStaging, setRotationOrder,
+        requests, onlineSingers, rotationOrder, permissions,
+        modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user });
 
     const [queueX, setQueueX] = useDebouncedSetting(userSettings?.karafunQueuePosX ?? 5, v => handleToggleSetting('karafunQueuePosX', v));
@@ -86,21 +86,42 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         setTempo(0);
     }
 
-    const nextEligibleEntry = () => {
-        for (const uid of rotationOrder) {
-            const entry = stagingQueue.find(s => s.singerUid === uid);
-            if (entry) return entry;
-        }
-        return stagingQueue[0] || null;
-    };
-
-    const pushNext = async () => {
-        const entry = nextEligibleEntry();
-        if (!entry) return;
-        const singer = entry.coSingerName ? `${entry.singerName} & ${entry.coSingerName}` : entry.singerName;
-        addToQueue(entry.songId, singer);
-        await dropStagingEntry(entry.id);
-    };
+    // Auto-sort: whenever KaraFun's own upcoming queue or the rotation order
+    // changes, reorder the LIVE queue in place via queueMove so it always
+    // reflects rotation turn order - no separate staging area, no manual
+    // "push" step. A queue item's owner is inferred from its `singer` string
+    // (KaraFun has no other identity for it) matched against each rotation
+    // singer's known name; a duet's owner is whoever asked (the name before
+    // " & "). Items whose singer doesn't match anyone in rotation sort last,
+    // keeping their relative order. Stops on its own once the live order
+    // already matches (every move below becomes a no-op), so this can't loop.
+    useEffect(() => {
+        const upcoming = queueData?.upcoming;
+        if (!moveInQueue || !upcoming || upcoming.length < 2 || rotationOrder.length === 0) return;
+        const ownerIndex = (singerField) => {
+            const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
+            if (!primary) return Infinity;
+            const idx = rotationOrder.findIndex(uid => {
+                const p = permissions[uid];
+                return p && (p.twitchUsername === primary || p.displayName === primary);
+            });
+            return idx === -1 ? Infinity : idx;
+        };
+        const current = upcoming.map(s => s.queueId);
+        const desired = upcoming
+            .map((s, i) => ({ queueId: s.queueId, owner: ownerIndex(s.singer), origIndex: i }))
+            .sort((a, b) => a.owner - b.owner || a.origIndex - b.origIndex)
+            .map(x => x.queueId);
+        const working = [...current];
+        desired.forEach((queueId, targetIndex) => {
+            const curIndex = working.indexOf(queueId);
+            if (curIndex !== targetIndex) {
+                moveInQueue(queueId, curIndex, targetIndex);
+                working.splice(curIndex, 1);
+                working.splice(targetIndex, 0, queueId);
+            }
+        });
+    }, [queueData?.upcoming, rotationOrder, permissions, moveInQueue]);
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -164,6 +185,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                 and stacking all of them one-wide wasted the dashboard's actual
                 width while forcing constant scrolling. */}
             <div style={{ flex: 1.4, minWidth: 0, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'min-content', alignContent: 'start', gap: d.gutter, overflowY: 'auto' }}>
+                {/* Deliberately outside the karaokeEnabled-gated block below -
+                    it's the switch that turns that whole section on, so it
+                    can't itself disappear once it's off. Lives here (not
+                    Settings) since it's a mod action, not overlay appearance. */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <Pane t={t} d={d} icon={<Mic size={13} />} title="Karaoke Access">
+                        <ToggleSwitch t={t} checked={!!userSettings?.karaokeEnabled} onChange={v => handleToggleSetting('karaokeEnabled', v)} label="Enable Karaoke Requests" description="Open the Karaoke tab to everyone — viewers can request songs, singers can add their own." />
+                    </Pane>
+                </div>
+
                 {userSettings?.karaokeEnabled && (
                     <>
                         <Pane t={t} d={d} icon={<Play size={13} />} title={queueData?.currentSong ? `Now: ${queueData.currentSong.title}` : 'Playback Controls'}>
@@ -212,31 +243,12 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                             {modQueue.map(reqst => (
                                 <div key={reqst.id} style={row(t)}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{reqst.title}</div>
+                                        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{reqst.title}{reqst.kind === 'duet' && <span style={{ color: t.accent }}> (duet)</span>}</div>
                                         <div style={{ ...tiny(t), color: t.faint }}>{reqst.status === 'public' ? 'public' : `for ${permissions[reqst.targetSingerUid]?.twitchUsername || permissions[reqst.targetSingerUid]?.displayName || 'someone'}`} · by {reqst.requestedByName}</div>
                                     </div>
                                     <div style={btnRow}>
-                                        {reqst.status === 'pending' && <ToolBtn t={t} onClick={() => modForcePublic(reqst.id)}>Force Public</ToolBtn>}
+                                        {reqst.status === 'pending' && reqst.kind !== 'duet' && <ToolBtn t={t} onClick={() => modForcePublic(reqst.id)}>Force Public</ToolBtn>}
                                         <ToolBtn t={t} icon={<X size={11} />} onClick={() => modDecline(reqst.id)}>Decline</ToolBtn>
-                                    </div>
-                                </div>
-                            ))}
-                        </Pane>
-
-                        <Pane t={t} d={d} icon={<Mic size={13} />} title={`Staging Queue · ${stagingQueue.length}`}
-                            actions={<ToolBtn t={t} primary onClick={pushNext} disabled={stagingQueue.length === 0}>Push Next</ToolBtn>}>
-                            {stagingQueue.length === 0 && <EmptyState icon={<Mic size={28} />} title="Nothing staged." />}
-                            {stagingQueue.map((entry, i) => (
-                                <div key={entry.id} style={row(t)}>
-                                    <span style={{ ...tiny(t), color: t.faint, width: 18 }}>{i + 1}</span>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{entry.title}</div>
-                                        <div style={{ ...tiny(t), color: t.faint }}>{entry.coSingerName ? `${entry.singerName} & ${entry.coSingerName}` : entry.singerName}</div>
-                                    </div>
-                                    <div style={btnRow}>
-                                        <ToolBtn t={t} icon={<ArrowUp size={11} />} disabled={i === 0} onClick={() => reorderStaging(i, i - 1)} />
-                                        <ToolBtn t={t} icon={<ArrowDown size={11} />} disabled={i === stagingQueue.length - 1} onClick={() => reorderStaging(i, i + 1)} />
-                                        <ToolBtn t={t} icon={<Trash2 size={11} />} onClick={() => dropStagingEntry(entry.id)} />
                                     </div>
                                 </div>
                             ))}
