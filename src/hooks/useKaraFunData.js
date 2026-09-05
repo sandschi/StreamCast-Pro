@@ -174,6 +174,14 @@ export function useKaraFunData({ targetUid, userSettings }) {
             setQueueData(prev => ({
                 ...prev,
                 upcoming: transformed,
+                // The authoritative "is anything left to play at all" signal -
+                // status's own 'idle' is ambiguous (also means "paused, still
+                // loaded") and can arrive before OR after this same event on a
+                // real party (verified live: Skip fires status:'idle' first,
+                // queue:[] a moment later), so checking prev.upcoming inside
+                // the status handler below races and can miss this. Checking
+                // the queue's own fresh length here instead doesn't.
+                currentSong: transformed.length === 0 ? null : prev.currentSong,
                 timestamp: Date.now(),
             }));
             setLastUpdated(new Date());
@@ -207,9 +215,11 @@ export function useKaraFunData({ targetUid, userSettings }) {
                     // song is loaded but paused (keep showing it - see the Play/Pause
                     // toggle) AND when the queue has fully emptied with nothing loaded
                     // at all (the last song finished, no 'infoscreen'/'stop' in
-                    // between). Treat an empty live queue as the tiebreaker: no items
-                    // left to play means 'idle' really is "nothing's loaded", so clear
-                    // the stale singer instead of leaving them "on air" forever.
+                    // between). The 'queue' handler above is the authoritative fix for
+                    // that (its own fresh queue length, not this stale closure) since a
+                    // real party can send this 'status' event BEFORE the matching
+                    // 'queue' event (verified live via Skip) - this check is just a
+                    // secondary catch for whichever arrives first.
                     const queueEmpty = (prev?.upcoming?.length ?? 0) === 0;
                     const nothingLoaded = status?.state === 'infoscreen' || status?.state === 'stop' || (status?.state === 'idle' && queueEmpty);
                     return {
