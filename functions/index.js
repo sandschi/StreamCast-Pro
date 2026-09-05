@@ -17,29 +17,37 @@ const db = admin.firestore();
 // even if nobody's dashboard happens to be open to notice.
 exports.expireKaraokeRequests = onSchedule('every 1 minutes', async () => {
     const now = admin.firestore.Timestamp.now();
-    const batch = db.batch();
-    let writes = 0;
 
-    const timedOutPending = await db.collectionGroup('karaoke_requests')
-        .where('status', '==', 'pending')
-        .where('respondBy', '<=', now)
-        .get();
-    timedOutPending.forEach(docSnap => {
-        batch.update(docSnap.ref, {
-            status: 'public', targetSingerUid: null, respondBy: null,
-            publicExpireBy: admin.firestore.Timestamp.fromMillis(now.toMillis() + 10 * 60 * 1000),
-        });
-        writes++;
-    });
+    const [timedOutPending, expiredPublic] = await Promise.all([
+        db.collectionGroup('karaoke_requests').where('status', '==', 'pending').where('respondBy', '<=', now).get(),
+        db.collectionGroup('karaoke_requests').where('status', '==', 'public').where('publicExpireBy', '<=', now).get(),
+    ]);
 
-    const expiredPublic = await db.collectionGroup('karaoke_requests')
-        .where('status', '==', 'public')
-        .where('publicExpireBy', '<=', now)
-        .get();
-    expiredPublic.forEach(docSnap => {
-        batch.update(docSnap.ref, { status: 'expired' });
-        writes++;
-    });
+    // Each transition runs in its own transaction, re-reading the document
+    // and re-checking its status/deadline immediately before writing. The
+    // query snapshots above can be seconds stale by the time this commits -
+    // a concurrent client write (accept/decline/claim) landing in that
+    // window must win over this scheduled sweep, not get silently
+    // overwritten by a shared unconditional batch. Per-doc transactions
+    // instead of one big batch also sidesteps Firestore's 500-write batch
+    // cap, since there's no shared batch left to overflow.
+    const transitions = [
+        ...timedOutPending.docs.map(docSnap => db.runTransaction(async (tx) => {
+            const fresh = await tx.get(docSnap.ref);
+            const data = fresh.data();
+            if (!fresh.exists || data.status !== 'pending' || !(data.respondBy?.toMillis() <= now.toMillis())) return;
+            tx.update(docSnap.ref, {
+                status: 'public', targetSingerUid: null, respondBy: null,
+                publicExpireBy: admin.firestore.Timestamp.fromMillis(now.toMillis() + 10 * 60 * 1000),
+            });
+        })),
+        ...expiredPublic.docs.map(docSnap => db.runTransaction(async (tx) => {
+            const fresh = await tx.get(docSnap.ref);
+            const data = fresh.data();
+            if (!fresh.exists || data.status !== 'public' || !(data.publicExpireBy?.toMillis() <= now.toMillis())) return;
+            tx.update(docSnap.ref, { status: 'expired' });
+        })),
+    ];
 
-    if (writes > 0) await batch.commit();
+    await Promise.all(transitions);
 });

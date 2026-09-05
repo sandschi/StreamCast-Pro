@@ -239,7 +239,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.singer}</div>
                                 </div>
                                 {(isMod || isMine) && (
-                                    <button type="button" title="Remove from queue" onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}>
+                                    <button type="button" disabled={!song.queueId} title={song.queueId ? 'Remove from queue' : 'Not removable yet'} onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: song.queueId ? 'pointer' : 'default', opacity: song.queueId ? 1 : 0.4 }}>
                                         <Trash2 size={13} />
                                     </button>
                                 )}

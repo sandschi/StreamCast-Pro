@@ -278,7 +278,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.artist}</div>
                                 </div>
                                 {song.singer && <span style={{ flex: 'none', maxWidth: 170, fontFamily: MONO, fontSize: 11, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{song.singer}</span>}
-                                <button type="button" title="Remove from queue" onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}>
+                                <button type="button" disabled={!song.queueId} title={song.queueId ? 'Remove from queue' : 'Not removable yet'} onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: song.queueId ? 'pointer' : 'default', opacity: song.queueId ? 1 : 0.4 }}>
                                     <Trash2 size={13} />
                                 </button>
                             </div>

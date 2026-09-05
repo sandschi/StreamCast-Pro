@@ -31,6 +31,16 @@ service cloud.firestore {
       );
     }
 
+    // A signed-in singer who's actually opted into the rotation (see
+    // useKaraokeData.js's onlineSingers/ELIGIBLE_ROTATION_ROLES) - shared by
+    // the claim-a-public-request and create-a-duet-invite rules below, which
+    // both need to tell an eligible singer apart from any other viewer.
+    function isParticipatingSinger(userId) {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.role == 'singer' &&
+        get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.participating == true;
+    }
+
     // Master Admin Bypass
     match /{document=**} {
       allow read, write: if isMasterAdmin();
@@ -136,7 +146,14 @@ service cloud.firestore {
       // reordered in place via queueMove.
       match /karaoke_requests/{requestId} {
         allow read: if request.auth != null;
-        allow create: if request.auth != null && request.resource.data.requestedBy == request.auth.uid;
+        // A plain song request may come from any signed-in viewer - that's
+        // the whole point of the feature. A duet invite is different: it's a
+        // singer inviting a specific co-singer to join their turn, so it's
+        // restricted the same way claiming a public request is, to a mod or
+        // a participating singer, rather than any viewer being able to send
+        // one under someone else's name.
+        allow create: if request.auth != null && request.resource.data.requestedBy == request.auth.uid
+          && (request.resource.data.kind != 'duet' || isChannelModerator(userId) || isParticipatingSinger(userId));
 
         // Mods: full control (force-public, decline, anything).
         allow update, delete: if isChannelModerator(userId);
@@ -163,31 +180,26 @@ service cloud.firestore {
           && resource.data.status == 'public' && resource.data.targetSingerUid == null
           && request.resource.data.status == 'accepted'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
-          && (
-            isChannelModerator(userId) ||
-            (
-              get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.role == 'singer' &&
-              get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.participating == true
-            )
-          );
+          && (isChannelModerator(userId) || isParticipatingSinger(userId));
 
-        // The original requester/asker may only ever drop their own
-        // request (singSoloAfterDecline/dropDeclinedDuet) or re-target a
-        // declined duet invite back to pending (reinviteDuet) - never
-        // approve their own request themselves. Dropping never touches the
-        // response-window timers; re-inviting is the one legitimate case
-        // that must reset respondBy (otherwise a stale/null deadline from
-        // the original invite would make expireKaraokeRequests reopen or
-        // never expire the re-invite - see reinviteDuet), so that path is
-        // allowed to set it, but only to a genuine future timestamp -
-        // publicExpireBy/requestedBy stay locked either way.
+        // The original requester/asker may only ever drop their own duet
+        // invite (singSoloAfterDecline/dropDeclinedDuet, both duet-only
+        // flows - see KaraokePane.js's myPendingDuetInvites/myDeclinedDuets)
+        // or re-target an already-declined duet invite back to pending
+        // (reinviteDuet) - never approve their own request themselves, and
+        // never touch a plain (non-duet) request or one that's already
+        // progressed past declined/pending. Scoped tightly to `kind == 'duet'`
+        // and the exact fields each of those three functions actually writes,
+        // rather than an exclusion list - an inclusion list can't be widened
+        // by a field this rule's author didn't anticipate.
         allow update: if request.auth != null && request.auth.uid == resource.data.requestedBy
+          && resource.data.kind == 'duet'
           && (
             (request.resource.data.status == 'dropped'
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['respondBy', 'publicExpireBy', 'requestedBy']))
-            || (request.resource.data.status == 'pending'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+            || (resource.data.status == 'declined' && request.resource.data.status == 'pending'
               && request.resource.data.respondBy > request.time
-              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['publicExpireBy', 'requestedBy']))
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['targetSingerUid', 'status', 'respondBy']))
           );
 
         allow delete: if request.auth != null

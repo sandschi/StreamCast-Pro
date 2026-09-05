@@ -73,7 +73,13 @@ export function useKaraokeData({ targetUid, user }) {
             .filter(p => {
                 const perm = permissions[p.id];
                 const role = perm?.role || (p.id === targetUid ? 'broadcaster' : null);
-                if (!ELIGIBLE_ROTATION_ROLES.includes(role) || !perm?.participating) return false;
+                if (!ELIGIBLE_ROTATION_ROLES.includes(role)) return false;
+                // The broadcaster has no reason to opt in/out via a permission
+                // doc the way an invited singer does - they're always in their
+                // own rotation. Without this, a broadcaster with no permissions
+                // doc yet (the common case - UsersPane never creates one for
+                // the owner) silently drops out of onlineSingers entirely.
+                if (role !== 'broadcaster' && !perm?.participating) return false;
                 const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
                 return now - lastSeenMs < 90_000;
             })
