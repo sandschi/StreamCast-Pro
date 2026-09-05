@@ -128,11 +128,16 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     const myDeclinedDuets = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'declined');
 
     // Best-effort correlation: KaraFun's own queue has no id we get back from
-    // queueAdd, so "is it my turn" is inferred from the display name we sent
+    // queueAdd, so "am I on air" is inferred from the display name we sent
     // as `singer` - "Alice & Bob" for a duet, per our own convention. Mods
-    // get playback controls unconditionally in KaraokeModPane instead.
+    // get playback controls unconditionally in the KaraFun Mod tab instead.
+    // Access also opens up to whoever's turn is next per rotation (the same
+    // cursor Rotation Order's arrow shows), not only once KaraFun's own
+    // status event confirms something is already playing - otherwise the
+    // one person who'd actually need Play (to start their own turn) is
+    // exactly the one person who never sees it.
     const onAirNames = (queueData?.currentSong?.singer || '').split(/\s*&\s*/).map(s => s.trim()).filter(Boolean);
-    const isMyTurn = onAirNames.includes(singerName);
+    const isMyTurn = onAirNames.includes(singerName) || rotationCursor === user?.uid;
     const isDuetOnAir = onAirNames.length > 1;
 
     const [pitch, setPitch] = useState(0);
@@ -243,37 +248,47 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 )}
 
                 {isMyTurn && (
-                    <Pane t={t} d={d} icon={<Play size={13} />} title={`Now: ${queueData.currentSong.title}`}>
+                    <Pane t={t} d={d} icon={<Play size={13} />} title={queueData?.currentSong ? `Now: ${queueData.currentSong.title}` : 'Your turn is next'}>
+                        {/* Play/Skip stay visible with nothing playing yet - Play is
+                            exactly how you start your own turn, so hiding it until
+                            something's already playing removed the one control the
+                            person whose turn it is actually needs. */}
                         <div style={{ display: 'flex', gap: 8 }}>
                             <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
                             <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
-                            <Field t={t} label="Key">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <ToolBtn t={t} disabled={pitch <= -6} onClick={() => { adjustPitch(-1); setPitch(p => p - 1); }}>-</ToolBtn>
-                                    <span style={{ ...tiny(t), color: t.text, minWidth: 24, textAlign: 'center' }}>{pitch > 0 ? `+${pitch}` : pitch}</span>
-                                    <ToolBtn t={t} disabled={pitch >= 6} onClick={() => { adjustPitch(1); setPitch(p => p + 1); }}>+</ToolBtn>
-                                </div>
-                            </Field>
-                            <Field t={t} label="Tempo">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <ToolBtn t={t} disabled={tempo <= -50} onClick={() => { adjustTempo(-5); setTempo(v => v - 5); }}>-</ToolBtn>
-                                    <span style={{ ...tiny(t), color: t.text, minWidth: 32, textAlign: 'center' }}>{tempo > 0 ? `+${tempo}%` : `${tempo}%`}</span>
-                                    <ToolBtn t={t} disabled={tempo >= 50} onClick={() => { adjustTempo(5); setTempo(v => v + 5); }}>+</ToolBtn>
-                                </div>
-                            </Field>
-                        </div>
-                        <RangeSlider t={t} label="General Volume" value={genVol} onChange={v => { setGenVol(v); setVolume(v); }} />
-                        {isDuetOnAir ? (
-                            <>
-                                <RangeSlider t={t} label="Lead Vocal 1" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
-                                <RangeSlider t={t} label="Lead Vocal 2" value={leadVol2} onChange={v => { setLeadVol2(v); setLeadVocalVolume('2', v); }} />
-                            </>
+                        {!queueData?.currentSong ? (
+                            <EmptyState icon={<Play size={28} />} title="Nothing playing yet." hint="Play starts your song once it's up." />
                         ) : (
                             <>
-                                <RangeSlider t={t} label="Backing Vocals" value={bvVol} onChange={v => { setBvVol(v); setBackingVocalsVolume(v); }} />
-                                <RangeSlider t={t} label="Lead Vocal" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
+                                    <Field t={t} label="Key">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <ToolBtn t={t} disabled={pitch <= -6} onClick={() => { adjustPitch(-1); setPitch(p => p - 1); }}>-</ToolBtn>
+                                            <span style={{ ...tiny(t), color: t.text, minWidth: 24, textAlign: 'center' }}>{pitch > 0 ? `+${pitch}` : pitch}</span>
+                                            <ToolBtn t={t} disabled={pitch >= 6} onClick={() => { adjustPitch(1); setPitch(p => p + 1); }}>+</ToolBtn>
+                                        </div>
+                                    </Field>
+                                    <Field t={t} label="Tempo">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <ToolBtn t={t} disabled={tempo <= -50} onClick={() => { adjustTempo(-5); setTempo(v => v - 5); }}>-</ToolBtn>
+                                            <span style={{ ...tiny(t), color: t.text, minWidth: 32, textAlign: 'center' }}>{tempo > 0 ? `+${tempo}%` : `${tempo}%`}</span>
+                                            <ToolBtn t={t} disabled={tempo >= 50} onClick={() => { adjustTempo(5); setTempo(v => v + 5); }}>+</ToolBtn>
+                                        </div>
+                                    </Field>
+                                </div>
+                                <RangeSlider t={t} label="General Volume" value={genVol} onChange={v => { setGenVol(v); setVolume(v); }} />
+                                {isDuetOnAir ? (
+                                    <>
+                                        <RangeSlider t={t} label="Lead Vocal 1" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
+                                        <RangeSlider t={t} label="Lead Vocal 2" value={leadVol2} onChange={v => { setLeadVol2(v); setLeadVocalVolume('2', v); }} />
+                                    </>
+                                ) : (
+                                    <>
+                                        <RangeSlider t={t} label="Backing Vocals" value={bvVol} onChange={v => { setBvVol(v); setBackingVocalsVolume(v); }} />
+                                        <RangeSlider t={t} label="Lead Vocal" value={leadVol1} onChange={v => { setLeadVol1(v); setLeadVocalVolume('1', v); }} />
+                                    </>
+                                )}
                             </>
                         )}
                     </Pane>

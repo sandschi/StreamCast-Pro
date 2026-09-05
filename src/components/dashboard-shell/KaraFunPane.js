@@ -323,14 +323,18 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                 {userSettings?.karaokeEnabled && (
                     <>
                         <Pane t={t} d={d} icon={<Play size={13} />} title={queueData?.currentSong ? `Now: ${queueData.currentSong.title}` : 'Playback Controls'}>
+                            {/* Play/Skip stay visible even with nothing playing - Play is
+                                exactly how you start whatever's next in the queue, so
+                                hiding it precisely when there's nothing playing removed
+                                the one control needed to fix that. */}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
+                                <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
+                            </div>
                             {!queueData?.currentSong ? (
-                                <EmptyState icon={<Play size={28} />} title="Nothing playing." />
+                                <EmptyState icon={<Play size={28} />} title="Nothing playing." hint="Play starts whatever's next in the queue." />
                             ) : (
                                 <>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                        <ToolBtn t={t} icon={<Play size={12} />} onClick={playSong}>Play</ToolBtn>
-                                        <ToolBtn t={t} icon={<SkipForward size={12} />} onClick={skipSong}>Skip</ToolBtn>
-                                    </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: d.gap }}>
                                         <Field t={t} label="Key">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
