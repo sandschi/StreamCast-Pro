@@ -153,7 +153,29 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         setRotationCursor(rotationOrder[(idx + 1) % rotationOrder.length]);
     }, [queueData?.currentSong, rotationOrder, nameFor, setRotationCursor]);
 
+    // DISABLED AGAIN (2026-09-05, second incident): still swapped two
+    // songs every ~5s against a real party even after the v2 rewrite above.
+    // The per-tick logic is a pure, deterministic function of (upcoming
+    // order, rotationOrder, rotationCursor, nameFor) - if none of those
+    // actually change between ticks, a single instance of this effect
+    // cannot oscillate on its own. Two live candidates for what IS still
+    // changing, neither ruled out yet: (a) more than one mod session had
+    // "KaraFun Mod" open at once, each independently polling and reconciling
+    // the same live queue against its own view of it, fighting each other -
+    // this session alone had it open the whole time the second incident was
+    // reported; (b) presence for a participating singer flickering across
+    // the 90s online threshold in useKaraokeData's onlineSingers, which
+    // would make nameFor/ownerIndexOf intermittently fail to match that
+    // person's queue items and bounce them to "unranked, sort last" and
+    // back. Needs a real fix - likely a per-target lock/lease (only one
+    // session acts) and/or requiring a discrepancy to persist across 2+
+    // consecutive ticks before acting on it, not just disabling the retry -
+    // before this can safely re-enable. Do not remove the early return
+    // below without a concrete fix for one of these, confirmed against a
+    // real party, not just reasoned about.
     useEffect(() => {
+        return;
+        // (kept below, unreachable, for the fix - see disable note above)
         const AUTO_SORT_INTERVAL_MS = 5000;
         const MAX_STALLED_ATTEMPTS = 3;
 
