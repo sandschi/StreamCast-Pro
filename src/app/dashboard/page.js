@@ -161,30 +161,38 @@ function DashboardContent() {
             });
         }
 
-        let heartbeatInterval;
-        if (user && hostParam) {
-            const presenceRef = doc(db, 'users', hostParam, 'online', user.uid);
-            const updatePresence = async () => {
-                const myProfile = await getDoc(doc(db, 'users', user.uid));
-                const myData = myProfile.data();
-
-                await setDoc(presenceRef, {
-                    lastSeen: serverTimestamp(),
-                    displayName: myData?.displayName || user.displayName,
-                    photoURL: myData?.photoURL || user.photoURL,
-                    twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
-                }, { merge: true });
-            };
-            updatePresence();
-            heartbeatInterval = setInterval(updatePresence, 30000);
-        }
-
         return () => {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
             unsubscribeRole();
             unsubscribeBroadcasterStatus();
         };
     }, [user, hostParam, isModeratorMode, isMasterAdmin, targetUid]);
+
+    // Presence heartbeat - deliberately its own effect, not folded into the
+    // permission-verification one above: that effect returns early for the
+    // isMasterAdmin branch, which used to skip this heartbeat entirely for a
+    // master admin viewing their own dashboard (silently made them impossible
+    // to mark online/participating for karaoke rotation - see #27). Also was
+    // gated on hostParam alone before, so a broadcaster viewing their own
+    // dashboard (no ?host=) never wrote their own presence doc either;
+    // targetUid covers both cases (self or hosted) the same way.
+    useEffect(() => {
+        if (!user || !targetUid) return;
+        const presenceRef = doc(db, 'users', targetUid, 'online', user.uid);
+        const updatePresence = async () => {
+            const myProfile = await getDoc(doc(db, 'users', user.uid));
+            const myData = myProfile.data();
+
+            await setDoc(presenceRef, {
+                lastSeen: serverTimestamp(),
+                displayName: myData?.displayName || user.displayName,
+                photoURL: myData?.photoURL || user.photoURL,
+                twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
+            }, { merge: true });
+        };
+        updatePresence();
+        const heartbeatInterval = setInterval(updatePresence, 30000);
+        return () => clearInterval(heartbeatInterval);
+    }, [user, targetUid]);
 
     // Stable Settings Listener
     useEffect(() => {

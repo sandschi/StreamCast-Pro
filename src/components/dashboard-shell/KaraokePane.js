@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music } from 'lucide-react';
+import { Mic, Search, UserPlus, Check, X, Play, SkipForward, Users, Music, Trash2 } from 'lucide-react';
 import { useKaraFunData, searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import { useAuth } from '@/context/AuthContext';
@@ -78,7 +78,7 @@ function SongRow({ t, song, canSelfAdd, onlineSingers, onSelfAdd, onRequest }) {
 // tab rather than mixed into the same sidebar - see #27.
 export default function KaraokePane({ t, d, targetUid, userRole, user, userSettings }) {
     const {
-        queueData, partyId, addToQueue,
+        queueData, partyId, addToQueue, removeFromQueue,
         adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     } = useKaraFunData({ targetUid, userSettings });
 
@@ -202,15 +202,24 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                     </div>
                     {(queueData?.upcoming || []).length === 0 ? (
                         <EmptyState icon={<Music size={24} />} title="Queue is empty." />
-                    ) : queueData.upcoming.map((song, i) => (
-                        <div key={i} style={row(t)}>
-                            <span style={{ width: 16, flex: 'none', ...tiny(t), color: t.faint }}>{i + 1}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.title}</div>
-                                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.singer}</div>
+                    ) : queueData.upcoming.map((song, i) => {
+                        const names = (song.singer || '').split(/\s*&\s*/).map(s => s.trim());
+                        const isMine = names.includes(singerName);
+                        return (
+                            <div key={song.queueId || i} style={row(t)}>
+                                <span style={{ width: 16, flex: 'none', ...tiny(t), color: t.faint }}>{i + 1}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.title}</div>
+                                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.singer}</div>
+                                </div>
+                                {(isMod || isMine) && (
+                                    <button type="button" title="Remove from queue" onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}>
+                                        <Trash2 size={13} />
+                                    </button>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </Pane>
 
                 <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
@@ -225,9 +234,9 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                     ))}
                 </Pane>
 
-                {isSinger && (
+                {(isSinger || isMod) && (
                     <Pane t={t} d={d} icon={<Mic size={13} />} title="My Participation">
-                        <ToggleSwitch t={t} checked={iAmParticipating} onChange={toggleParticipating} label="Participating tonight" description="Off = you're just watching: you can still request songs, but you won't be pickable and can't add your own." />
+                        <ToggleSwitch t={t} checked={iAmParticipating} onChange={toggleParticipating} label="Participating tonight" description={isMod ? "On = you show up in Rotation Order and can be picked for requests/duets, same as a singer." : "Off = you're just watching: you can still request songs, but you won't be pickable and can't add your own."} />
                     </Pane>
                 )}
 

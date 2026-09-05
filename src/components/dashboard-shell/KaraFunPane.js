@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, SkipForward, Users, Mic, ArrowUp, ArrowDown, X, Trash2 } from 'lucide-react';
 import { useKaraFunData } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
@@ -52,7 +52,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
-        moveInQueue, adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
+        moveInQueue, removeFromQueue, adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     } = useKaraFunData({ targetUid, userSettings });
 
     // Karaoke request oversight (see #27) - deliberately gated on
@@ -63,6 +63,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         requests, onlineSingers, rotationOrder, permissions,
         modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user });
+
+    // Presence (via onlineSingers), not permissions, is the primary name
+    // source - permissions only gets twitchUsername/displayName written when
+    // a mod assigns a role, and the broadcaster's own permissions doc (only
+    // ever created the first time they toggle Participating) never has one
+    // at all. Falls back to permissions for a currently-offline target.
+    const nameFor = useCallback((uid) => {
+        const online = onlineSingers.find(s => s.id === uid);
+        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
+    }, [onlineSingers, permissions]);
 
     const [queueX, setQueueX] = useDebouncedSetting(userSettings?.karafunQueuePosX ?? 5, v => handleToggleSetting('karafunQueuePosX', v));
     const [queueY, setQueueY] = useDebouncedSetting(userSettings?.karafunQueuePosY ?? 5, v => handleToggleSetting('karafunQueuePosY', v));
@@ -101,10 +111,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         const ownerIndex = (singerField) => {
             const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
             if (!primary) return Infinity;
-            const idx = rotationOrder.findIndex(uid => {
-                const p = permissions[uid];
-                return p && (p.twitchUsername === primary || p.displayName === primary);
-            });
+            const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
             return idx === -1 ? Infinity : idx;
         };
         const current = upcoming.map(s => s.queueId);
@@ -121,7 +128,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                 working.splice(targetIndex, 0, queueId);
             }
         });
-    }, [queueData?.upcoming, rotationOrder, permissions, moveInQueue]);
+    }, [queueData?.upcoming, rotationOrder, nameFor, moveInQueue]);
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -168,13 +175,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                         {upcoming.length === 0 ? (
                             <EmptyState icon={<Music size={32} />} title="Queue is empty." hint="Songs your chat adds to the KaraFun party show up here." />
                         ) : upcoming.map((song, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 10px', height: d.row + 14, borderBottom: `1px solid ${t.hair}` }}>
+                            <div key={song.queueId || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 10px', height: d.row + 14, borderBottom: `1px solid ${t.hair}` }}>
                                 <span style={{ width: 20, flex: 'none', fontFamily: MONO, fontSize: 11, color: t.faint, fontVariantNumeric: 'tabular-nums' }}>{String(i + 1).padStart(2, '0')}</span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.title}</div>
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.artist}</div>
                                 </div>
                                 {song.singer && <span style={{ flex: 'none', maxWidth: 170, fontFamily: MONO, fontSize: 11, color: t.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{song.singer}</span>}
+                                <button type="button" title="Remove from queue" onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: 'pointer' }}>
+                                    <Trash2 size={13} />
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -244,7 +254,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
                                 <div key={reqst.id} style={row(t)}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{reqst.title}{reqst.kind === 'duet' && <span style={{ color: t.accent }}> (duet)</span>}</div>
-                                        <div style={{ ...tiny(t), color: t.faint }}>{reqst.status === 'public' ? 'public' : `for ${permissions[reqst.targetSingerUid]?.twitchUsername || permissions[reqst.targetSingerUid]?.displayName || 'someone'}`} · by {reqst.requestedByName}</div>
+                                        <div style={{ ...tiny(t), color: t.faint }}>{reqst.status === 'public' ? 'public' : `for ${nameFor(reqst.targetSingerUid)}`} · by {reqst.requestedByName}</div>
                                     </div>
                                     <div style={btnRow}>
                                         {reqst.status === 'pending' && reqst.kind !== 'duet' && <ToolBtn t={t} onClick={() => modForcePublic(reqst.id)}>Force Public</ToolBtn>}

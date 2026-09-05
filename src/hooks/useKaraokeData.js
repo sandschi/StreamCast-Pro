@@ -9,6 +9,10 @@ import {
 
 const RESPOND_WINDOW_MS = 5 * 60 * 1000;
 const PUBLIC_WINDOW_MS = 10 * 60 * 1000;
+// Mods and the broadcaster can sing too - scoping this to 'singer' left them
+// unable to ever show up in Rotation Order or be pickable as a request/duet
+// target, even though they can already self-add unconditionally elsewhere.
+const ELIGIBLE_ROTATION_ROLES = ['singer', 'mod', 'broadcaster'];
 
 // Song requests, duet invites, and the online+participating singer list (see
 // #27). Deliberately does NOT hold songs anywhere before they hit KaraFun's
@@ -68,12 +72,13 @@ export function useKaraokeData({ targetUid, user }) {
         return presence
             .filter(p => {
                 const perm = permissions[p.id];
-                if (!perm || perm.role !== 'singer' || !perm.participating) return false;
+                const role = perm?.role || (p.id === targetUid ? 'broadcaster' : null);
+                if (!ELIGIBLE_ROTATION_ROLES.includes(role) || !perm?.participating) return false;
                 const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
                 return now - lastSeenMs < 90_000;
             })
             .map(p => ({ id: p.id, displayName: p.displayName, twitchUsername: p.twitchUsername, photoURL: p.photoURL }));
-    }, [presence, permissions, now]);
+    }, [presence, permissions, now, targetUid]);
 
     const submitRequest = async (song, targetSingerUid) => {
         if (!targetUid || !user) return;
