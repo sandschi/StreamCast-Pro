@@ -96,39 +96,98 @@ export default function KaraFunPane({ t, d, targetUid, user, userSettings }) {
         setTempo(0);
     }
 
-    // Auto-sort: whenever KaraFun's own upcoming queue or the rotation order
-    // changes, reorder the LIVE queue in place via queueMove so it always
-    // reflects rotation turn order - no separate staging area, no manual
-    // "push" step. A queue item's owner is inferred from its `singer` string
-    // (KaraFun has no other identity for it) matched against each rotation
-    // singer's known name; a duet's owner is whoever asked (the name before
-    // " & "). Items whose singer doesn't match anyone in rotation sort last,
-    // keeping their relative order. Stops on its own once the live order
-    // already matches (every move below becomes a no-op), so this can't loop.
+    // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
+    // real party, "switching songs around in rapid succession", and had to
+    // be killed by turning the party off). Redesigned around three changes,
+    // any one of which might have been the actual cause - rather than bet on
+    // a single diagnosis against a production party again, all three ship
+    // together:
+    //
+    // 1. Polls on a fixed 5s interval via refs, instead of reacting to every
+    //    dependency change. v1 re-ran on every Firestore tick (presence,
+    //    permissions, settings all update independently of the real KaraFun
+    //    queue), and nameFor/onlineSingers are new references each time -
+    //    plausible on their own for far more frequent re-evaluation than
+    //    intended, especially since v1 evaluated the correction and re-sent
+    //    it inline in the same effect that also re-created a `working` array
+    //    just from `current`, no fresher than what was already lined up.
+    // 2. Applies at most ONE move per tick, computed fresh from the latest
+    //    server-reported queue each time - not a whole batch derived from a
+    //    local simulation of how earlier moves in the same batch land. If
+    //    KaraFun applies a move differently than simulated (index semantics,
+    //    async ordering, a rejected move), a multi-move batch has nothing to
+    //    notice or recover from; a single move re-evaluated 5s later does.
+    // 3. Never targets whatever KaraFun currently reports as playing - it
+    //    has no drag handle in KaraFun's own remote client and confirmed
+    //    separately that it can't actually be moved; a desired order that
+    //    displaces it could never be satisfied.
+    //
+    // On top of all three: a circuit breaker. If the exact same move keeps
+    // getting proposed without the queue ever reflecting it, that means
+    // something is blocking it that this code doesn't understand yet - stop
+    // and log rather than retry forever.
+    const liveRef = useRef({});
     useEffect(() => {
-        const upcoming = queueData?.upcoming;
-        if (!moveInQueue || !upcoming || upcoming.length < 2 || rotationOrder.length === 0) return;
-        const ownerIndex = (singerField) => {
-            const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
-            if (!primary) return Infinity;
-            const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
-            return idx === -1 ? Infinity : idx;
-        };
-        const current = upcoming.map(s => s.queueId);
-        const desired = upcoming
-            .map((s, i) => ({ queueId: s.queueId, owner: ownerIndex(s.singer), origIndex: i }))
-            .sort((a, b) => a.owner - b.owner || a.origIndex - b.origIndex)
-            .map(x => x.queueId);
-        const working = [...current];
-        desired.forEach((queueId, targetIndex) => {
-            const curIndex = working.indexOf(queueId);
-            if (curIndex !== targetIndex) {
-                moveInQueue(queueId, curIndex, targetIndex);
-                working.splice(curIndex, 1);
-                working.splice(targetIndex, 0, queueId);
+        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, nameFor, moveInQueue };
+    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, nameFor, moveInQueue]);
+    const stallCountRef = useRef(0);
+    const lastMoveSignatureRef = useRef(null);
+
+    useEffect(() => {
+        const AUTO_SORT_INTERVAL_MS = 5000;
+        const MAX_STALLED_ATTEMPTS = 3;
+
+        const tick = () => {
+            const { upcoming, currentSong, rotationOrder, nameFor, moveInQueue } = liveRef.current;
+            if (!moveInQueue || !upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return;
+
+            const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
+            const playingIdx = upcoming.findIndex(isPlaying);
+
+            const ownerIndex = (singerField) => {
+                const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
+                if (!primary) return Infinity;
+                const idx = rotationOrder.findIndex(uid => nameFor(uid) === primary);
+                return idx === -1 ? Infinity : idx;
+            };
+
+            const currentIds = upcoming.map(s => s.queueId);
+            const restSorted = upcoming
+                .map((s, i) => ({ queueId: s.queueId, owner: ownerIndex(s.singer), origIndex: i }))
+                .filter((_, i) => i !== playingIdx)
+                .sort((a, b) => a.owner - b.owner || a.origIndex - b.origIndex)
+                .map(x => x.queueId);
+            const desiredIds = [...restSorted];
+            if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
+
+            const firstMismatch = desiredIds.findIndex((queueId, i) => currentIds[i] !== queueId);
+            if (firstMismatch === -1) {
+                stallCountRef.current = 0;
+                lastMoveSignatureRef.current = null;
+                return;
             }
-        });
-    }, [queueData?.upcoming, rotationOrder, nameFor, moveInQueue]);
+
+            const queueId = desiredIds[firstMismatch];
+            const from = currentIds.indexOf(queueId);
+            const to = firstMismatch;
+            const signature = `${queueId}:${from}->${to}`;
+
+            if (signature === lastMoveSignatureRef.current) {
+                stallCountRef.current += 1;
+                if (stallCountRef.current >= MAX_STALLED_ATTEMPTS) {
+                    console.error('Karaoke auto-sort: the same move keeps being proposed without the live queue ever reflecting it - stopping instead of retrying indefinitely.', signature);
+                    return;
+                }
+            } else {
+                stallCountRef.current = 0;
+            }
+            lastMoveSignatureRef.current = signature;
+            moveInQueue(queueId, from, to);
+        };
+
+        const id = setInterval(tick, AUTO_SORT_INTERVAL_MS);
+        return () => clearInterval(id);
+    }, []);
 
     if (!userSettings?.karafunEnabled) {
         return (
