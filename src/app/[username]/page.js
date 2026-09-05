@@ -26,7 +26,19 @@ export default function UsernameEntryPage() {
                 const snap = await getDoc(doc(db, 'usernames', String(username).toLowerCase()));
                 if (cancelled) return;
                 if (snap.exists()) {
-                    router.replace(`/dashboard?host=${snap.data().uid}&tab=karaoke`);
+                    const uid = snap.data().uid;
+                    // usernames/{username} is create-only and never cleaned up, so a
+                    // mapping can outlive the account it points to. Confirm the
+                    // account still exists before redirecting - but only when we
+                    // actually can: users/{uid} requires request.auth != null (see
+                    // firestore.rules), and this route is mainly hit by logged-out
+                    // visitors, so a not-yet-signed-in visitor still gets redirected
+                    // on the mapping's word alone, same as before.
+                    try {
+                        const userSnap = await getDoc(doc(db, 'users', uid));
+                        if (!cancelled && !userSnap.exists()) { setState('not-found'); return; }
+                    } catch { /* not signed in yet - can't verify, fall through */ }
+                    if (!cancelled) router.replace(`/dashboard?host=${uid}&tab=karaoke`);
                 } else {
                     setState('not-found');
                 }
