@@ -260,8 +260,12 @@ function DashboardContent() {
         if (!hasVerifiedAccess) return [];
         const base = ROLE_TABS[userRole] || [];
         const extra = [];
-        if ((userRole === 'broadcaster' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
-        // Open to every role (unlike 'karafun', which is broadcaster/admin-only
+        // 'karafun' ("KaraFun Mod") also now hosts karaoke request oversight,
+        // the staging queue, rotation order, and playback controls (gated
+        // separately on karaokeEnabled inside the pane) - open to mod here
+        // too, not just broadcaster, since those are real mod actions.
+        if ((userRole === 'broadcaster' || userRole === 'mod' || isMasterAdmin) && userSettings?.karafunEnabled) extra.push('karafun');
+        // Open to every role (unlike 'karafun', which is broadcaster/mod-only
         // settings) - viewers and singers are exactly who this tab is for.
         if (userSettings?.karaokeEnabled) extra.push('karaoke');
         if (isMasterAdmin) extra.push('broadcasters');
