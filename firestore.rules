@@ -149,26 +149,46 @@ service cloud.firestore {
         // dropping back to public).
         allow update: if request.auth != null && request.auth.uid == resource.data.targetSingerUid;
 
-        // Any signed-in singer can "claim" a request that's already public
-        // (no specific target) - the Public Requests panel's Claim button
-        // calls the exact same acceptRequest as a targeted accept, just for
-        // someone who is neither requestedBy nor targetSingerUid, so it
-        // needs its own clause rather than falling under either one above.
-        // Restricted to exactly that one transition, first-come-first-served.
+        // An eligible singer (or a mod) can "claim" a request that's already
+        // public (no specific target) - the Public Requests panel's Claim
+        // button calls the exact same acceptRequest as a targeted accept,
+        // just for someone who is neither requestedBy nor targetSingerUid,
+        // so it needs its own clause rather than falling under either one
+        // above. request.auth != null alone isn't enough here - the client
+        // only shows Claim to a participating singer, but that's a UI gate,
+        // not a write restriction, so any signed-in user could otherwise
+        // call this directly. Restricted to exactly the public->accepted
+        // transition, first-come-first-served.
         allow update: if request.auth != null
           && resource.data.status == 'public' && resource.data.targetSingerUid == null
           && request.resource.data.status == 'accepted'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          && (
+            isChannelModerator(userId) ||
+            (
+              get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.role == 'singer' &&
+              get(/databases/$(database)/documents/users/$(userId)/permissions/$(request.auth.uid)).data.participating == true
+            )
+          );
 
         // The original requester/asker may only ever drop their own
         // request (singSoloAfterDecline/dropDeclinedDuet) or re-target a
         // declined duet invite back to pending (reinviteDuet) - never
-        // approve their own request themselves, and never touch the
-        // response-window timers the Cloud Function's expiry sweep relies
-        // on (functions/index.js's expireKaraokeRequests).
+        // approve their own request themselves. Dropping never touches the
+        // response-window timers; re-inviting is the one legitimate case
+        // that must reset respondBy (otherwise a stale/null deadline from
+        // the original invite would make expireKaraokeRequests reopen or
+        // never expire the re-invite - see reinviteDuet), so that path is
+        // allowed to set it, but only to a genuine future timestamp -
+        // publicExpireBy/requestedBy stay locked either way.
         allow update: if request.auth != null && request.auth.uid == resource.data.requestedBy
-          && request.resource.data.status in ['dropped', 'pending']
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['respondBy', 'publicExpireBy', 'requestedBy']);
+          && (
+            (request.resource.data.status == 'dropped'
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['respondBy', 'publicExpireBy', 'requestedBy']))
+            || (request.resource.data.status == 'pending'
+              && request.resource.data.respondBy > request.time
+              && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['publicExpireBy', 'requestedBy']))
+          );
 
         allow delete: if request.auth != null
           && (request.auth.uid == resource.data.requestedBy || request.auth.uid == resource.data.targetSingerUid);

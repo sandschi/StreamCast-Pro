@@ -181,7 +181,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
                 // queue:[] a moment later), so checking prev.upcoming inside
                 // the status handler below races and can miss this. Checking
                 // the queue's own fresh length here instead doesn't.
-                currentSong: transformed.length === 0 ? null : prev.currentSong,
+                currentSong: transformed.length === 0 ? null : (prev?.currentSong ?? null),
                 timestamp: Date.now(),
             }));
             setLastUpdated(new Date());

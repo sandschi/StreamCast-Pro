@@ -196,7 +196,13 @@ export function useKaraokeData({ targetUid, user }) {
         await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'dropped' });
     };
     const dropDeclinedDuet = async (requestId) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { status: 'dropped' });
-    const reinviteDuet = async (requestId, newInvitedUid) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { targetSingerUid: newInvitedUid, status: 'pending' });
+    // Resets respondBy to a fresh window - without this, re-inviting after
+    // the original deadline already passed (or after expireKaraokeRequests
+    // already cleared it to null) would either instantly time out again or
+    // never time out at all.
+    const reinviteDuet = async (requestId, newInvitedUid) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), {
+        targetSingerUid: newInvitedUid, status: 'pending', respondBy: Timestamp.fromMillis(Date.now() + RESPOND_WINDOW_MS),
+    });
 
     const setRotationOrder = async (uidArray) => {
         await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { karaokeRotationOrder: uidArray }, { merge: true });
