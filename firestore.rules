@@ -85,6 +85,15 @@ service cloud.firestore {
       match /settings/{document=**} {
         allow read: if true; // Public for overlay
         allow write: if request.auth != null && request.auth.uid == userId;
+        // An invited mod may additionally update just karaokeRotationOrder -
+        // KaraFunPane.js's Rotation Order controls are opened to mod, not
+        // just the owner (see dashboard/page.js), but until now this doc was
+        // owner-write-only, so a mod's reorder silently failed with
+        // permission-denied. Update-only: the doc always exists by the time
+        // this tab can render, since karaokeEnabled (set via the owner's own
+        // Settings tab) is a prerequisite for it to show at all.
+        allow update: if isChannelModerator(userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['karaokeRotationOrder']);
       }
       
       match /private/{document=**} {
@@ -196,6 +205,7 @@ service cloud.firestore {
           && resource.data.kind == 'duet'
           && (
             (request.resource.data.status == 'dropped'
+              && (resource.data.status == 'pending' || resource.data.status == 'declined')
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
             || (resource.data.status == 'declined' && request.resource.data.status == 'pending'
               && request.resource.data.respondBy > request.time
