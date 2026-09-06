@@ -29,6 +29,7 @@ export const viewport = {
 import { AuthProvider } from "@/context/AuthContext";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import CookieConsentBanner from "@/components/CookieConsentBanner";
 
 export default function RootLayout({ children }) {
   return (
@@ -41,6 +42,7 @@ export default function RootLayout({ children }) {
             {children}
           </AuthProvider>
         </PostHogProvider>
+        <CookieConsentBanner />
         <ServiceWorkerRegister />
         <SpeedInsights />
       </body>

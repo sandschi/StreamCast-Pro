@@ -4,18 +4,18 @@ import posthog from 'posthog-js'
 import { PostHogProvider as PHProvider } from 'posthog-js/react'
 import { useEffect, Suspense } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { getConsent, CONSENT_UPDATED_EVENT } from '@/lib/cookieConsent'
 
-// Cloudflare Zaraz "Analytics" consent purpose (Zaraz > Consent for
-// sandschi.xyz, Purpose ID NxWe) - PostHog only ever initializes once this
-// purpose is granted, so nothing captures/identifies/sends anything before
-// the visitor consents. Zaraz isn't otherwise involved: PostHog still runs as
-// the normal posthog-js SDK: this only reads Zaraz's consent signal to decide
-// whether to call posthog.init() at all.
-const ANALYTICS_PURPOSE_ID = 'NxWe';
+// First-party consent (see cookieConsent.js) - PostHog only ever initializes
+// once the visitor accepts via CookieConsentBanner, so nothing
+// captures/identifies/sends anything before that. Previously read this from
+// Cloudflare Zaraz's consent API, which turned out to only be usable on the
+// apex sandschi.xyz (an unrelated project) - dropped in favor of owning this
+// directly, since it's the only thing Zaraz was ever used for here.
 let phInitialized = false;
 
-function syncWithZarazConsent() {
-    const granted = typeof window !== 'undefined' && window.zaraz?.consent?.get(ANALYTICS_PURPOSE_ID) === true;
+function syncWithLocalConsent() {
+    const granted = getConsent() === 'granted';
     if (granted) {
         if (!phInitialized) {
             phInitialized = true;
@@ -41,15 +41,12 @@ function syncWithZarazConsent() {
 export function PostHogProvider({ children }) {
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            // Listeners first, unconditionally: if the immediate check below ever
-            // threw (window.zaraz.consent existing doesn't mean APIReady - Zaraz's
-            // own script loads async and may finish before or after this effect
-            // runs), an uncaught error there would abort the rest of this effect
-            // body, silently skipping registration and leaving a later consent
-            // grant with nothing listening for it.
-            document.addEventListener('zarazConsentAPIReady', syncWithZarazConsent);
-            document.addEventListener('zarazConsentChoicesUpdated', syncWithZarazConsent);
-            if (window.zaraz?.consent?.APIReady) syncWithZarazConsent();
+            // localStorage is synchronous, unlike Zaraz's async-loaded API, so
+            // there's no "wait for ready" dance needed - just check immediately
+            // and listen for later changes (banner accept/decline, or the
+            // preferences link reopening it and choosing differently).
+            document.addEventListener(CONSENT_UPDATED_EVENT, syncWithLocalConsent);
+            syncWithLocalConsent();
 
             const originalConsole = {
                 warn: console.warn,
@@ -112,8 +109,7 @@ export function PostHogProvider({ children }) {
                 console.error = originalConsole.error;
                 window.removeEventListener('error', handleWindowError);
                 window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-                document.removeEventListener('zarazConsentAPIReady', syncWithZarazConsent);
-                document.removeEventListener('zarazConsentChoicesUpdated', syncWithZarazConsent);
+                document.removeEventListener(CONSENT_UPDATED_EVENT, syncWithLocalConsent);
             };
         }
     }, [])
