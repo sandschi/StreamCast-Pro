@@ -29,6 +29,7 @@ export const viewport = {
 import { AuthProvider } from "@/context/AuthContext";
 import { PostHogProvider } from "@/providers/PostHogProvider";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import CookieConsentBanner from "@/components/CookieConsentBanner";
 
 export default function RootLayout({ children }) {
   return (
@@ -36,11 +37,12 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}
       >
-        <PostHogProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <PostHogProvider>
             {children}
-          </AuthProvider>
-        </PostHogProvider>
+          </PostHogProvider>
+        </AuthProvider>
+        <CookieConsentBanner />
         <ServiceWorkerRegister />
         <SpeedInsights />
       </body>

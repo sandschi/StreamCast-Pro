@@ -10,7 +10,7 @@ export const MENUS = {
     Overlay: ['Show Last Message', 'Show Permanently  ∞', 'Hide Overlay', '—', 'Send Test Message', 'Save Settings'],
     Chat: ['Reconnect to Twitch', 'Clear Log', '—', 'Approve All Suggestions', 'Mute Suggestions'],
     Window: ['Compact Density', 'Comfortable Density', '—', 'Full Screen'],
-    Help: ['Changelog', 'Remote API Reference', 'About StreamCast Pro'],
+    Help: ['Changelog', 'Remote API Reference', '—', 'Terms', 'Privacy', '—', 'About StreamCast Pro'],
 };
 
 // While access isn't verified (Access Pending / Access Denied) there is no

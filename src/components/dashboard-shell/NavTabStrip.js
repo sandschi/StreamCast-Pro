@@ -10,7 +10,7 @@ export default function NavTabStrip({ t, d, tab, set, allowed }) {
                 const on = n.id === tab;
                 const Icon = n.icon;
                 return (
-                    <button key={n.id} onClick={() => set(n.id)} title={`⌘${i + 1}`}
+                    <button key={n.id} onClick={() => set(n.id)} title={`Ctrl+${i + 1}`}
                         style={{
                             display: 'flex', alignItems: 'center', gap: 7, height: d.tabs - 5, padding: '0 13px', appearance: 'none', cursor: 'pointer',
                             borderLeft: `1px solid ${on ? t.edge : 'transparent'}`, borderRight: `1px solid ${on ? t.edge : 'transparent'}`, borderTop: `2px solid ${on ? t.accent : 'transparent'}`, borderBottom: 'none',

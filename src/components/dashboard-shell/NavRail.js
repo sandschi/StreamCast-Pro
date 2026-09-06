@@ -11,7 +11,7 @@ export default function NavRail({ t, d, tab, set, allowed, onSignOut }) {
                 const on = n.id === tab;
                 const Icon = n.icon;
                 return (
-                    <button key={n.id} onClick={() => set(n.id)} title={`${n.label}  ⌘${i + 1}`}
+                    <button key={n.id} onClick={() => set(n.id)} title={`${n.label}  Ctrl+${i + 1}`}
                         style={{
                             position: 'relative', width: d.rail - 10, height: d.rail - 12, display: 'grid', placeItems: 'center', appearance: 'none', cursor: 'pointer',
                             border: `1px solid ${on ? t.edge : 'transparent'}`, background: on ? (t.glow ? 'rgba(7,252,3,.12)' : t.inset) : 'transparent',

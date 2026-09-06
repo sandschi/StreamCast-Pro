@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2026-09-05
+
+### Added
+- A new Karaoke tab: viewers can search KaraFun's catalog and request a song from a specific online singer (or leave it open to anyone); singers can add songs for themselves and invite another online singer to duet.
+- A new "singer" role — everything a viewer can do, plus adding their own songs to the KaraFun queue directly, assignable from the Users panel like Mod/Viewer/Deny.
+- A rotation-ordered staging queue for mods: accepted and self-added songs wait here first and only get pushed into KaraFun's real queue in the order mods set, instead of piling up first-come-first-served.
+- Mod controls for reordering/removing anything in KaraFun's live queue (except the currently playing song, which only KaraFun's own app can touch), plus live pitch, tempo, and volume controls — visible to mods always, and to a singer during their own turn on stage.
+- `karaoke.sandschi.xyz/{username}` — a human-readable link straight into a specific broadcaster's Karaoke tab, separate from the technical mod-invite link.
+- Timed-out song requests (5 minutes for a targeted singer to respond, 10 minutes once public) now expire automatically via a scheduled Cloud Function, instead of relying on someone's dashboard being open.
+
+### Changed
+- The Users panel's "Copy Mod Link" is now "Copy Dashboard Link" — the same link now doubles as the general entry point for mods, singers, and viewers, not just mods.
+- KaraFun's now-playing/queue display and requests are gated by two separate settings (Enable KaraFun, Enable Karaoke Requests) instead of one, so you can run the overlay without opening requests to viewers, or vice versa.
+
 ## [0.5.5] - 2026-09-04
 
 ### Added

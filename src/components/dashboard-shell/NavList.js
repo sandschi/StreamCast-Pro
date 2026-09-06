@@ -21,7 +21,7 @@ export default function NavList({ t, d, tab, set, allowed, role, user }) {
                             }}>
                             <Icon size={15} />
                             <span style={{ flex: 1 }}>{n.label}</span>
-                            <span style={{ fontFamily: MONO, fontSize: 10, color: on ? t.accent : t.faint, opacity: .8 }}>⌘{i + 1}</span>
+                            <span style={{ fontFamily: MONO, fontSize: 10, color: on ? t.accent : t.faint, opacity: .8 }}>Ctrl+{i + 1}</span>
                         </button>
                     );
                 })}
