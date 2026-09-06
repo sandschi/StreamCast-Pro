@@ -192,12 +192,28 @@ for that party and retries later. This is the same optimistic-lock shape as the 
 `toggle-karafun-queue` transaction in `api/overlay/[userId]/route.js` — nothing new
 conceptually, just applied to "who owns this socket" instead of "who owns this boolean."
 
-Connection lifecycle: open a party's socket lazily on its first pending command or first active
-`karafun_state` subscriber signal, keep it open while `karafunEnabled` is true and the lease is
-held, and close it after some idle window (e.g. no commands and no read subscribers for 10
-minutes) to avoid holding sockets open for broadcasters who aren't live. Subscriber presence can
-piggyback on the existing `online/{uid}` heartbeat doc (already written every 30s while a
+**Multi-tenancy:** the relay is one process serving every broadcaster, not one process per
+broadcaster. It holds a separate socket.io connection **per party**, keyed by `userId` (the lease
+doc is `karafun_relay/{userId}`, one per broadcaster) — so if two different streamers each have
+their own KaraFun party running at the same time, that's two independent sockets inside the same
+relay process, each with its own `partyId`, its own command queue (`users/{userId}/karafun_commands`),
+its own lease, and its own mirrored state doc (`users/{userId}/karafun_state/live`). They never
+share a socket or a queue — nothing about processing one party's commands blocks or interacts
+with another party's. The relay only needs to scale (more instances, more memory) if the number of
+*simultaneously live* parties gets large enough to matter; for this app's scale, one process
+comfortably holding a handful of concurrent party sockets is enough for a long while.
+
+Connection lifecycle, per party: open a party's socket lazily on its first pending command or
+first active `karafun_state` subscriber signal, keep it open while `karafunEnabled` is true and
+the lease is held, and close it after some idle window (e.g. no commands and no read subscribers
+for 10 minutes) to avoid holding sockets open for broadcasters who aren't live. Subscriber presence
+can piggyback on the existing `online/{uid}` heartbeat doc (already written every 30s while a
 dashboard is open) rather than inventing new presence tracking.
+
+This per-party laziness was already the plan even for an always-on process. But it's worth being
+explicit that it's a *separate* axis from whether the relay **process itself** stays running when
+literally nobody, across every broadcaster, is streaming — see §8, since the deployment choice
+changes based on that.
 
 ## 5. Reintroducing auto-sort (round-robin) safely
 
@@ -277,25 +293,40 @@ Vercel (the Next.js app's implied host, given `next.config.mjs`/CLAUDE.md's serv
 doesn't support long-lived outbound socket.io connections in its function runtime, so this has to
 be a separate deployment, not a route. Options, in recommended order:
 
-1. **Cloud Run (v2), `min-instances: 1`, `max-instances: 1`, CPU always allocated.** Firebase
-   projects already run on GCP, so this service can use a GCP service account / Workload Identity
-   directly instead of the `FIREBASE_PRIVATE_KEY` env var — which sidesteps the entire PEM
-   reconstruction problem `src/lib/firebase-admin.js` exists to work around (per CLAUDE.md, that
-   file's defensive logic is specifically there because *hosting envs keep mangling that one env
-   var*; a same-project Cloud Run service doesn't need it at all). `max-instances: 1` makes the
-   §4 lease belt-and-suspenders rather than load-bearing for the common case; it's still worth
-   keeping for the deploy-overlap window. Cost: one always-on small instance, roughly the cheapest
-   "always up" tier on Cloud Run.
-2. **Fly.io or Render, single small always-on machine/worker.** Simpler mental model (it's just a
-   Node process, no Cloud Run request-based billing quirks to reason about), but needs the same
-   `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` triple as
+The relay only needs to be running while at least one party is actually active — nobody's
+streaming most hours of the day, so an always-on instance would mostly be idling and burning
+money for nothing. Both realistic options below support **scale-to-zero**: the whole process shuts
+down completely when no party is active, and restarts on demand. The piece that makes this work is
+a **wake trigger** — something has to tell the platform "spin back up," since a sleeping process
+can't watch Firestore on its own. Both platforms wake on an incoming HTTP request, so the plan is:
+whenever the Next.js API route writes a command (§3.1) or a broadcaster opens the KaraFun dashboard
+pane with `karafunEnabled` true, it also fires a plain HTTP request at the relay's `/connect/{userId}`
+endpoint. That request is what wakes the container (typically a couple seconds of cold-start the
+first time), after which the relay opens that party's socket per the lifecycle above and keeps
+itself warm for a while; it scales back to zero once every party's idle window (§4) has elapsed and
+no new wake requests have come in.
+
+1. **Cloud Run (v2), `min-instances: 0`, `max-instances: 1`.** Scales to zero automatically between
+   streams and wakes on the `/connect/{userId}` HTTP hit above — you only pay for the seconds it's
+   actually handling a live party, not 24/7. Firebase projects already run on GCP, so this service
+   can use a GCP service account / Workload Identity directly instead of the `FIREBASE_PRIVATE_KEY`
+   env var — which sidesteps the entire PEM reconstruction problem `src/lib/firebase-admin.js`
+   exists to work around (per CLAUDE.md, that file's defensive logic is specifically there because
+   *hosting envs keep mangling that one env var*; a same-project Cloud Run service doesn't need it
+   at all). `max-instances: 1` makes the §4 lease belt-and-suspenders rather than load-bearing for
+   the common case; it's still worth keeping for the deploy-overlap window (and for the moment
+   where a cold-start briefly overlaps a still-shutting-down previous instance).
+2. **Fly.io or Render, "auto stop/start" machine.** Same scale-to-zero-and-wake-on-request idea —
+   Fly calls it auto stop/start machines, Render has an equivalent on some plans — simpler mental
+   model (it's just a Node process, no Cloud Run request-based billing quirks to reason about), but
+   needs the same `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` triple as
    `firebase-admin.js` already handles for Vercel — so it inherits that same "hosting env mangles
    the PEM" risk class rather than avoiding it. Reasonable if there's a reason to avoid GCP
    specifically.
 
-Recommendation: **Cloud Run v2** for the credential-simplicity win alone, unless there's an
-existing reason (team familiarity, other infra already on Fly/Render) to prefer one of the
-alternatives.
+Recommendation: **Cloud Run v2, scaled to zero**, for the credential-simplicity win plus not
+paying for idle time, unless there's an existing reason (team familiarity, other infra already on
+Fly/Render) to prefer one of the alternatives.
 
 ## 9. Phased implementation plan
 
