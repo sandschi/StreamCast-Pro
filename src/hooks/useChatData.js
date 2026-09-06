@@ -8,6 +8,19 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, where, getDocs, writeBatch, orderBy, runTransaction } from 'firebase/firestore';
 import posthog from 'posthog-js';
 
+// Firestore caps a single batch at 500 writes - a prolific chatter's messages
+// spread across history/message_queue/suggestions can exceed that before a
+// mod times them out or bans them, so this chunks rather than queuing every
+// matched doc into one writeBatch (which would throw and leave the
+// Twitch-side deletion signal applied only partially, or not at all).
+async function deleteRefsInChunks(refs) {
+    for (let i = 0; i < refs.length; i += 500) {
+        const batch = writeBatch(db);
+        for (const ref of refs.slice(i, i + 500)) batch.delete(ref);
+        await batch.commit();
+    }
+}
+
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
 // tmi.js/Firestore wiring rather than duplicating it. No behavior changes.
@@ -66,17 +79,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const deleteMessagesByTwitchId = async (uid, twitchMessageId) => {
         if (!uid || !twitchMessageId) return;
         try {
-            const batch = writeBatch(db);
+            const refs = [];
             for (const col of ['history', 'message_queue']) {
                 const snap = await getDocs(query(collection(db, 'users', uid, col), where('twitchMessageId', '==', twitchMessageId)));
-                snap.forEach(d => batch.delete(d.ref));
+                snap.forEach(d => refs.push(d.ref));
             }
             const activeRef = doc(db, 'users', uid, 'active_message', 'current');
             const activeSnap = await getDoc(activeRef);
             if (activeSnap.exists() && activeSnap.data().twitchMessageId === twitchMessageId) {
-                batch.delete(activeRef);
+                refs.push(activeRef);
             }
-            await batch.commit();
+            await deleteRefsInChunks(refs);
         } catch (e) { console.error('Error deleting message after Twitch CLEARMSG:', e); }
     };
 
@@ -86,17 +99,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const deleteMessagesByLogin = async (uid, login) => {
         if (!uid || !login) return;
         try {
-            const batch = writeBatch(db);
+            const refs = [];
             for (const col of ['history', 'message_queue', 'suggestions']) {
                 const snap = await getDocs(query(collection(db, 'users', uid, col), where('login', '==', login)));
-                snap.forEach(d => batch.delete(d.ref));
+                snap.forEach(d => refs.push(d.ref));
             }
             const activeRef = doc(db, 'users', uid, 'active_message', 'current');
             const activeSnap = await getDoc(activeRef);
             if (activeSnap.exists() && activeSnap.data().login === login) {
-                batch.delete(activeRef);
+                refs.push(activeRef);
             }
-            await batch.commit();
+            await deleteRefsInChunks(refs);
         } catch (e) { console.error('Error deleting messages after Twitch timeout/ban:', e); }
     };
 

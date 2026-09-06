@@ -25,7 +25,7 @@ These Terms govern your use of StreamCast Pro, a broadcast overlay and moderatio
 
 > **Plain English Summary**: StreamCast Pro puts Twitch chat on your stream, but only after you or a mod approves each message. It also pulls in a KaraFun song queue and gives you a dashboard to run it all. It's in beta, it's free right now, and it will occasionally break. We'll try hard not to let it break during your stream, but we can't promise it won't.
 
-2.1 **What the service does.** StreamCast Pro provides: a Twitch chat overlay rendered as a browser source (1920×1080); manual approval of messages before they air; moderator invitation and server-side role enforcement; a KaraFun song queue display; a searchable message history with re-air; and pixel-level positioning of overlay elements, savable per scene.
+2.1 **What the service does.** StreamCast Pro provides: a Twitch chat overlay rendered as a browser source (1920×1080); manual approval of messages before they air; moderator invitation and server-side role enforcement; a KaraFun song queue display; a karaoke song-request and duet-invite system with a mod-managed singer rotation; a searchable message history with re-air; and pixel-level positioning of overlay elements, savable per scene.
 
 2.2 **Access is granted manually.** Accounts are reviewed by hand. Review currently takes approximately one week. We may approve, decline, or defer any application at our discretion and without giving reasons, subject to applicable non-discrimination law.
 
@@ -63,7 +63,7 @@ These Terms govern your use of StreamCast Pro, a broadcast overlay and moderatio
 
 4.1 StreamCast Pro is currently provided free of charge. No payment method is collected.
 
-4.2 If we introduce paid plans, we will give at least 30 days' notice by email and by prominent notice in the dashboard. **No charge will ever be applied to a beta account without your separate, express opt-in.** There is no automatic conversion of a free beta account into a paid subscription.
+4.2 If we introduce paid plans, we will give at least 30 days' notice by prominent notice in the dashboard. **No charge will ever be applied to a beta account without your separate, express opt-in.** There is no automatic conversion of a free beta account into a paid subscription.
 
 4.3 Any future paid terms (billing cycle, taxes, refund policy, auto-renewal disclosures, and the statutory 14-day right of withdrawal for EU consumers) will be published as a separate schedule to these Terms before the first charge.
 
@@ -95,7 +95,7 @@ These Terms govern your use of StreamCast Pro, a broadcast overlay and moderatio
 
 6.3 **Message history.** The service retains message history so it can be searched and re-aired. **Retention period: 30 days, rolling.** Messages older than 30 days are automatically and permanently deleted. You can also delete individual messages and your history manually through the dashboard at any time before that.
 
-6.4 **KaraFun queue data.** Song, performer, and queue information pulled from KaraFun is displayed on your overlay and retained for 30 days on a rolling basis, matching chat message history. Your use of KaraFun remains governed by your own agreement with KaraFun. Displaying song titles and performer names on stream may raise separate music licensing questions on the broadcasting platform — that is between you, the platform, and the relevant collecting society (in Austria, typically AKM/austro mechana). We do not grant any music rights.
+6.4 **KaraFun queue and song requests.** Song, performer, and queue information pulled live from KaraFun is displayed on your overlay and is never stored — it exists only for the duration of the connection. Separately, the karaoke song-request and duet-invite system stores the request or invite itself (song, requester, target singer, status, timestamps) and retains it for 30 days on a rolling basis, matching chat message history. Your use of KaraFun remains governed by your own agreement with KaraFun. Displaying song titles and performer names on stream may raise separate music licensing questions on the broadcasting platform — that is between you, the platform, and the relevant collecting society (in Austria, typically AKM/austro mechana). We do not grant any music rights.
 
 6.5 **Removal.** We may remove or refuse to transmit content that breaches these Terms, is unlawful, or exposes us to liability.
 
@@ -133,7 +133,7 @@ We may investigate suspected breaches and cooperate with law enforcement where l
 
 8.1 Our Privacy Policy at https://overlay.sandschi.xyz/privacy forms part of these Terms and explains what we collect and why.
 
-8.2 **Summary of processing.** We process: Twitch account identifiers and OAuth tokens (to authenticate and read chat); channel and moderator role data; overlay configuration; chat messages and their approval state; KaraFun queue data; and technical logs. The website uses analytics, which runs only if you accept it in the cookie banner.
+8.2 **Summary of processing.** We process: Twitch account identifiers and OAuth tokens (to authenticate and read chat); channel and moderator role data; overlay configuration; chat messages and their approval state; the live KaraFun queue (never stored) and karaoke song requests/duet invites (stored, 30 days); and technical logs. The website uses analytics, which runs only if you accept it in the cookie banner.
 
 8.3 **Legal basis (GDPR Art. 6).** Performance of the contract with you (Art. 6(1)(b)) for account and overlay operation; consent (Art. 6(1)(a)) for website analytics and any optional cookies; legitimate interests (Art. 6(1)(f)) for security, abuse prevention, and service integrity; legal obligation (Art. 6(1)(c)) where applicable.
 
@@ -147,7 +147,7 @@ We may investigate suspected breaches and cooperate with law enforcement where l
 
 8.8 **International transfers.** Twitch processes data outside the EEA. Our other sub-processors are Firebase/Google Cloud and Vercel (both certified under the EU–US Data Privacy Framework), PostHog (EU-hosted, no transfer occurs), and Discord (signup notifications only).
 
-8.9 **Retention.** Account data is deleted immediately via the self-service deletion control described in section 11.1. Message history and KaraFun queue data are each retained for 30 days on a rolling basis and then automatically deleted. Logs are governed by our infrastructure providers' own default retention periods.
+8.9 **Retention.** Account data is deleted immediately via the self-service deletion control described in section 11.1. Message history and karaoke song-request/duet-invite data are each retained for 30 days on a rolling basis and then automatically deleted; the live KaraFun queue itself is never stored. Logs are governed by our infrastructure providers' own default retention periods.
 
 8.10 **CCPA/CPRA — California residents.** If you are a California resident, you have the right to know what personal information we collect and how it is used, to delete it, to correct it, to opt out of the sale or sharing of personal information, to limit use of sensitive personal information, and not to be discriminated against for exercising these rights. **We do not sell or share personal information as those terms are defined under the CCPA.** Requests: support@sandschi.xyz.
 
@@ -199,7 +199,7 @@ We may investigate suspected breaches and cooperate with law enforcement where l
 
 11.2 **By us.** We may terminate or suspend access (a) for material breach of these Terms, with notice and, where the breach is curable, a reasonable opportunity to cure; (b) immediately, for unlawful use, security risk, or serious abuse; or (c) on 30 days' notice if we discontinue the service or the beta.
 
-11.3 **Effect.** On termination, access ends, overlay URLs stop rendering, and your account data is deleted immediately on self-service confirmation; message history and KaraFun queue data continue to age out automatically on their existing 30-day rolling windows in the meantime. Export anything you want to keep before terminating.
+11.3 **Effect.** On termination, access ends, overlay URLs stop rendering, and your account data is deleted immediately on self-service confirmation; message history and karaoke song-request/duet-invite data continue to age out automatically on their existing 30-day rolling windows in the meantime. Export anything you want to keep before terminating.
 
 11.4 **Survival.** Sections 5 (Intellectual Property), 6.1–6.2 (content licences and responsibility), 9 (Disclaimers and Liability), 10 (Indemnification), 12 (Governing Law and Disputes), and 14 (General) survive termination.
 
@@ -223,11 +223,11 @@ We may investigate suspected breaches and cooperate with law enforcement where l
 
 ## 13. Changes to These Terms
 
-> **Plain English Summary**: We'll update these terms sometimes. Small stuff we just publish. Anything that actually affects you gets 30 days' notice by email and in the dashboard, and if you don't like it you can leave before it kicks in.
+> **Plain English Summary**: We'll update these terms sometimes. Small stuff we just publish. Anything that actually affects you gets 30 days' notice in the dashboard, and if you don't like it you can leave before it kicks in.
 
 13.1 We may amend these Terms. The current version is always at https://overlay.sandschi.xyz/terms with a "Last Updated" date.
 
-13.2 For material changes — anything affecting your rights, our liability, fees, or how we handle your data — we will give at least 30 days' advance notice by email to your account address and by prominent notice in the dashboard.
+13.2 For material changes — anything affecting your rights, our liability, fees, or how we handle your data — we will give at least 30 days' advance notice by prominent notice in the dashboard.
 
 13.3 Changes take effect on the stated date. Continued use after that date constitutes acceptance. If you do not accept a change, terminate your account before the effective date; termination is your remedy for a change you reject.
 
@@ -249,11 +249,9 @@ We may investigate suspected breaches and cooperate with law enforcement where l
 
 14.5 **No partnership.** Nothing here creates an agency, partnership, joint venture, or employment relationship. Moderators are not our staff.
 
-14.6 **Electronic communications.** You consent to receive notices and communications from us electronically, at the email address associated with your account.
+14.6 **Language.** These Terms are provided in English only; no German-language version is offered at this time. English is the sole and prevailing version.
 
-14.7 **Language.** These Terms are provided in English only; no German-language version is offered at this time. English is the sole and prevailing version.
-
-14.8 **Headings** are for convenience only and do not affect interpretation.
+14.7 **Headings** are for convenience only and do not affect interpretation.
 
 ---
 

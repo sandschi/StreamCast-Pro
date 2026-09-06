@@ -37,11 +37,11 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}
       >
-        <PostHogProvider>
-          <AuthProvider>
+        <AuthProvider>
+          <PostHogProvider>
             {children}
-          </AuthProvider>
-        </PostHogProvider>
+          </PostHogProvider>
+        </AuthProvider>
         <CookieConsentBanner />
         <ServiceWorkerRegister />
         <SpeedInsights />

@@ -266,7 +266,7 @@ function DashboardContent() {
     // one real socket instead of two components separately reconnecting on
     // every tab switch, and so the status bar can show the party's actual
     // live connection state instead of just "is it configured".
-    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings });
+    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings, userRole, isMasterAdmin });
 
     const allowed = useMemo(() => {
         // userRole is set to 'broadcaster' optimistically the moment someone reaches
@@ -472,11 +472,12 @@ function DashboardContent() {
             </div>
             {statusbar && (
                 <StatusBar
-                    t={t} d={d} tab={current} onAir={chat.activeMessage} conn={conn}
+                    t={t} d={d} tab={current} allowed={allowed} onAir={chat.activeMessage} conn={conn}
                     role={isMasterAdmin ? 'broadcaster' : (userRole || 'waiting')}
                     queueDepth={chat.suggestions?.length || 0} partyId={userSettings?.karafunPartyId}
                     karafunEnabled={userSettings?.karafunEnabled}
                     karaFunLoading={karaFun.loading} karaFunError={karaFun.error} karaFunLastUpdated={karaFun.lastUpdated}
+                    karaFunConnected={karaFun.connected}
                     blocked={isVerifying || !!gate}
                 />
             )}

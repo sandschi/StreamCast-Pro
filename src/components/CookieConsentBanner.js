@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { getConsent, setConsent, CONSENT_REOPEN_EVENT } from '@/lib/cookieConsent';
 
 // First-party cookie/analytics prompt - see cookieConsent.js for why this
 // replaced Cloudflare Zaraz's modal. Mounted once in the root layout so it's
-// available on every route (marketing page and dashboard alike).
+// available on every route (marketing page and dashboard alike) - except the
+// OBS overlay, which never shows it: PostHogProvider already runs
+// unconditionally there (no real "visitor" to ask), so there's nothing this
+// banner would ever need to gate on that route.
 export default function CookieConsentBanner() {
+    const pathname = usePathname();
     const [visible, setVisible] = useState(false);
+    const onOverlay = !!pathname?.startsWith('/overlay');
 
     useEffect(() => {
         // One-time read of an external source (localStorage) on mount, kept
@@ -24,7 +30,7 @@ export default function CookieConsentBanner() {
         return () => document.removeEventListener(CONSENT_REOPEN_EVENT, onReopen);
     }, []);
 
-    if (!visible) return null;
+    if (onOverlay || !visible) return null;
 
     const choose = (value) => {
         setConsent(value);

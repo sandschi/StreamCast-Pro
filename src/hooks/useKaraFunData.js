@@ -17,11 +17,19 @@ export async function searchKaraFunSongs(partyId, query) {
 }
 
 // Extracted verbatim from the original inline logic in components/dashboard/KaraFun.js.
-export function useKaraFunData({ targetUid, userSettings }) {
+export function useKaraFunData({ targetUid, userSettings, userRole, isMasterAdmin }) {
     const [queueData, setQueueData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
+    // Distinct from lastUpdated, which never gets cleared - a real socket
+    // drop only fires 'disconnect', not necessarily 'serverUnreacheable' or
+    // 'connect_error' (those are about never having connected at all, or the
+    // party itself being unreachable), so lastUpdated alone can't tell a
+    // caller "is this live right now" without going stale after a mid-session
+    // drop. Set true only once a real payload has arrived (matching
+    // hasCapturedConnected below), false on any disconnect/reconnect attempt.
+    const [connected, setConnected] = useState(false);
     const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
     const [isSavingId, setIsSavingId] = useState(false);
     const [reconnectKey, setReconnectKey] = useState(0);
@@ -33,6 +41,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
     const handleReconnect = () => {
         setQueueData(null);
         setLastUpdated(null);
+        setConnected(false);
         setError(null);
         setReconnectKey(k => k + 1);
     };
@@ -103,6 +112,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
             // disabled and permanently labeled "Connecting..." instead of
             // reflecting the real "no Party ID set" state.
             setLoading(false);
+            setConnected(false);
             return;
         }
 
@@ -118,6 +128,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         // authenticated connection actually works.
         let hasCapturedConnected = false;
         const captureConnectedOnce = () => {
+            setConnected(true);
             if (hasCapturedConnected) return;
             hasCapturedConnected = true;
             posthog.capture('karafun_connected');
@@ -153,16 +164,19 @@ export function useKaraFunData({ targetUid, userSettings }) {
         socket.on('connect_error', (err) => {
             console.error('KaraFun Sync: Connection error', err);
             setError('Connection error. Retrying...');
+            setConnected(false);
         });
 
         socket.on('serverUnreacheable', () => {
             console.error('KaraFun Sync: Party unreachable', partyId);
             setError('Party unreachable. Make sure the KaraFun app is open and connected to this party. You can try restarting the Party in the Settings (Turn Remote Off and On again) or restarting the KaraFun App.');
             setLoading(false);
+            setConnected(false);
         });
 
         socket.on('disconnect', (reason) => {
             console.log('KaraFun Sync: Disconnected -', reason);
+            setConnected(false);
         });
 
         // Real-time queue updates
@@ -251,7 +265,26 @@ export function useKaraFunData({ targetUid, userSettings }) {
     // socket frames, not assumed from any documentation. Every emit is a
     // silent no-op if there's no live connection yet, matching how KaraFun's
     // own remote client behaves when a control is used before it's ready.
-    const emit = (event, payload) => { if (socketRef.current) socketRef.current.emit(event, payload); };
+    //
+    // This hook runs unconditionally for every signed-in dashboard session
+    // (see dashboard/page.js - the 'karaoke' tab is open to every role), and
+    // every one of these functions is a raw, unauthenticated emit straight to
+    // KaraFun's real socket - there's no backend in between to check who's
+    // asking (see issue #29). canControl is a client-side guard, not a real
+    // security boundary (a determined user can still open their own socket
+    // with the party ID, which is public via settings/config for the
+    // overlay's sake) - it only stops these functions from doing anything for
+    // a role that could never legitimately reach them through this app's own
+    // UI. broadcaster/mod always qualify; 'singer' qualifies too since
+    // KaraokePane's self-add and "my turn" performer controls (play/skip/
+    // pitch/tempo/volume) are real, legitimate singer-role actions. A plain
+    // 'viewer' has no path to any of these - canSelfAdd, isMyTurn, and isMine
+    // in KaraokePane.js are all structurally false for that role.
+    const canControl = !!isMasterAdmin || userRole === 'broadcaster' || userRole === 'mod' || userRole === 'singer';
+    const emit = (event, payload) => {
+        if (!canControl) { console.warn(`KaraFun: blocked "${event}" - role "${userRole}" isn't authorized to control playback.`); return; }
+        if (socketRef.current) socketRef.current.emit(event, payload);
+    };
     const addToQueue = (songId, singer, pos = 99999) => emit('queueAdd', { songId, pos, singer });
     const moveInQueue = (queueId, from, to) => emit('queueMove', { queueId, from, to });
     const removeFromQueue = (queueId) => emit('queueRemove', queueId);
@@ -273,7 +306,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
     const skipSong = () => emit('next', null);
 
     return {
-        queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
+        queueData, loading, error, lastUpdated, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
         addToQueue, moveInQueue, removeFromQueue, adjustPitch, adjustTempo,
         setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,

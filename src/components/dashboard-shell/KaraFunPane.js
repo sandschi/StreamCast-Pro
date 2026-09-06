@@ -47,7 +47,7 @@ function useDebouncedSetting(propValue, onCommit) {
     return [value, handleChange];
 }
 
-export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun }) {
+export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, isMasterAdmin }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
@@ -84,6 +84,15 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
     // last, jumping them ahead of everyone who's actually been waiting.
     const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
+
+    // The persisted order, extended with any online singer it doesn't know
+    // about yet (appended at the end, same as rotationRank's tie-break
+    // above). The Rotation Order arrows below swap two singers' positions
+    // within THIS array and persist the whole thing back - swapping within
+    // arr.map(x => x.id) instead (the visible, online-only list) would drop
+    // every temporarily offline singer from karaokeRotationOrder on the very
+    // next reorder.
+    const fullRotationOrder = [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))];
 
     // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
     // real party, "switching songs around in rapid succession", and had to
@@ -293,21 +302,28 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                 {/* Deliberately outside the karaokeEnabled-gated block below -
                     it's the switch that turns that whole section on, so it
                     can't itself disappear once it's off. Lives here (not
-                    Settings) since it's a mod action, not overlay appearance. */}
-                <div style={{ gridColumn: '1 / -1' }}>
-                    <Pane t={t} d={d} icon={<Mic size={13} />} title="Karaoke Access">
-                        <div style={{ display: 'flex', gap: d.gap }}>
-                            <div style={{ flex: 1 }}>
-                                <ToggleSwitch t={t} checked={!!userSettings?.karaokeEnabled} onChange={v => handleToggleSetting('karaokeEnabled', v)} label="Karaoke Mode" description="Opens the Karaoke tab and connects to KaraFun." />
-                            </div>
-                            {userSettings?.karaokeEnabled && (
+                    Settings) since it's a mod action, not overlay appearance.
+                    Broadcaster/master-admin only: firestore.rules only lets a
+                    mod update karaokeRotationOrder on settings/config, not
+                    karaokeEnabled/karaokeRequestsOpen, so an invited mod
+                    seeing these toggles would just get permission-denied on
+                    every click. */}
+                {(userRole === 'broadcaster' || isMasterAdmin) && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                        <Pane t={t} d={d} icon={<Mic size={13} />} title="Karaoke Access">
+                            <div style={{ display: 'flex', gap: d.gap }}>
                                 <div style={{ flex: 1 }}>
-                                    <ToggleSwitch t={t} checked={userSettings?.karaokeRequestsOpen !== false} onChange={v => handleToggleSetting('karaokeRequestsOpen', v)} label="Public Song Requests" description="Let viewers submit requests. Off to self-add only." />
+                                    <ToggleSwitch t={t} checked={!!userSettings?.karaokeEnabled} onChange={v => handleToggleSetting('karaokeEnabled', v)} label="Karaoke Mode" description="Opens the Karaoke tab and connects to KaraFun." />
                                 </div>
-                            )}
-                        </div>
-                    </Pane>
-                </div>
+                                {userSettings?.karaokeEnabled && (
+                                    <div style={{ flex: 1 }}>
+                                        <ToggleSwitch t={t} checked={userSettings?.karaokeRequestsOpen !== false} onChange={v => handleToggleSetting('karaokeRequestsOpen', v)} label="Public Song Requests" description="Let viewers submit requests. Off to self-add only." />
+                                    </div>
+                                )}
+                            </div>
+                        </Pane>
+                    </div>
+                )}
 
                 {userSettings?.karaokeEnabled && (
                     <>
@@ -338,13 +354,17 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                                     <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
                                     <div style={btnRow}>
                                         <ToolBtn t={t} icon={<ArrowUp size={11} />} disabled={i === 0} onClick={() => {
-                                            const order = arr.map(x => x.id);
-                                            [order[i - 1], order[i]] = [order[i], order[i - 1]];
+                                            const order = [...fullRotationOrder];
+                                            const curIdx = order.indexOf(s.id);
+                                            const neighborIdx = order.indexOf(arr[i - 1].id);
+                                            [order[curIdx], order[neighborIdx]] = [order[neighborIdx], order[curIdx]];
                                             setRotationOrder(order);
                                         }} />
                                         <ToolBtn t={t} icon={<ArrowDown size={11} />} disabled={i === arr.length - 1} onClick={() => {
-                                            const order = arr.map(x => x.id);
-                                            [order[i + 1], order[i]] = [order[i], order[i + 1]];
+                                            const order = [...fullRotationOrder];
+                                            const curIdx = order.indexOf(s.id);
+                                            const neighborIdx = order.indexOf(arr[i + 1].id);
+                                            [order[curIdx], order[neighborIdx]] = [order[neighborIdx], order[curIdx]];
                                             setRotationOrder(order);
                                         }} />
                                     </div>

@@ -168,13 +168,22 @@ service cloud.firestore {
       match /karaoke_requests/{requestId} {
         allow read: if request.auth != null;
         // A plain song request may come from any signed-in viewer - that's
-        // the whole point of the feature. A duet invite is different: it's a
-        // singer inviting a specific co-singer to join their turn, so it's
-        // restricted the same way claiming a public request is, to a mod or
-        // a participating singer, rather than any viewer being able to send
-        // one under someone else's name.
+        // the whole point of the feature - but only while the broadcaster's
+        // "Public Song Requests" toggle (settings/config.karaokeRequestsOpen)
+        // is actually open; KaraokePane's requestsOpen was only ever a UI
+        // gate (hides the button, self-add stays available), so a direct
+        // Firestore write could still create one while requests were
+        // supposedly paused. Missing the field entirely means open, same
+        // default as the client's `!== false` check. A duet invite is
+        // different: it's a singer inviting a specific co-singer to join
+        // their turn, so it's restricted the same way claiming a public
+        // request is, to a mod or a participating singer, rather than any
+        // viewer being able to send one under someone else's name - the
+        // open/closed toggle doesn't apply to it at all.
         allow create: if request.auth != null && request.resource.data.requestedBy == request.auth.uid
-          && (request.resource.data.kind != 'duet' || isChannelModerator(userId) || isParticipatingSinger(userId));
+          && (request.resource.data.kind != 'duet' || isChannelModerator(userId) || isParticipatingSinger(userId))
+          && (request.resource.data.kind == 'duet' ||
+              get(/databases/$(database)/documents/users/$(userId)/settings/config).data.get('karaokeRequestsOpen', true) != false);
 
         // Mods: full control (force-public, decline, anything).
         allow update, delete: if isChannelModerator(userId);

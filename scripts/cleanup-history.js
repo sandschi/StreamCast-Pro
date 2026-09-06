@@ -17,33 +17,42 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// Firestore caps a single batch at 500 writes - commit in chunks rather than
+// queuing every matched doc into one batch, which would throw and leave a
+// user with >500 stale messages never cleaned up.
+async function deleteInChunks(refs) {
+  for (let i = 0; i < refs.length; i += 500) {
+    const batch = db.batch();
+    for (const ref of refs.slice(i, i + 500)) batch.delete(ref);
+    await batch.commit();
+  }
+}
+
 async function cleanupHistory() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
   console.log(`Cleaning up history messages older than ${thirtyDaysAgo.toISOString()}...`);
 
   // We need to iterate through all users to clean their specific history collections
   const usersSnapshot = await db.collection('users').get();
-  
+
   for (const userDoc of usersSnapshot.docs) {
     const historyRef = db.collection('users').doc(userDoc.id).collection('history');
     const oldMessagesQuery = historyRef.where('timestamp', '<', thirtyDaysAgo);
-    
+
     const snapshot = await oldMessagesQuery.get();
     if (snapshot.empty) continue;
 
     console.log(`Found ${snapshot.size} old messages for user ${userDoc.id}. Deleting...`);
-    
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-    
-    await batch.commit();
+
+    await deleteInChunks(snapshot.docs.map((doc) => doc.ref));
   }
 
   console.log('Cleanup complete.');
 }
 
-cleanupHistory().catch(console.error);
+cleanupHistory().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

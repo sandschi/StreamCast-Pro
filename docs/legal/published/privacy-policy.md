@@ -91,15 +91,17 @@ Where we rely on consent, you may withdraw it at any time via "Cookie preference
 
 ---
 
-## 6. KaraFun Queue Data
+## 6. Karaoke and KaraFun Data
 
-> **Plain English Summary**: If you use the KaraFun integration, we pull in what's queued and who's singing next so it can go on the overlay. Names in that queue are personal data too.
+> **Plain English Summary**: Two separate things live under "karaoke." The live KaraFun queue is just relayed to your overlay in real time and never stored. The song-request and duet-invite system is different — someone has to remember who asked for what and whether they said yes, so that part is actually saved, for 30 days.
 
-6.1 We process song titles, queue position, and performer names or handles from the KaraFun queue you connect, solely to display them on your overlay.
+6.1 **Live KaraFun queue.** If you connect the KaraFun integration, we read song titles, queue position, and performer names or handles directly from KaraFun's own live connection and display them on your overlay in real time. This is never written to our database — it exists only for as long as the connection is open and is replaced by the next update. There is nothing here to delete afterward, because nothing is stored.
 
-6.2 Performer names are personal data where they identify a person. The same rights and retention rules apply.
+6.2 **Song requests and duet invites.** Separately, viewers can request a song for a specific singer or leave it open for anyone to claim, and singers can invite each other to duets. For each request or invite we store: the song, who asked (their Twitch identity), who it's for (if targeted), its status as it moves through pending, public, accepted, declined, dropped, or expired, and the timestamps that drive its automatic expiry. This is stored in our database and automatically deleted after 30 days on a rolling basis — see section 11.
 
-6.3 Your use of KaraFun is governed by KaraFun's own privacy policy. We have no control over their processing.
+6.3 Performer names, requester names, and target-singer names are all personal data where they identify a person. The same rights and retention rules apply to all of them.
+
+6.4 Your use of KaraFun is governed by KaraFun's own privacy policy. We have no control over their processing.
 
 ---
 
@@ -192,7 +194,11 @@ Under GDPR you have the right to:
 |---|---|
 | Account and configuration data | Deleted immediately, self-service, via the "Delete My Account" control in the dashboard. |
 | Chat message history | 30 days, rolling. Deleted automatically every night. |
-| KaraFun queue and song-request data | 30 days, rolling. Deleted automatically every night. |
+| Viewer suggestions awaiting mod review | 30 days, rolling. Deleted automatically every night if never approved or declined. |
+| Messages queued to show next | 30 days, rolling. Deleted automatically every night if never shown or removed. |
+| The message currently live on your overlay | Cleared automatically after 30 days if left up the whole time without being replaced or hidden (relevant mainly to a "permanent" message, which otherwise has no expiry of its own). |
+| Live KaraFun queue (song, performer, queue position) | Never stored — relayed live only, nothing to retain. |
+| Song requests and duet invites | 30 days, rolling. Deleted automatically every night. |
 | OAuth tokens | Until you revoke access or delete your account. |
 | Technical and security logs | Governed by our infrastructure providers' own default retention periods. |
 | Analytics data | Up to 1 year. |
@@ -237,6 +243,6 @@ We do not currently keep backups of our database, so deleted data does not persi
 
 14.1 The current version is always at https://overlay.sandschi.xyz/privacy with a "Last Updated" date.
 
-14.2 For material changes — new data categories, new purposes, new recipients, or longer retention — we will give at least 30 days' notice by email and in the dashboard. Where a change requires consent, we will ask for it rather than assume it.
+14.2 For material changes — new data categories, new purposes, new recipients, or longer retention — we will give at least 30 days' notice by prominent notice in the dashboard. Where a change requires consent, we will ask for it rather than assume it.
 
 14.3 We will not apply a new purpose retroactively to data already collected without a valid basis for doing so.
