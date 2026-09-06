@@ -50,9 +50,9 @@ export default function DeleteAccountModal({ t, open, onClose }) {
         >
             <div
                 onClick={(e) => e.stopPropagation()}
-                style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto', background: t.pane, border: `1px solid var(--danger)`, ...bevel(t) }}
+                style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto', background: t.chrome, border: `1px solid var(--danger)`, ...bevel(t) }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${t.hair}`, background: t.inset }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${t.hair}`, background: t.chrome }}>
                     <span style={{ color: 'var(--danger)', display: 'inline-flex' }}><AlertTriangle size={16} /></span>
                     <span style={{ ...tiny(t), color: 'var(--danger)', fontSize: 12 }}>{L(t, 'Delete Your Account')}</span>
                     <span style={{ flex: 1 }} />

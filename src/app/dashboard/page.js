@@ -391,7 +391,12 @@ function DashboardContent() {
             case 'Full Screen': return document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
             case 'Changelog': return setShowChangelog(true);
             case 'Remote API Reference': return setActiveTab('api');
-            case 'About StreamCast Pro': return setShowChangelog(true);
+            // Opened in a new tab rather than navigated to in-place: this
+            // dashboard holds a live Twitch chat connection (and any unsaved
+            // settings) that navigating away would drop.
+            case 'Terms': return window.open('/terms', '_blank', 'noopener,noreferrer');
+            case 'Privacy': return window.open('/privacy', '_blank', 'noopener,noreferrer');
+            case 'About StreamCast Pro': return window.open('/', '_blank', 'noopener,noreferrer');
             default: return;
         }
     };
