@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Mic, Search, UserPlus, Check, X, Play, Pause, SkipForward, Users, Music, Trash2, ArrowRight } from 'lucide-react';
-import { useKaraFunData, searchKaraFunSongs } from '@/hooks/useKaraFunData';
+import { searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import { useAuth } from '@/context/AuthContext';
 import Pane from './Pane';
@@ -39,7 +39,7 @@ function SingerPicker({ t, singers, onPick, onCancel, allowPublic }) {
     );
 }
 
-function SongRow({ t, song, canSelfAdd, onlineSingers, onSelfAdd, onRequest }) {
+function SongRow({ t, song, canSelfAdd, canRequest, onlineSingers, onSelfAdd, onRequest }) {
     const [picker, setPicker] = useState(null); // 'request' | 'duet' | null
 
     return (
@@ -56,7 +56,7 @@ function SongRow({ t, song, canSelfAdd, onlineSingers, onSelfAdd, onRequest }) {
                         <ToolBtn t={t} icon={<UserPlus size={11} />} onClick={() => setPicker(picker === 'duet' ? null : 'duet')}>Duet</ToolBtn>
                     </>
                 )}
-                <ToolBtn t={t} onClick={() => setPicker(picker === 'request' ? null : 'request')}>Request…</ToolBtn>
+                {canRequest && <ToolBtn t={t} onClick={() => setPicker(picker === 'request' ? null : 'request')}>Request…</ToolBtn>}
             </div>
             {picker === 'duet' && (
                 <SingerPicker t={t} singers={onlineSingers} allowPublic={false}
@@ -76,11 +76,11 @@ function SongRow({ t, song, canSelfAdd, onlineSingers, onSelfAdd, onRequest }) {
 // oversight (request management, staging queue, rotation order, playback
 // controls for mods) lives entirely in KaraokeModPane instead, kept off this
 // tab rather than mixed into the same sidebar - see #27.
-export default function KaraokePane({ t, d, targetUid, userRole, user, userSettings }) {
+export default function KaraokePane({ t, d, targetUid, userRole, user, userSettings, karaFun }) {
     const {
         queueData, partyId, addToQueue, removeFromQueue,
         adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
-    } = useKaraFunData({ targetUid, userSettings });
+    } = karaFun;
 
     const {
         requests, onlineSingers, rotationOrder, permissions, getActiveSingerUid, nameFor,
@@ -99,6 +99,12 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // Broadcaster/mod can always add for themselves - the participating gate
     // only exists for the singer role (opting in/out of being pickable).
     const canSelfAdd = isMod || (isSinger && iAmParticipating);
+    // Separate from karaokeEnabled (the whole-tab switch) - this only pauses
+    // NEW request submissions, so the broadcaster/mod/a singer can keep using
+    // this tab to self-add or run a private party without opening it to
+    // viewer requests. Missing (pre-existing accounts) defaults to open, so
+    // shipping this doesn't silently close requests for anyone already live.
+    const requestsOpen = userSettings?.karaokeRequestsOpen !== false;
 
     const [searchTerm, setSearchTerm] = useState('');
     const [results, setResults] = useState([]);
@@ -201,10 +207,15 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 <div style={{ padding: d.pad, borderBottom: `1px solid ${t.hair}` }}>
                     <TextInput t={t} value={searchTerm} onChange={setSearchTerm} placeholder="Search a song, artist…" />
                 </div>
+                {!requestsOpen && (
+                    <div style={{ padding: d.pad, borderBottom: `1px solid ${t.hair}`, background: t.inset, ...tiny(t), color: t.faint }}>
+                        Public requests are paused{canSelfAdd ? ' — add songs for yourself below.' : '.'}
+                    </div>
+                )}
                 {searching && <div style={{ padding: d.pad, ...tiny(t), color: t.faint }}>Searching…</div>}
                 {!searching && searchTerm && visibleResults.length === 0 && <EmptyState icon={<Search size={28} />} title="No matches." />}
                 {visibleResults.map(song => (
-                    <SongRow key={song.songId} t={t} song={song} canSelfAdd={canSelfAdd}
+                    <SongRow key={song.songId} t={t} song={song} canSelfAdd={canSelfAdd} canRequest={requestsOpen}
                         onlineSingers={onlineSingers} onSelfAdd={handleSelfAdd} onRequest={handleRequest} />
                 ))}
             </Pane>
@@ -264,7 +275,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
 
                 {(isSinger || isMod) && (
                     <Pane t={t} d={d} icon={<Mic size={13} />} title="My Participation">
-                        <ToggleSwitch t={t} checked={iAmParticipating} onChange={toggleParticipating} label="Participating tonight" description={isMod ? "On = you show up in Rotation Order and can be picked for requests/duets, same as a singer." : "Off = you're just watching: you can still request songs, but you won't be pickable and can't add your own."} />
+                        <ToggleSwitch t={t} checked={iAmParticipating} onChange={toggleParticipating} label="Participating tonight" description={isMod ? "On = you're in Rotation Order and pickable for requests/duets." : "Off = you can still request songs, but won't be pickable."} />
                     </Pane>
                 )}
 

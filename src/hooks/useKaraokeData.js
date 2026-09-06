@@ -125,12 +125,16 @@ export function useKaraokeData({ targetUid, user, userRole }) {
                 const perm = permissions[p.id];
                 const role = perm?.role || (p.id === targetUid ? 'broadcaster' : null);
                 if (!ELIGIBLE_ROTATION_ROLES.includes(role)) return false;
-                // The broadcaster has no reason to opt in/out via a permission
-                // doc the way an invited singer does - they're always in their
-                // own rotation. Without this, a broadcaster with no permissions
-                // doc yet (the common case - UsersPane never creates one for
-                // the owner) silently drops out of onlineSingers entirely.
-                if (role !== 'broadcaster' && !perm?.participating) return false;
+                // The broadcaster defaults into their own rotation with no
+                // permissions doc at all (the common case - UsersPane never
+                // creates one for the owner; without this default they'd
+                // silently drop out of onlineSingers entirely) - but once a
+                // doc exists (e.g. the broadcaster used their own
+                // "Participating tonight" toggle, which writes one), its
+                // explicit value must still be respected instead of the
+                // broadcaster role unconditionally overriding it forever.
+                const participating = role === 'broadcaster' ? perm?.participating !== false : !!perm?.participating;
+                if (!participating) return false;
                 const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
                 return now - lastSeenMs < 90_000;
             })

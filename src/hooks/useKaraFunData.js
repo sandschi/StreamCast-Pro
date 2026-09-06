@@ -49,6 +49,14 @@ export function useKaraFunData({ targetUid, userSettings }) {
         try {
             const configRef = doc(db, 'users', targetUid, 'settings', 'config');
             await setDoc(configRef, { karafunPartyId: tempPartyId }, { merge: true });
+            // Force a fresh connection attempt even when tempPartyId is
+            // unchanged from what's already stored (e.g. saving again after
+            // actually starting the KaraFun party, having typed the same ID
+            // earlier while it was down) - the connect effect below only
+            // re-runs when `partyId` itself changes, so an unchanged value
+            // would otherwise leave last attempt's error/dead socket in
+            // place until a full page reload.
+            handleReconnect();
         } catch (err) {
             console.error("Error saving Party ID:", err);
             setError("Failed to save Party ID. Check permissions.");

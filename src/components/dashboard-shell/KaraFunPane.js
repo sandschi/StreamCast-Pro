@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
-import { useKaraFunData } from '@/hooks/useKaraFunData';
+import { Music, RefreshCw, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
 import Field from './Field';
@@ -48,12 +47,12 @@ function useDebouncedSetting(propValue, onCommit) {
     return [value, handleChange];
 }
 
-export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings }) {
+export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun }) {
     const {
         queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
         moveInQueue, removeFromQueue, playSong, skipSong,
-    } = useKaraFunData({ targetUid, userSettings });
+    } = karaFun;
 
     // Karaoke request oversight (see #27) - deliberately gated on
     // karaokeEnabled separately below, not folded into the karafunEnabled
@@ -297,7 +296,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                     Settings) since it's a mod action, not overlay appearance. */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Pane t={t} d={d} icon={<Mic size={13} />} title="Karaoke Access">
-                        <ToggleSwitch t={t} checked={!!userSettings?.karaokeEnabled} onChange={v => handleToggleSetting('karaokeEnabled', v)} label="Enable Karaoke Requests" description="Open the Karaoke tab to everyone — viewers can request songs, singers can add their own." />
+                        <div style={{ display: 'flex', gap: d.gap }}>
+                            <div style={{ flex: 1 }}>
+                                <ToggleSwitch t={t} checked={!!userSettings?.karaokeEnabled} onChange={v => handleToggleSetting('karaokeEnabled', v)} label="Karaoke Mode" description="Opens the Karaoke tab and connects to KaraFun." />
+                            </div>
+                            {userSettings?.karaokeEnabled && (
+                                <div style={{ flex: 1 }}>
+                                    <ToggleSwitch t={t} checked={userSettings?.karaokeRequestsOpen !== false} onChange={v => handleToggleSetting('karaokeRequestsOpen', v)} label="Public Song Requests" description="Let viewers submit requests. Off to self-add only." />
+                                </div>
+                            )}
+                        </div>
                     </Pane>
                 </div>
 
@@ -348,11 +356,13 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
 
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">
-                        <div style={{ display: 'flex', gap: 6 }}>
-                            <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <div style={{ width: 100, flex: 'none' }}>
+                                <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                            </div>
+                            <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save'}</ToolBtn>
                         </div>
                     </Field>
-                    <ToolBtn t={t} icon={<RefreshCw size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save Party ID'}</ToolBtn>
                     <Field t={t} label="Overlay visibility">
                         {/* This inspector column can be as narrow as 210px (ResizableWidth
                             minWidth below) — a rigid 2-column grid left no room for the

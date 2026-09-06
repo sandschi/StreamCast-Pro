@@ -29,6 +29,7 @@ import ApiPane from '@/components/dashboard-shell/ApiPane';
 import BroadcastersPane from '@/components/dashboard-shell/BroadcastersPane';
 import ChangelogModal from '@/components/dashboard/ChangelogModal';
 import { useChatData } from '@/hooks/useChatData';
+import { useKaraFunData } from '@/hooks/useKaraFunData';
 
 const PANES = { history: HistoryPane, users: UsersPane, karafun: KaraFunPane, karaoke: KaraokePane, settings: SettingsPane, api: ApiPane, broadcasters: BroadcastersPane };
 
@@ -260,6 +261,13 @@ function DashboardContent() {
     const chatEnabled = hasVerifiedAccess && !verifyingMod;
     const chat = useChatData({ targetUid: chatEnabled ? targetUid : null, userRole, enabled: chatEnabled });
 
+    // Same reasoning as chat above: lifted here (rather than each of
+    // KaraokePane/KaraFunPane calling useKaraFunData independently) so there's
+    // one real socket instead of two components separately reconnecting on
+    // every tab switch, and so the status bar can show the party's actual
+    // live connection state instead of just "is it configured".
+    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings });
+
     const allowed = useMemo(() => {
         // userRole is set to 'broadcaster' optimistically the moment someone reaches
         // their own dashboard, before broadcasterStatus (waiting/approved/denied) is
@@ -449,7 +457,7 @@ function DashboardContent() {
                                         userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
                                         isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
                                         uiScale={uiScale} setUiScale={setUiScale}
-                                        activeSection={settingsSection}
+                                        activeSection={settingsSection} karaFun={karaFun}
                                     />
                                 )}
                             </>
@@ -462,6 +470,8 @@ function DashboardContent() {
                     t={t} d={d} tab={current} onAir={chat.activeMessage} conn={conn}
                     role={isMasterAdmin ? 'broadcaster' : (userRole || 'waiting')}
                     queueDepth={chat.suggestions?.length || 0} partyId={userSettings?.karafunPartyId}
+                    karafunEnabled={userSettings?.karafunEnabled}
+                    karaFunLoading={karaFun.loading} karaFunError={karaFun.error} karaFunLastUpdated={karaFun.lastUpdated}
                     blocked={isVerifying || !!gate}
                 />
             )}
