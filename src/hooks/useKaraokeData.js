@@ -85,10 +85,23 @@ export function useKaraokeData({ targetUid, user, userRole }) {
                     const fresh = await tx.get(ref);
                     const data = fresh.data();
                     if (!fresh.exists() || data.status !== 'pending' || !(data.respondBy?.toMillis() <= now)) return;
-                    tx.update(ref, {
-                        status: 'public', targetSingerUid: null, respondBy: null,
-                        publicExpireBy: Timestamp.fromMillis(now + PUBLIC_WINDOW_MS),
-                    });
+                    // A duet invite going unanswered isn't the same as a plain
+                    // request opening up to the room - there's no "room" for a
+                    // duet, just the one invitee. Route it through the same
+                    // declined state respondToDuetInvite's reject uses, so it
+                    // lands in myDeclinedDuets (Sing Solo / Drop) instead of
+                    // silently vanishing: publicRequests excludes kind==='duet'
+                    // and myPendingDuetInvites requires status==='pending', so
+                    // 'public' would match neither filter and the requester
+                    // would never see it again.
+                    if (data.kind === 'duet') {
+                        tx.update(ref, { status: 'declined', respondBy: null });
+                    } else {
+                        tx.update(ref, {
+                            status: 'public', targetSingerUid: null, respondBy: null,
+                            publicExpireBy: Timestamp.fromMillis(now + PUBLIC_WINDOW_MS),
+                        });
+                    }
                 }).catch(e => console.error('Error expiring karaoke request:', e));
             } else if (r.status === 'public' && r.publicExpireBy && r.publicExpireBy.toMillis() <= now) {
                 const ref = doc(db, 'users', targetUid, 'karaoke_requests', r.id);

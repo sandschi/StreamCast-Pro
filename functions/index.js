@@ -36,10 +36,19 @@ exports.expireKaraokeRequests = onSchedule('every 1 minutes', async () => {
             const fresh = await tx.get(docSnap.ref);
             const data = fresh.data();
             if (!fresh.exists || data.status !== 'pending' || !(data.respondBy?.toMillis() <= now.toMillis())) return;
-            tx.update(docSnap.ref, {
-                status: 'public', targetSingerUid: null, respondBy: null,
-                publicExpireBy: admin.firestore.Timestamp.fromMillis(now.toMillis() + 10 * 60 * 1000),
-            });
+            // A duet invite going unanswered has no "room" to open up to the
+            // way a plain request does - route it to declined (same state
+            // respondToDuetInvite's reject uses) so it lands in the asker's
+            // Duet Declined panel instead of a 'public' kind==='duet' doc
+            // that matches no UI filter and is never seen again.
+            if (data.kind === 'duet') {
+                tx.update(docSnap.ref, { status: 'declined', respondBy: null });
+            } else {
+                tx.update(docSnap.ref, {
+                    status: 'public', targetSingerUid: null, respondBy: null,
+                    publicExpireBy: admin.firestore.Timestamp.fromMillis(now.toMillis() + 10 * 60 * 1000),
+                });
+            }
         })),
         ...expiredPublic.docs.map(docSnap => db.runTransaction(async (tx) => {
             const fresh = await tx.get(docSnap.ref);
