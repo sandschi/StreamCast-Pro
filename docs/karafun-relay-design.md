@@ -293,40 +293,45 @@ Vercel (the Next.js app's implied host, given `next.config.mjs`/CLAUDE.md's serv
 doesn't support long-lived outbound socket.io connections in its function runtime, so this has to
 be a separate deployment, not a route. Options, in recommended order:
 
-The relay only needs to be running while at least one party is actually active — nobody's
-streaming most hours of the day, so an always-on instance would mostly be idling and burning
-money for nothing. Both realistic options below support **scale-to-zero**: the whole process shuts
-down completely when no party is active, and restarts on demand. The piece that makes this work is
-a **wake trigger** — something has to tell the platform "spin back up," since a sleeping process
-can't watch Firestore on its own. Both platforms wake on an incoming HTTP request, so the plan is:
-whenever the Next.js API route writes a command (§3.1) or a broadcaster opens the KaraFun dashboard
-pane with `karafunEnabled` true, it also fires a plain HTTP request at the relay's `/connect/{userId}`
-endpoint. That request is what wakes the container (typically a couple seconds of cold-start the
-first time), after which the relay opens that party's socket per the lifecycle above and keeps
-itself warm for a while; it scales back to zero once every party's idle window (§4) has elapsed and
-no new wake requests have come in.
+1. **Self-hosted Dokploy, always-on container. (Recommended.)** The relay is exactly the shape
+   Dokploy is built for — a plain Docker container running a persistent Node process, deployed
+   from the Git repo like anything else on it, Traefik giving it HTTPS for free. Since it's your
+   own server, there's no per-vCPU-second/per-request meter running (§8.1 below covered what that
+   would cost on Cloud Run — a few dollars a month at worst, but here it's just $0 marginal cost on
+   capacity you already pay for), so the scale-to-zero machinery the other two options need
+   (§8.2/8.3's wake-on-HTTP-request dance) simply isn't needed — the process can just stay up
+   continuously. That also removes the cold-start-on-first-command latency and the
+   `/connect/{userId}` wake endpoint entirely: the relay is always listening, `karafunEnabled`
+   dashboards can hit it directly, and the per-party socket still opens/closes lazily around
+   individual streams exactly as described in §4 — that part isn't about cost, it's about not
+   holding pointless connections open against KaraFun's servers, so it's worth keeping regardless
+   of host. Firebase Admin credentials are the same `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/
+   `FIREBASE_PRIVATE_KEY` triple `firebase-admin.js` already handles for Vercel, just set as env
+   vars in Dokploy's dashboard instead — no new credential-handling risk, since it's the same
+   pattern already proven to work for the main app. Before committing: confirm the box has spare
+   CPU/RAM (a handful of socket.io connections plus light JSON processing is a genuinely small
+   footprint) and that Dokploy's restart policy brings the container back up automatically after a
+   host reboot or a crash, same as you'd get for free from a managed platform.
+2. **Cloud Run (v2), `min-instances: 0`, `max-instances: 1`.** Only worth it if there's a reason
+   *not* to put this on the Dokploy box (e.g. wanting it isolated from your other self-hosted
+   services, or not wanting the relay's uptime tied to that box's uptime). Scales to zero between
+   streams and wakes on an HTTP hit to a `/connect/{userId}` endpoint that the Next.js API route
+   calls whenever it writes a command (§3.1) or a broadcaster opens the KaraFun dashboard pane —
+   see the pricing estimate in the earlier discussion of this doc for what that costs in practice
+   (roughly free to ~$5/month at this app's scale). Firebase projects already run on GCP, so this
+   service can use a GCP service account / Workload Identity directly instead of the
+   `FIREBASE_PRIVATE_KEY` env var, sidestepping the PEM-mangling problem `firebase-admin.js` exists
+   to work around. `max-instances: 1` makes the §4 lease belt-and-suspenders rather than
+   load-bearing; still worth keeping for the deploy-overlap window.
+3. **Fly.io or Render, "auto stop/start" machine.** Same scale-to-zero-and-wake-on-request idea as
+   Cloud Run, simpler mental model (just a Node process, no Cloud Run billing quirks to reason
+   about), but needs the same three-env-var credential setup as option 2 without the
+   same-GCP-project shortcut. Reasonable if there's a reason to avoid both Dokploy and GCP.
 
-1. **Cloud Run (v2), `min-instances: 0`, `max-instances: 1`.** Scales to zero automatically between
-   streams and wakes on the `/connect/{userId}` HTTP hit above — you only pay for the seconds it's
-   actually handling a live party, not 24/7. Firebase projects already run on GCP, so this service
-   can use a GCP service account / Workload Identity directly instead of the `FIREBASE_PRIVATE_KEY`
-   env var — which sidesteps the entire PEM reconstruction problem `src/lib/firebase-admin.js`
-   exists to work around (per CLAUDE.md, that file's defensive logic is specifically there because
-   *hosting envs keep mangling that one env var*; a same-project Cloud Run service doesn't need it
-   at all). `max-instances: 1` makes the §4 lease belt-and-suspenders rather than load-bearing for
-   the common case; it's still worth keeping for the deploy-overlap window (and for the moment
-   where a cold-start briefly overlaps a still-shutting-down previous instance).
-2. **Fly.io or Render, "auto stop/start" machine.** Same scale-to-zero-and-wake-on-request idea —
-   Fly calls it auto stop/start machines, Render has an equivalent on some plans — simpler mental
-   model (it's just a Node process, no Cloud Run request-based billing quirks to reason about), but
-   needs the same `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` triple as
-   `firebase-admin.js` already handles for Vercel — so it inherits that same "hosting env mangles
-   the PEM" risk class rather than avoiding it. Reasonable if there's a reason to avoid GCP
-   specifically.
-
-Recommendation: **Cloud Run v2, scaled to zero**, for the credential-simplicity win plus not
-paying for idle time, unless there's an existing reason (team familiarity, other infra already on
-Fly/Render) to prefer one of the alternatives.
+Recommendation: **your own Dokploy**, since it's infrastructure you already run and pay for — the
+relay's resource footprint is small enough that it shouldn't compete meaningfully with whatever
+else is on that box. Fall back to Cloud Run (scaled to zero) only if you'd rather keep this
+isolated from your own server's uptime/capacity.
 
 ## 9. Phased implementation plan
 
