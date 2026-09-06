@@ -96,8 +96,20 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['karaokeRotationOrder']);
       }
       
-      match /private/{document=**} {
+      match /private/config {
         allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Twitch OAuth token: encrypted at rest, accessible only through
+      // /api/twitch-token (Admin SDK, which bypasses these rules entirely) -
+      // denying the client SDK here is what actually enforces that, not a
+      // wildcard match. This can't be folded back into a /private/{document=**}
+      // block above: Firestore ORs sibling match blocks together, so a
+      // wildcard permitting private/config would silently re-permit
+      // private/twitch too, regardless of a stricter rule written for it
+      // specifically.
+      match /private/twitch {
+        allow read, write: if false;
       }
       
       match /active_message/{document=**} {

@@ -3,12 +3,13 @@
 import { useAuth } from '@/context/AuthContext';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsData, SOUNDS } from '@/hooks/useSettingsData';
-import { Settings as SettingsIcon, Save, Send, XCircle, Sparkles, Move } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Send, XCircle, Sparkles, Move, Trash2 } from 'lucide-react';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
 import ResizableBox from './ResizableBox';
 import ResizableWidth from './ResizableWidth';
+import DeleteAccountModal from './DeleteAccountModal';
 import { TREATMENTS, bevel, tiny, L } from './treatments';
 import Select from '@/components/ui/Select';
 import RangeSlider from '@/components/ui/RangeSlider';
@@ -72,13 +73,14 @@ function ScaledBubblePreview({ message, settings, boxWidth, boxHeight }) {
     );
 }
 
-export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale, setUiScale, activeSection = 'dashboard' }) {
+export default function SettingsPane({ t, d, targetUid, isModeratorMode, isMasterAdmin, uiScale, setUiScale, activeSection = 'dashboard' }) {
     const { user } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
         saving, activeMessage,
         handleSave, sendTestOverlay, hideOverlay,
     } = useSettingsData({ targetUid, isModeratorMode });
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     const previewMessage = { id: 'preview', username: user?.displayName || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: user?.photoURL, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
     const canHide = activeMessage && (user?.uid === effectiveUid || isModeratorMode);
@@ -179,6 +181,26 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <ToggleSwitch t={t} checked={settings.dashboardMenubar} onChange={v => updateAppearanceSetting('dashboardMenubar', v)} label="Show Menu Bar" description="Keep every action reachable from File, Overlay, Chat, Window and Help." />
                     <ToggleSwitch t={t} checked={settings.dashboardStatusbar} onChange={v => updateAppearanceSetting('dashboardStatusbar', v)} label="Show Status Bar" description="Connection, latency, queue depth and overlay visibility along the bottom edge." />
                 </div>
+
+                {/* Hidden in Host Mode (this deletes the signed-in person's own
+                    account, not whichever channel is currently being viewed)
+                    and for the master admin (see DeleteAccountModal/route -
+                    that account can't self-delete without stranding the app). */}
+                {!isModeratorMode && !isMasterAdmin && (
+                    <div style={{ padding: 12, border: '1px solid var(--danger)', background: 'rgba(239,68,68,.06)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, color: 'var(--danger)' }}>Danger Zone</div>
+                            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.faint }}>Permanently delete your account and all associated data.</div>
+                        </div>
+                        <button type="button" onClick={() => setShowDeleteModal(true)} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px', flex: 'none', appearance: 'none', cursor: 'pointer',
+                            border: '1px solid var(--danger)', background: 'transparent', color: 'var(--danger)',
+                            fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, ...bevel(t),
+                        }}>
+                            <Trash2 size={13} />Delete My Account
+                        </button>
+                    </div>
+                )}
                 </>}
 
                 {activeSection === 'overlay' && <>
@@ -253,6 +275,8 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, uiScale
                     <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: t.faint }}>Drag the sliders under Overlay appearance to move this — they were moved off this panel since they were easy to miss below the preview.</span>
                 </Pane>
             </ResizableWidth>
+
+            <DeleteAccountModal t={t} open={showDeleteModal} onClose={() => setShowDeleteModal(false)} />
         </div>
     );
 }

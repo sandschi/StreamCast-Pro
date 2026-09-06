@@ -1,4 +1,4 @@
-name: Daily Firestore History Cleanup
+name: Daily Firestore Cleanup
 
 on:
   schedule:
@@ -20,7 +20,12 @@ jobs:
       - name: Install dependencies
         run: npm install firebase-admin
 
-      - name: Run cleanup script
+      - name: Run history cleanup script
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/cleanup-history.js
+
+      - name: Run karaoke requests cleanup script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/cleanup-karaoke-requests.js
