@@ -251,12 +251,36 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
 
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <div style={{ width: 100, flex: 'none' }}>
-                                <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                        {/* flex-wrap, not a rigid row - this column can shrink to
+                            210px (see Overlay visibility below, same reasoning in
+                            its own comment). Auto-sort sits alongside Party ID/Save
+                            at comfortable widths and drops to its own line once it
+                            can't fit. Broadcaster/master-admin only - firestore.rules
+                            only lets the owner write karafunAutoSortEnabled (same
+                            owner-only default the Karaoke Access toggles above rely
+                            on), so a mod would just get permission-denied. */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 'none' }}>
+                                <div style={{ width: 100, flex: 'none' }}>
+                                    <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                                </div>
+                                <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save'}</ToolBtn>
                             </div>
-                            <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save'}</ToolBtn>
+                            {(userRole === 'broadcaster' || isMasterAdmin) && (
+                                <div style={{ flex: '1 1 190px', minWidth: 190 }}>
+                                    <ToggleSwitch t={t} checked={!!userSettings?.karafunAutoSortEnabled} onChange={(v) => handleToggleSetting('karafunAutoSortEnabled', v)} label="Auto-sort" description="Round-robin reorder by rotation." />
+                                </div>
+                            )}
                         </div>
+                        {/* The relay flips this same toggle off itself if auto-sort
+                            trips its circuit breaker (see relay/src/autoSort.js) -
+                            surfacing why beats the silent disable this used to be a
+                            code comment about (docs/karafun-relay-design.md §5). */}
+                        {!userSettings?.karafunAutoSortEnabled && userSettings?.karafunAutoSortDisabledReason && (
+                            <div style={{ marginTop: 6, ...tiny(t), color: 'var(--danger)' }}>
+                                Auto-sort turned off: {userSettings.karafunAutoSortDisabledReason}
+                            </div>
+                        )}
                     </Field>
                     <Field t={t} label="Overlay visibility">
                         {/* This inspector column can be as narrow as 210px (ResizableWidth

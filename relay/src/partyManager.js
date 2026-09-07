@@ -4,6 +4,7 @@ const { getDb, admin } = require('./firebaseAdmin');
 const { acquireLease, renewLease, releaseLease, LEASE_RENEW_INTERVAL_MS } = require('./lease');
 const { KaraFunConnection } = require('./karafunConnection');
 const { CommandProcessor } = require('./commandProcessor');
+const { AutoSort } = require('./autoSort');
 
 const DISCOVERY_INTERVAL_MS = 30_000;
 // Matches useKaraokeData.js's own ">90s since lastSeen = offline" threshold
@@ -132,6 +133,13 @@ class PartyManager {
         const cmdProcessor = new CommandProcessor({ db: this.db, userId, connection: conn });
         cmdProcessor.start();
 
+        // Only ever acts while karafunAutoSortEnabled is set (checked every
+        // tick, off by default) - see docs/karafun-relay-design.md §5/§9.
+        // Started unconditionally alongside the connection like
+        // cmdProcessor above; it no-ops when the toggle is off.
+        const autoSort = new AutoSort({ db: this.db, userId, connection: conn });
+        autoSort.start();
+
         const renewTimer = setInterval(() => {
             renewLease(this.db, userId, instanceId).catch(async (err) => {
                 console.error(`[partyManager] lost lease for ${userId}, stopping connection:`, err.message);
@@ -139,7 +147,7 @@ class PartyManager {
             });
         }, LEASE_RENEW_INTERVAL_MS);
 
-        this.connections.set(userId, { conn, cmdProcessor, renewTimer, lastPresenceAt: Date.now() });
+        this.connections.set(userId, { conn, cmdProcessor, autoSort, renewTimer, lastPresenceAt: Date.now() });
         console.log(`[partyManager] started party ${cfg.partyId} for user ${userId}`);
     }
 
@@ -148,6 +156,7 @@ class PartyManager {
         if (!entry) return;
 
         clearInterval(entry.renewTimer);
+        entry.autoSort.stop();
         entry.cmdProcessor.stop();
         entry.conn.stop();
         this.connections.delete(userId);
