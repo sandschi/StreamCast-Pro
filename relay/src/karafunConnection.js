@@ -40,6 +40,13 @@ class KaraFunConnection {
         this.dirty = false;
         this.retryTimer = null;
         this.stopped = false;
+        // Tracks the transport-level connection only (fires on 'connect'),
+        // not "has KaraFun confirmed this party is real" - a
+        // 'serverUnreacheable' can still follow. Good enough for gating
+        // command emits: the existing client hook's own emit() never waited
+        // for anything stronger than this either (see useKaraFunData.js's
+        // canControl comment).
+        this.connected = false;
     }
 
     start() {
@@ -58,6 +65,7 @@ class KaraFunConnection {
         });
 
         this.socket.on('connect', () => {
+            this.connected = true;
             console.log(`[karafun:${this.userId}] connected to party ${this.partyId}, authenticating as ${loginName}`);
             this.socket.emit('authenticate', {
                 login: loginName,
@@ -74,6 +82,7 @@ class KaraFunConnection {
 
         this.socket.on('serverUnreacheable', () => {
             console.error(`[karafun:${this.userId}] party unreachable: ${this.partyId}, retrying in ${UNREACHABLE_RETRY_MS}ms`);
+            this.connected = false;
             this.socket.disconnect();
             this.retryTimer = setTimeout(() => {
                 this.retryTimer = null;
@@ -82,6 +91,7 @@ class KaraFunConnection {
         });
 
         this.socket.on('disconnect', (reason) => {
+            this.connected = false;
             console.log(`[karafun:${this.userId}] disconnected: ${reason}`);
         });
 
@@ -129,6 +139,18 @@ class KaraFunConnection {
         });
     }
 
+    isConnected() {
+        return this.connected && !!this.socket;
+    }
+
+    // Used by CommandProcessor to actually execute an already-authorized
+    // command (see relay/src/commandProcessor.js) - this class owns the one
+    // socket a party's commands are allowed to go through.
+    emit(event, payload) {
+        if (!this.isConnected()) throw new Error('not connected to KaraFun');
+        this.socket.emit(event, payload);
+    }
+
     _scheduleWrite() {
         this.dirty = true;
         if (this.writeTimer) return;
@@ -148,6 +170,7 @@ class KaraFunConnection {
 
     stop() {
         this.stopped = true;
+        this.connected = false;
         if (this.writeTimer) {
             clearTimeout(this.writeTimer);
             this.writeTimer = null;

@@ -3,6 +3,7 @@
 const { getDb, admin } = require('./firebaseAdmin');
 const { acquireLease, renewLease, releaseLease, LEASE_RENEW_INTERVAL_MS } = require('./lease');
 const { KaraFunConnection } = require('./karafunConnection');
+const { CommandProcessor } = require('./commandProcessor');
 
 const DISCOVERY_INTERVAL_MS = 30_000;
 // Matches useKaraokeData.js's own ">90s since lastSeen = offline" threshold
@@ -103,6 +104,14 @@ class PartyManager {
         const conn = new KaraFunConnection({ db: this.db, userId, partyId: cfg.partyId });
         conn.start();
 
+        // One consumer of this party's command queue - see
+        // docs/karafun-relay-design.md §3.1 step 5 and
+        // relay/src/commandProcessor.js's own comment for why this is what
+        // actually fixes the "DISABLED AGAIN" incident's multiple-poller
+        // suspect (§0).
+        const cmdProcessor = new CommandProcessor({ db: this.db, userId, connection: conn });
+        cmdProcessor.start();
+
         const renewTimer = setInterval(() => {
             renewLease(this.db, userId, instanceId).catch(async (err) => {
                 console.error(`[partyManager] lost lease for ${userId}, stopping connection:`, err.message);
@@ -110,7 +119,7 @@ class PartyManager {
             });
         }, LEASE_RENEW_INTERVAL_MS);
 
-        this.connections.set(userId, { conn, renewTimer, lastPresenceAt: Date.now() });
+        this.connections.set(userId, { conn, cmdProcessor, renewTimer, lastPresenceAt: Date.now() });
         console.log(`[partyManager] started party ${cfg.partyId} for user ${userId}`);
     }
 
@@ -119,6 +128,7 @@ class PartyManager {
         if (!entry) return;
 
         clearInterval(entry.renewTimer);
+        entry.cmdProcessor.stop();
         entry.conn.stop();
         this.connections.delete(userId);
 

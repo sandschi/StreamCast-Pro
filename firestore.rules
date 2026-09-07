@@ -288,6 +288,21 @@ service cloud.firestore {
         allow read: if true;
         allow write: if false;
       }
+
+      // Command queue for KaraFun playback control - see
+      // docs/karafun-relay-design.md §3.1/§6. Only
+      // src/app/api/karafun/[userId]/command/route.js (Admin SDK, real
+      // role/turn/ownership checks) ever writes a command doc; the relay
+      // (also Admin SDK) is the only thing that ever updates one to
+      // done/failed. Read is scoped to mods/broadcaster for the optimistic-
+      // UI listener in §3.1 step 7 - a plain singer/viewer isn't meant to
+      // see the whole channel's command history, just whether their own
+      // request (surfaced client-side from the route's response) went
+      // through.
+      match /karafun_commands/{commandId} {
+        allow read: if isChannelModerator(userId);
+        allow write: if false;
+      }
     }
 
     // Twitch-username -> uid lookup so karaoke.sandschi.xyz/{username} (see #27)
