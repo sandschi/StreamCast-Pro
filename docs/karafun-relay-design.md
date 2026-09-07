@@ -291,47 +291,69 @@ earlier would break the current overlay before its replacement ships.
 
 Vercel (the Next.js app's implied host, given `next.config.mjs`/CLAUDE.md's serverless framing)
 doesn't support long-lived outbound socket.io connections in its function runtime, so this has to
-be a separate deployment, not a route. Options, in recommended order:
+be a separate deployment, not a route.
 
-1. **Self-hosted Dokploy, always-on container. (Recommended.)** The relay is exactly the shape
-   Dokploy is built for — a plain Docker container running a persistent Node process, deployed
-   from the Git repo like anything else on it, Traefik giving it HTTPS for free. Since it's your
-   own server, there's no per-vCPU-second/per-request meter running (§8.1 below covered what that
-   would cost on Cloud Run — a few dollars a month at worst, but here it's just $0 marginal cost on
-   capacity you already pay for), so the scale-to-zero machinery the other two options need
-   (§8.2/8.3's wake-on-HTTP-request dance) simply isn't needed — the process can just stay up
-   continuously. That also removes the cold-start-on-first-command latency and the
-   `/connect/{userId}` wake endpoint entirely: the relay is always listening, `karafunEnabled`
-   dashboards can hit it directly, and the per-party socket still opens/closes lazily around
-   individual streams exactly as described in §4 — that part isn't about cost, it's about not
-   holding pointless connections open against KaraFun's servers, so it's worth keeping regardless
-   of host. Firebase Admin credentials are the same `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/
-   `FIREBASE_PRIVATE_KEY` triple `firebase-admin.js` already handles for Vercel, just set as env
-   vars in Dokploy's dashboard instead — no new credential-handling risk, since it's the same
-   pattern already proven to work for the main app. Before committing: confirm the box has spare
-   CPU/RAM (a handful of socket.io connections plus light JSON processing is a genuinely small
-   footprint) and that Dokploy's restart policy brings the container back up automatically after a
-   host reboot or a crash, same as you'd get for free from a managed platform.
-2. **Cloud Run (v2), `min-instances: 0`, `max-instances: 1`.** Only worth it if there's a reason
-   *not* to put this on the Dokploy box (e.g. wanting it isolated from your other self-hosted
-   services, or not wanting the relay's uptime tied to that box's uptime). Scales to zero between
-   streams and wakes on an HTTP hit to a `/connect/{userId}` endpoint that the Next.js API route
-   calls whenever it writes a command (§3.1) or a broadcaster opens the KaraFun dashboard pane —
-   see the pricing estimate in the earlier discussion of this doc for what that costs in practice
-   (roughly free to ~$5/month at this app's scale). Firebase projects already run on GCP, so this
-   service can use a GCP service account / Workload Identity directly instead of the
-   `FIREBASE_PRIVATE_KEY` env var, sidestepping the PEM-mangling problem `firebase-admin.js` exists
-   to work around. `max-instances: 1` makes the §4 lease belt-and-suspenders rather than
-   load-bearing; still worth keeping for the deploy-overlap window.
-3. **Fly.io or Render, "auto stop/start" machine.** Same scale-to-zero-and-wake-on-request idea as
-   Cloud Run, simpler mental model (just a Node process, no Cloud Run billing quirks to reason
-   about), but needs the same three-env-var credential setup as option 2 without the
-   same-GCP-project shortcut. Reasonable if there's a reason to avoid both Dokploy and GCP.
+**Decision: self-hosted Dokploy, always-on container, on the existing 8 vCPU / 16GB RAM / 400GB
+SSD box.** Confirmed against that box's actual Dokploy usage graphs (not just theoretical specs):
+1.86% CPU used, 8.98GiB/16GiB RAM used (~7GB free), 57GB/394GB disk used. The relay's realistic
+footprint — a Node process holding a handful of socket.io connections, maybe 50-150MB RAM, close
+to zero sustained CPU — is a rounding error against ~7GB of free RAM and 8 essentially-idle vCores.
+No capacity concern.
 
-Recommendation: **your own Dokploy**, since it's infrastructure you already run and pay for — the
-relay's resource footprint is small enough that it shouldn't compete meaningfully with whatever
-else is on that box. Fall back to Cloud Run (scaled to zero) only if you'd rather keep this
-isolated from your own server's uptime/capacity.
+Deployment shape: a plain Docker container running the relay's persistent Node process, deployed
+from the repo the same way anything else on that Dokploy instance is, Traefik giving it HTTPS for
+free. Because it's infrastructure already paid for, there's no per-vCPU-second/per-request meter
+running, so the scale-to-zero machinery a serverless host would need (wake-on-HTTP-request, cold
+starts, a `/connect/{userId}` wake endpoint) isn't needed at all — the process just stays up
+continuously. The per-party *KaraFun* socket still opens/closes lazily around individual streams
+exactly as described in §4 — that's about not holding pointless connections open against KaraFun's
+servers, unrelated to hosting cost, so it stays regardless of host. Firebase Admin credentials are
+the same `FIREBASE_PROJECT_ID`/`FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` triple
+`firebase-admin.js` already handles for Vercel, just set as env vars in Dokploy's dashboard instead
+— no new credential-handling risk, it's the same pattern already proven to work for the main app.
+Two things worth confirming once the container's actually deployed rather than assumed: Dokploy's
+restart policy brings it back up automatically after a host reboot or a process crash, and the
+Docker disk usage graph (currently 24.78GB of images/containers/volumes) has room for one more
+small image — it clearly does, but worth a glance after the first deploy.
+
+Cloud Run (v2, scaled to zero) or a Fly.io/Render "auto stop/start" machine remain fine fallbacks
+*only* if there's ever a reason to want this isolated from that box specifically — e.g. wanting the
+relay's uptime independent of whatever else runs there, or the box's own resource picture changing
+materially from what's confirmed above. Nothing in the current picture calls for that; the pricing
+math and setup for those options is preserved above in case it's ever needed.
+
+### 8.1 Anything else that should move to Dokploy while we're at it?
+
+Went through the rest of the architecture (per CLAUDE.md) looking for other pieces with the same
+"needs a persistent process, not a stateless request" shape that got this relay off of serverless.
+Short answer: no — nothing else in this app currently has that shape, so nothing else is a forced
+move the way the relay is. For the record, what was checked and why it stays put:
+
+- **The Twitch chat connection (`tmi.js`, dashboard, client-side)** looks superficially similar
+  (many clients, one external realtime service) but isn't the same problem: each browser tab
+  connects to Twitch chat *as that signed-in user*, read-only, with their own OAuth-scoped session
+  — there's no shared mutable state multiple tabs could race over, the way multiple mods' sockets
+  racing `moveInQueue` calls on one shared KaraFun party was. Moving chat behind a relay would trade
+  a working per-user model for a shared one with no corresponding problem to fix. Leave it.
+- **`src/app/api/overlay/[userId]/route.js`** (the existing remote-control HTTP API) and the new
+  `/api/karafun/[userId]/command` route (§3.1) are both single-request, single-Firestore-write
+  operations with no need to hold a connection open — exactly what Vercel functions are for. No
+  reason to move.
+- **Cloud Functions (`functions/index.js`, `notifyNewSignup`)** — event-triggered, short-lived,
+  fires once per new signup. Serverless-appropriate as-is. Separately, CLAUDE.md already flags that
+  it overlaps with `src/app/api/notify-signup/route.js` (both post the same Discord notification,
+  one Firestore-triggered, one client-triggered) — that's worth deduplicating at some point, and
+  *if* that consolidation ever happens, a single always-on Dokploy-hosted Firestore listener would
+  be a clean place to put the one surviving implementation instead of two. But that's a separate
+  cleanup from this relay work, not something this rewrite should pull in.
+- **`scripts/cleanup-history.js`** (nightly Firestore purge, run via GitHub Actions cron per
+  `.github/workflows/cleanup-history.yml`) — a scheduled batch job, not a persistent connection.
+  GitHub Actions cron already does this for free with no maintenance burden; moving it to Dokploy
+  would just mean managing one more cron schedule and one more copy of Firebase Admin credentials
+  for no functional gain. Not worth it.
+
+So: this relay is the one piece of the app that actually needed what Dokploy uniquely offers here
+(a place to keep a socket open). Nothing else currently does.
 
 ## 9. Phased implementation plan
 
