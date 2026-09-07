@@ -43,13 +43,25 @@ async function buildNameFor(db, userId) {
 }
 
 // Verbatim port of the dead client-side v2 algorithm (KaraFunPane.js, see
-// git history) - round-robin by rotation round, cursor derived from KaraFun's
-// own live "who's actually singing" status, single move per tick recomputed
-// fresh from the latest queue, never targets whatever's currently playing.
-// Returns { queueId, from, to } for the one move needed to converge upcoming
-// toward the desired order, or null if already in sync / nothing to do.
-function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor }) {
-    if (!upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return null;
+// git history), with one real fix found by live-testing a skip against an
+// actual two-singer rotation: the original always derived the cursor from
+// currentSong.singer alone, defaulting to rotationOrder[0] whenever nothing
+// is currently playing. KaraFun doesn't auto-start the next song after a
+// skip - there's a real gap (currentSong null) between "someone's turn just
+// ended" and "someone pressed Play on the next one" - so that default
+// silently favored whoever's first in rotation on every single gap, not
+// just on cold start. Skip person B, and instead of B's turn passing to
+// whoever's next, the algorithm would forget B ever went and hand priority
+// back to rotationOrder[0]. Fixed by threading `lastActiveUid` through:
+// only update the remembered active singer when KaraFun actually reports
+// someone playing, and keep using the last real one across the gap.
+// Returns { move, activeUid } - move is { queueId, from, to } or null if
+// already in sync / nothing to do; activeUid is what the caller should pass
+// back in as lastActiveUid on the next tick.
+function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, lastActiveUid }) {
+    if (!upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) {
+        return { move: null, activeUid: lastActiveUid };
+    }
 
     const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
     const playingIdx = upcoming.findIndex(isPlaying);
@@ -59,7 +71,9 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor }) {
         if (!primary) return -1;
         return rotationOrder.findIndex((uid) => nameFor(uid) === primary);
     };
-    const activeIdx = ownerIndexOf(currentSong?.singer);
+    const liveActiveIdx = ownerIndexOf(currentSong?.singer);
+    const activeUid = liveActiveIdx !== -1 ? rotationOrder[liveActiveIdx] : lastActiveUid;
+    const activeIdx = activeUid ? rotationOrder.indexOf(activeUid) : -1;
     const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
 
     const seenRounds = {};
@@ -80,12 +94,12 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor }) {
     if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
 
     const firstMismatch = desiredIds.findIndex((queueId, i) => currentIds[i] !== queueId);
-    if (firstMismatch === -1) return null;
+    if (firstMismatch === -1) return { move: null, activeUid };
 
     const queueId = desiredIds[firstMismatch];
     const from = currentIds.indexOf(queueId);
     const to = firstMismatch;
-    return { queueId, from, to };
+    return { move: { queueId, from, to }, activeUid };
 }
 
 // Runs the ported algorithm on a fixed interval for one party, only while
@@ -116,6 +130,13 @@ class AutoSort {
         // never specific to multiple pollers).
         this.lastIssuedSignature = null;
         this.stallCount = 0;
+        // Who KaraFun last actually reported as playing, kept across the gap
+        // between songs (currentSong null) - see computeDesiredMove's own
+        // comment for why the cursor can't just reset to rotationOrder[0]
+        // there. Lost on a relay restart, same as every other in-memory
+        // piece of this class - acceptable, bounded, and no worse than the
+        // lease/connection state elsewhere already losing its memory too.
+        this.lastActiveUid = null;
     }
 
     start() {
@@ -140,7 +161,8 @@ class AutoSort {
         const { upcoming, currentSong } = this.connection.state;
         const nameFor = await buildNameFor(this.db, this.userId);
 
-        const move = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor });
+        const { move, activeUid } = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, lastActiveUid: this.lastActiveUid });
+        this.lastActiveUid = activeUid;
         if (!move) {
             this.pendingSignature = null;
             return;
