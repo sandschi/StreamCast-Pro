@@ -74,6 +74,10 @@ class KaraFunConnection {
                 app: 'karafun',
                 socket_id: null,
             }, null);
+            // Mirrored for the dashboard/overlay's own "KaraFun Live" vs.
+            // "Unreachable" status (see StatusBar.js's karaFunStatus) - they
+            // no longer hold a socket of their own to observe this from.
+            this._scheduleWrite();
         });
 
         this.socket.on('connect_error', (err) => {
@@ -83,6 +87,7 @@ class KaraFunConnection {
         this.socket.on('serverUnreacheable', () => {
             console.error(`[karafun:${this.userId}] party unreachable: ${this.partyId}, retrying in ${UNREACHABLE_RETRY_MS}ms`);
             this.connected = false;
+            this._scheduleWrite();
             this.socket.disconnect();
             this.retryTimer = setTimeout(() => {
                 this.retryTimer = null;
@@ -92,6 +97,7 @@ class KaraFunConnection {
 
         this.socket.on('disconnect', (reason) => {
             this.connected = false;
+            this._scheduleWrite();
             console.log(`[karafun:${this.userId}] disconnected: ${reason}`);
         });
 
@@ -165,7 +171,7 @@ class KaraFunConnection {
         this.dirty = false;
 
         const ref = this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live');
-        await ref.set({ ...this.state, updatedAt: Date.now() });
+        await ref.set({ ...this.state, connected: this.connected, updatedAt: Date.now() });
     }
 
     stop() {
@@ -183,6 +189,11 @@ class KaraFunConnection {
             this.socket.disconnect();
             this.socket = null;
         }
+        // Best-effort final write so a torn-down party doesn't leave
+        // connected:true mirrored forever - the debounced write above was
+        // just cancelled, not flushed.
+        this.dirty = true;
+        this._flush().catch((err) => console.error(`[karafun:${this.userId}] final flush failed`, err));
     }
 }
 

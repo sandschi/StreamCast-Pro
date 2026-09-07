@@ -40,20 +40,30 @@ class PartyManager {
     }
 
     async tick() {
-        const activeUserIds = await this._findActiveBroadcasters();
+        const activeBroadcasters = await this._findActiveBroadcasters();
         const now = Date.now();
 
-        for (const userId of activeUserIds) {
+        for (const [userId, cfg] of activeBroadcasters) {
             const entry = this.connections.get(userId);
-            if (entry) {
-                entry.lastPresenceAt = now;
-            } else {
+            if (!entry) {
+                await this._maybeStartParty(userId);
+                continue;
+            }
+            entry.lastPresenceAt = now;
+            // A broadcaster can change Party ID while already live (see
+            // useKaraFunData.js's handleSavePartyId) - discovery alone
+            // wouldn't notice, since this userId is already in
+            // this.connections and the branch above only fires for a
+            // userId that isn't tracked yet.
+            if (entry.conn.partyId !== cfg.partyId) {
+                console.log(`[partyManager] party ID changed for ${userId} (${entry.conn.partyId} -> ${cfg.partyId}), restarting`);
+                await this._stopParty(userId);
                 await this._maybeStartParty(userId);
             }
         }
 
         for (const [userId, entry] of this.connections.entries()) {
-            if (!activeUserIds.has(userId) && now - entry.lastPresenceAt > IDLE_CLOSE_MS) {
+            if (!activeBroadcasters.has(userId) && now - entry.lastPresenceAt > IDLE_CLOSE_MS) {
                 await this._stopParty(userId);
             }
         }
@@ -62,7 +72,8 @@ class PartyManager {
     // Broadcasters with a fresh presence heartbeat under their own
     // users/{userId}/online subcollection (written by anyone with that
     // broadcaster's dashboard open - see dashboard/page.js), cross-checked
-    // against karafunEnabled + a saved party ID.
+    // against karafunEnabled + a saved party ID. Returns a Map so tick() can
+    // reuse the resolved config instead of re-deriving it.
     async _findActiveBroadcasters() {
         const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - PRESENCE_STALE_MS);
         const snap = await this.db.collectionGroup('online').where('lastSeen', '>', cutoff).get();
@@ -74,19 +85,28 @@ class PartyManager {
             if (userId) candidateUserIds.add(userId);
         }
 
-        const active = new Set();
+        const active = new Map();
         await Promise.all([...candidateUserIds].map(async (userId) => {
             const cfg = await this._getKaraFunConfig(userId);
-            if (cfg) active.add(userId);
+            if (cfg) active.set(userId, cfg);
         }));
         return active;
     }
 
+    // karafunEnabled stays a public settings/config toggle; karafunPartyId
+    // lives in private/config (owner-only) - see
+    // docs/karafun-relay-design.md §6. The Admin SDK reads both regardless
+    // of those client-facing rules; this split is about what a client is
+    // allowed to read, not what the relay needs.
     async _getKaraFunConfig(userId) {
-        const snap = await this.db.collection('users').doc(userId).collection('settings').doc('config').get();
-        const cfg = snap.data();
-        if (cfg?.karafunEnabled && cfg?.karafunPartyId) {
-            return { partyId: cfg.karafunPartyId };
+        const [settingsSnap, privateSnap] = await Promise.all([
+            this.db.collection('users').doc(userId).collection('settings').doc('config').get(),
+            this.db.collection('users').doc(userId).collection('private').doc('config').get(),
+        ]);
+        const karafunEnabled = settingsSnap.data()?.karafunEnabled;
+        const partyId = privateSnap.data()?.karafunPartyId;
+        if (karafunEnabled && partyId) {
+            return { partyId };
         }
         return null;
     }

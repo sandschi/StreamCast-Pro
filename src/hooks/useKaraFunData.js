@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import io from 'socket.io-client';
-import posthog from 'posthog-js';
+import { useEffect, useState } from 'react';
+import { auth, db } from '@/lib/firebase';
+import { doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 // Public, unauthenticated - identical to what the real karafun.com/{partyId}
 // remote client itself calls, confirmed by driving that page directly and
-// reading its network traffic (see #27). No backend proxy needed.
+// reading its network traffic (see #27). No backend proxy needed - stays
+// direct per docs/karafun-relay-design.md §0/§6, unlike the queue/status/
+// command paths below.
 export async function searchKaraFunSongs(partyId, query) {
     if (!partyId || !query) return [];
     const res = await fetch(`https://www.karafun.com/${partyId}/?type=search&q=${encodeURIComponent(query)}&types=karaoke`);
@@ -16,59 +16,43 @@ export async function searchKaraFunSongs(partyId, query) {
     return res.json();
 }
 
-// Extracted verbatim from the original inline logic in components/dashboard/KaraFun.js.
-export function useKaraFunData({ targetUid, userSettings, userRole, isMasterAdmin }) {
+// This used to open its own socket.io connection straight to KaraFun (see
+// git history) - closed issue #29's real gap: canControl was a client-side-
+// only guard, so a determined user could call any of the emit functions
+// below on someone else's turn/queue entry with nothing to stop them. Now
+// this only ever reads users/{targetUid}/karafun_state/live (mirrored by
+// relay/, the one process that still holds a real KaraFun socket) and sends
+// commands through /api/karafun/[userId]/command, which re-derives role/
+// turn/ownership server-side instead of trusting this hook's caller - see
+// docs/karafun-relay-design.md §3/§7.
+export function useKaraFunData({ targetUid, userSettings, privateConfig }) {
     const [queueData, setQueueData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [lastUpdated, setLastUpdated] = useState(null);
-    // Distinct from lastUpdated, which never gets cleared - a real socket
-    // drop only fires 'disconnect', not necessarily 'serverUnreacheable' or
-    // 'connect_error' (those are about never having connected at all, or the
-    // party itself being unreachable), so lastUpdated alone can't tell a
-    // caller "is this live right now" without going stale after a mid-session
-    // drop. Set true only once a real payload has arrived (matching
-    // hasCapturedConnected below), false on any disconnect/reconnect attempt.
+    // Mirrors the relay's own live KaraFun connection state (see
+    // karafunConnection.js's `connected` field) - not this hook's own
+    // connection, since it no longer has one.
     const [connected, setConnected] = useState(false);
-    const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
+    const [tempPartyId, setTempPartyId] = useState(privateConfig?.karafunPartyId || '');
     const [isSavingId, setIsSavingId] = useState(false);
-    const [reconnectKey, setReconnectKey] = useState(0);
-    // Emitters below (queueAdd/queueMove/... - see #27) read from this ref
-    // rather than closing over the effect's local `socket` const, since they're
-    // called from outside that effect and need whichever connection is current.
-    const socketRef = useRef(null);
 
-    const handleReconnect = () => {
-        setQueueData(null);
-        setLastUpdated(null);
-        setConnected(false);
-        setError(null);
-        setReconnectKey(k => k + 1);
-    };
-
-    const partyId = userSettings?.karafunPartyId;
+    // Moved from settings/config (public read) to private/config (owner-only)
+    // per docs/karafun-relay-design.md §6 - once the relay is the only thing
+    // that ever dials KaraFun directly, the overlay has no more use for a
+    // public party ID, and the dashboard already has private/config access
+    // as the signed-in owner.
+    const partyId = privateConfig?.karafunPartyId;
 
     useEffect(() => {
-        setTempPartyId(userSettings?.karafunPartyId || '');
-    }, [userSettings?.karafunPartyId]);
+        setTempPartyId(privateConfig?.karafunPartyId || '');
+    }, [privateConfig?.karafunPartyId]);
 
     const handleSavePartyId = async () => {
         if (!targetUid || !tempPartyId) return;
         setIsSavingId(true);
         try {
-            const configRef = doc(db, 'users', targetUid, 'settings', 'config');
-            await setDoc(configRef, { karafunPartyId: tempPartyId }, { merge: true });
-            // Force a fresh connection attempt even when tempPartyId is
-            // unchanged from what's already stored (e.g. saving again after
-            // actually starting the KaraFun party, having typed the same ID
-            // earlier while it was down) - the connect effect below only
-            // re-runs when `partyId` itself changes, so an unchanged value
-            // would otherwise leave last attempt's error/dead socket in
-            // place until a full page reload.
-            handleReconnect();
+            const privateRef = doc(db, 'users', targetUid, 'private', 'config');
+            await setDoc(privateRef, { karafunPartyId: tempPartyId }, { merge: true });
         } catch (err) {
             console.error("Error saving Party ID:", err);
-            setError("Failed to save Party ID. Check permissions.");
         } finally {
             setIsSavingId(false);
         }
@@ -105,209 +89,70 @@ export function useKaraFunData({ targetUid, userSettings, userRole, isMasterAdmi
     };
 
     useEffect(() => {
-        if (!partyId || !userSettings?.karafunEnabled) {
-            // loading otherwise stays stuck at its initial true forever here -
-            // nothing else ever sets it false, since no socket connection is
-            // even attempted without a Party ID, so the header action stayed
-            // disabled and permanently labeled "Connecting..." instead of
-            // reflecting the real "no Party ID set" state.
-            setLoading(false);
+        if (!targetUid || !userSettings?.karafunEnabled) {
+            setQueueData(null);
             setConnected(false);
             return;
         }
 
-        setLoading(true);
-        setError(null);
-
-        // Unique login per session — avoids duplicate-name rejection on reconnects
-        const suffix = Math.floor(1000 + Math.random() * 9000);
-        const loginName = `StreamCastPro${suffix}`;
-        // 'connect' only confirms the transport-level socket connected, not that
-        // this is actually a valid KaraFun party (serverUnreacheable can still
-        // follow it) - captured once, on the first real payload proving the
-        // authenticated connection actually works.
-        let hasCapturedConnected = false;
-        const captureConnectedOnce = () => {
-            setConnected(true);
-            if (hasCapturedConnected) return;
-            hasCapturedConnected = true;
-            posthog.capture('karafun_connected');
-        };
-
-        // KaraFun uses Socket.IO v2 at https://www.karafun.com
-        // The party is identified by the query parameter: remote=kf[partyId]
-        const socket = io('https://www.karafun.com', {
-            query: { remote: `kf${partyId}` },
-            transports: ['polling', 'websocket'],
-            forceNew: true,
-            reconnection: true,
-            reconnectionDelay: 3000,
-            reconnectionAttempts: Infinity,
-        });
-        socketRef.current = socket;
-
-        socket.on('connect', () => {
-            console.log('KaraFun Sync: Connected to party', partyId);
-            setError(null);
-
-            // KaraFun requires an authenticate event before it pushes any data
-            console.log('KaraFun Sync: Authenticating as', loginName);
-            socket.emit('authenticate', {
-                login: loginName,
-                channel: partyId,
-                role: 'participant',
-                app: 'karafun',
-                socket_id: null,
-            }, null);
-        });
-
-        socket.on('connect_error', (err) => {
-            console.error('KaraFun Sync: Connection error', err);
-            setError('Connection error. Retrying...');
-            setConnected(false);
-        });
-
-        socket.on('serverUnreacheable', () => {
-            console.error('KaraFun Sync: Party unreachable', partyId);
-            setError('Party unreachable. Make sure the KaraFun app is open and connected to this party. You can try restarting the Party in the Settings (Turn Remote Off and On again) or restarting the KaraFun App.');
-            setLoading(false);
-            setConnected(false);
-        });
-
-        socket.on('disconnect', (reason) => {
-            console.log('KaraFun Sync: Disconnected -', reason);
-            setConnected(false);
-        });
-
-        // Real-time queue updates
-        // Real queue items have top-level: { title, artist, singer, songId, queueId, status }
-        socket.on('queue', (items) => {
-            console.log('KaraFun Sync: Queue received', items);
-            captureConnectedOnce();
-            const transformed = (items || []).map(item => ({
-                title: item.title || 'Unknown',
-                artist: item.artist || '',
-                singer: item.singer || '',
-                // Needed to target queueMove/queueRemove at a specific entry (see
-                // #27) - not used by the read-only display, only by KaraokePane's
-                // mod reorder panel.
-                queueId: item.queueId,
-            }));
-            setQueueData(prev => ({
-                ...prev,
-                upcoming: transformed,
-                // The authoritative "is anything left to play at all" signal -
-                // status's own 'idle' is ambiguous (also means "paused, still
-                // loaded") and can arrive before OR after this same event on a
-                // real party (verified live: Skip fires status:'idle' first,
-                // queue:[] a moment later), so checking prev.upcoming inside
-                // the status handler below races and can miss this. Checking
-                // the queue's own fresh length here instead doesn't.
-                currentSong: transformed.length === 0 ? null : (prev?.currentSong ?? null),
-                timestamp: Date.now(),
-            }));
-            setLastUpdated(new Date());
-            setLoading(false);
-            setError(null);
-        });
-
-        // Real-time playback status
-        socket.on('status', (status) => {
-            console.log('KaraFun Sync: Status received (full):', JSON.stringify(status));
-            captureConnectedOnce();
-            setLoading(false);
-            setError(null);
-            setLastUpdated(new Date());
-
-            // Resolve current song from whichever field KaraFun uses when playing
-            const cur = status?.songPlaying || status?.current || null;
-            if (cur) {
-                setQueueData(prev => ({
-                    ...prev,
-                    currentSong: {
-                        title: cur.title || cur.song?.title || 'Unknown',
-                        artist: cur.artist || cur.song?.artist || '',
-                        singer: cur.singer || cur.singerName || cur.options?.singer || '',
-                    },
-                    playState: status.state,
-                }));
+        const stateRef = doc(db, 'users', targetUid, 'karafun_state', 'live');
+        const unsubscribe = onSnapshot(stateRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                setQueueData({ upcoming: data.upcoming || [], currentSong: data.currentSong || null, playState: data.playState });
+                setConnected(!!data.connected);
             } else {
-                setQueueData(prev => {
-                    // 'idle' is ambiguous by itself - KaraFun reports it both when a
-                    // song is loaded but paused (keep showing it - see the Play/Pause
-                    // toggle) AND when the queue has fully emptied with nothing loaded
-                    // at all (the last song finished, no 'infoscreen'/'stop' in
-                    // between). The 'queue' handler above is the authoritative fix for
-                    // that (its own fresh queue length, not this stale closure) since a
-                    // real party can send this 'status' event BEFORE the matching
-                    // 'queue' event (verified live via Skip) - this check is just a
-                    // secondary catch for whichever arrives first.
-                    const queueEmpty = (prev?.upcoming?.length ?? 0) === 0;
-                    const nothingLoaded = status?.state === 'infoscreen' || status?.state === 'stop' || (status?.state === 'idle' && queueEmpty);
-                    return {
-                        ...prev,
-                        currentSong: nothingLoaded ? null : prev?.currentSong,
-                        playState: status?.state,
-                    };
-                });
+                setQueueData(null);
+                setConnected(false);
             }
         });
 
-        return () => {
-            console.log('KaraFun Sync: Cleaning up socket');
-            socket.disconnect();
-            if (socketRef.current === socket) socketRef.current = null;
-        };
-    }, [partyId, userSettings?.karafunEnabled, reconnectKey]);
+        return () => unsubscribe();
+    }, [targetUid, userSettings?.karafunEnabled]);
 
-    // Queue/playback actions (see #27) - all verified live against KaraFun's
-    // real protocol by driving the actual remote client and capturing its
-    // socket frames, not assumed from any documentation. Every emit is a
-    // silent no-op if there's no live connection yet, matching how KaraFun's
-    // own remote client behaves when a control is used before it's ready.
-    //
-    // This hook runs unconditionally for every signed-in dashboard session
-    // (see dashboard/page.js - the 'karaoke' tab is open to every role), and
-    // every one of these functions is a raw, unauthenticated emit straight to
-    // KaraFun's real socket - there's no backend in between to check who's
-    // asking (see issue #29). canControl is a client-side guard, not a real
-    // security boundary (a determined user can still open their own socket
-    // with the party ID, which is public via settings/config for the
-    // overlay's sake) - it only stops these functions from doing anything for
-    // a role that could never legitimately reach them through this app's own
-    // UI. broadcaster/mod always qualify; 'singer' qualifies too since
-    // KaraokePane's self-add and "my turn" performer controls (play/skip/
-    // pitch/tempo/volume) are real, legitimate singer-role actions. A plain
-    // 'viewer' has no path to any of these - canSelfAdd, isMyTurn, and isMine
-    // in KaraokePane.js are all structurally false for that role.
-    const canControl = !!isMasterAdmin || userRole === 'broadcaster' || userRole === 'mod' || userRole === 'singer';
-    const emit = (event, payload) => {
-        if (!canControl) { console.warn(`KaraFun: blocked "${event}" - role "${userRole}" isn't authorized to control playback.`); return; }
-        if (socketRef.current) socketRef.current.emit(event, payload);
+    // Every one of these used to be a raw, unauthenticated emit straight to
+    // KaraFun's real socket (see git history / issue #29's own description
+    // of that gap). Now they all funnel through one authenticated POST - the
+    // route, not this hook, decides whether the caller's role/turn/ownership
+    // actually allows the requested action (see
+    // src/lib/karafunCommands.js §3.3). A command that's rejected server-side
+    // just logs a warning here; the UI's own role-based control hiding
+    // (isMyTurn etc., still computed client-side for UX) is what normally
+    // keeps a disallowed call from ever being made in the first place.
+    const sendCommand = async (action, params = {}) => {
+        if (!targetUid || !auth.currentUser) return;
+        try {
+            const idToken = await auth.currentUser.getIdToken();
+            const res = await fetch(`/api/karafun/${targetUid}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                body: JSON.stringify({ action, params }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => null);
+                console.warn(`KaraFun command "${action}" rejected:`, body?.error || res.status);
+            }
+        } catch (err) {
+            console.error(`KaraFun command "${action}" failed:`, err);
+        }
     };
-    const addToQueue = (songId, singer, pos = 99999) => emit('queueAdd', { songId, pos, singer });
-    const moveInQueue = (queueId, from, to) => emit('queueMove', { queueId, from, to });
-    const removeFromQueue = (queueId) => emit('queueRemove', queueId);
+
+    const addToQueue = (songId, singer, pos = 99999) => sendCommand('addToQueue', { songId, pos, singer });
+    const moveInQueue = (queueId, from, to) => sendCommand('moveInQueue', { queueId, from, to });
+    const removeFromQueue = (queueId) => sendCommand('removeFromQueue', { queueId });
     // pitch/tempo are relative steps (±1 / ±5 per press), not absolute values -
-    // confirmed live: clicking + twice moved the displayed value from 0 to +2,
-    // sending the same delta both times.
-    const adjustPitch = (delta) => emit('pitch', delta);
-    const adjustTempo = (delta) => emit('tempo', delta);
-    const setVolume = (value) => emit('volume', value);
-    const setBackingVocalsVolume = (value) => emit('volumeBv', value);
-    // filename distinguishes which lead-vocal stem this is - solo songs have
-    // one ("1"), duets have two ("1" and "2"); render one slider per stem the
-    // song actually reports, not a fixed count.
-    const setLeadVocalVolume = (filename, value) => emit('volumeLd', { filename, volume: value });
-    const playSong = () => emit('play', null);
-    // Also the only way to clear the currently active/playing song - it has no
-    // drag handle in KaraFun's own remote client and can't be targeted by
-    // queueMove/queueRemove, confirmed live.
-    const skipSong = () => emit('next', null);
+    // see the wire-protocol table in docs/karafun-relay-design.md §3.1.
+    const adjustPitch = (delta) => sendCommand('adjustPitch', { delta });
+    const adjustTempo = (delta) => sendCommand('adjustTempo', { delta });
+    const setVolume = (value) => sendCommand('setVolume', { value });
+    const setBackingVocalsVolume = (value) => sendCommand('setBackingVocalsVolume', { value });
+    const setLeadVocalVolume = (filename, value) => sendCommand('setLeadVocalVolume', { filename, value });
+    const playSong = () => sendCommand('playSong');
+    const skipSong = () => sendCommand('skipSong');
 
     return {
-        queueData, loading, error, lastUpdated, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
-        handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
+        queueData, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
+        handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
         addToQueue, moveInQueue, removeFromQueue, adjustPitch, adjustTempo,
         setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     };

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
+import { Music, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
 import Field from './Field';
@@ -49,9 +49,9 @@ function useDebouncedSetting(propValue, onCommit) {
 
 export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, isMasterAdmin }) {
     const {
-        queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
-        handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
-        moveInQueue, removeFromQueue, playSong, skipSong,
+        queueData, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
+        handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
+        removeFromQueue, playSong, skipSong,
     } = karaFun;
 
     // Karaoke request oversight (see #27) - deliberately gated on
@@ -94,139 +94,16 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // next reorder.
     const fullRotationOrder = [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))];
 
-    // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
-    // real party, "switching songs around in rapid succession", and had to
-    // be killed by turning the party off). Redesigned around three changes,
-    // any one of which might have been the actual cause - rather than bet on
-    // a single diagnosis against a production party again, all three ship
-    // together:
-    //
-    // 1. Polls on a fixed 5s interval via refs, instead of reacting to every
-    //    dependency change. v1 re-ran on every Firestore tick (presence,
-    //    permissions, settings all update independently of the real KaraFun
-    //    queue), and nameFor/onlineSingers are new references each time -
-    //    plausible on their own for far more frequent re-evaluation than
-    //    intended, especially since v1 evaluated the correction and re-sent
-    //    it inline in the same effect that also re-created a `working` array
-    //    just from `current`, no fresher than what was already lined up.
-    // 2. Applies at most ONE move per tick, computed fresh from the latest
-    //    server-reported queue each time - not a whole batch derived from a
-    //    local simulation of how earlier moves in the same batch land. If
-    //    KaraFun applies a move differently than simulated (index semantics,
-    //    async ordering, a rejected move), a multi-move batch has nothing to
-    //    notice or recover from; a single move re-evaluated 5s later does.
-    // 3. Never targets whatever KaraFun currently reports as playing - it
-    //    has no drag handle in KaraFun's own remote client and confirmed
-    //    separately that it can't actually be moved; a desired order that
-    //    displaces it could never be satisfied.
-    //
-    // On top of all three: a circuit breaker. If the exact same move keeps
-    // getting proposed without the queue ever reflecting it, that means
-    // something is blocking it that this code doesn't understand yet - stop
-    // and log rather than retry forever.
-    const liveRef = useRef({});
-    useEffect(() => {
-        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, nameFor, moveInQueue };
-    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, nameFor, moveInQueue]);
-    const stallCountRef = useRef(0);
-    const lastMoveSignatureRef = useRef(null);
-
-    // DISABLED AGAIN (2026-09-05, second incident): still swapped two
-    // songs every ~5s against a real party even after the v2 rewrite above.
-    // The per-tick logic is a pure, deterministic function of (upcoming
-    // order, rotationOrder, rotationCursor, nameFor) - if none of those
-    // actually change between ticks, a single instance of this effect
-    // cannot oscillate on its own. Two live candidates for what IS still
-    // changing, neither ruled out yet: (a) more than one mod session had
-    // "KaraFun Mod" open at once, each independently polling and reconciling
-    // the same live queue against its own view of it, fighting each other -
-    // this session alone had it open the whole time the second incident was
-    // reported; (b) presence for a participating singer flickering across
-    // the 90s online threshold in useKaraokeData's onlineSingers, which
-    // would make nameFor/ownerIndexOf intermittently fail to match that
-    // person's queue items and bounce them to "unranked, sort last" and
-    // back. Needs a real fix - likely a per-target lock/lease (only one
-    // session acts) and/or requiring a discrepancy to persist across 2+
-    // consecutive ticks before acting on it, not just disabling the retry -
-    // before this can safely re-enable. Do not remove the early return
-    // below without a concrete fix for one of these, confirmed against a
-    // real party, not just reasoned about.
-    useEffect(() => {
-        return;
-        // (kept below, unreachable, for the fix - see disable note above)
-        const AUTO_SORT_INTERVAL_MS = 5000;
-        const MAX_STALLED_ATTEMPTS = 3;
-
-        const tick = () => {
-            const { upcoming, currentSong, rotationOrder, nameFor, moveInQueue } = liveRef.current;
-            if (!moveInQueue || !upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return;
-
-            const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
-            const playingIdx = upcoming.findIndex(isPlaying);
-
-            const ownerIndexOf = (singerField) => {
-                const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
-                if (!primary) return -1;
-                return rotationOrder.findIndex(uid => nameFor(uid) === primary);
-            };
-            // Whoever's actually singing right now (KaraFun's own live status,
-            // not a value we track ourselves - see activeSingerUid above)
-            // decides where round-robin distance is measured from; "next up"
-            // is one slot after them. Nobody currently on air defaults to 0.
-            const activeIdx = ownerIndexOf(currentSong?.singer);
-            const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
-
-            // Round-robin, not a static priority ranking: everyone's FIRST
-            // queued song (round 0) comes before anyone's SECOND (round 1),
-            // so one singer adding several songs in a row can't bury
-            // everyone else - it just claims one slot per lap, starting from
-            // whoever's turn is actually next (the cursor), not always
-            // rotationOrder[0].
-            const seenRounds = {};
-            const currentIds = upcoming.map(s => s.queueId);
-            const restSorted = upcoming
-                .map((s, i) => {
-                    const ownerIdx = ownerIndexOf(s.singer);
-                    if (ownerIdx === -1) return { queueId: s.queueId, round: Infinity, distance: Infinity, origIndex: i };
-                    const round = seenRounds[ownerIdx] || 0;
-                    seenRounds[ownerIdx] = round + 1;
-                    const distance = (ownerIdx - cursorIdx + rotationOrder.length) % rotationOrder.length;
-                    return { queueId: s.queueId, round, distance, origIndex: i };
-                })
-                .filter((_, i) => i !== playingIdx)
-                .sort((a, b) => a.round - b.round || a.distance - b.distance || a.origIndex - b.origIndex)
-                .map(x => x.queueId);
-            const desiredIds = [...restSorted];
-            if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
-
-            const firstMismatch = desiredIds.findIndex((queueId, i) => currentIds[i] !== queueId);
-            if (firstMismatch === -1) {
-                stallCountRef.current = 0;
-                lastMoveSignatureRef.current = null;
-                return;
-            }
-
-            const queueId = desiredIds[firstMismatch];
-            const from = currentIds.indexOf(queueId);
-            const to = firstMismatch;
-            const signature = `${queueId}:${from}->${to}`;
-
-            if (signature === lastMoveSignatureRef.current) {
-                stallCountRef.current += 1;
-                if (stallCountRef.current >= MAX_STALLED_ATTEMPTS) {
-                    console.error('Karaoke auto-sort: the same move keeps being proposed without the live queue ever reflecting it - stopping instead of retrying indefinitely.', signature);
-                    return;
-                }
-            } else {
-                stallCountRef.current = 0;
-            }
-            lastMoveSignatureRef.current = signature;
-            moveInQueue(queueId, from, to);
-        };
-
-        const id = setInterval(tick, AUTO_SORT_INTERVAL_MS);
-        return () => clearInterval(id);
-    }, []);
+    // Auto-sort (round-robin queue reordering) previously lived here as a
+    // client-side effect, disabled since a real incident (see git history,
+    // issue #27) - two independent "KaraFun Mod" sessions each polling and
+    // reconciling the same live queue could fight each other, among other
+    // suspects never fully ruled out client-side. docs/karafun-relay-
+    // design.md §5 relocates that logic into the relay instead, where
+    // there's structurally only one process per party issuing moves - not
+    // yet ported (ships later, off by default, only after the manual
+    // command path here has been used for real - see design doc §9). This
+    // component no longer holds any of that logic, dead or otherwise.
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -236,13 +113,11 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
         );
     }
 
-    const conn = error ? 'disconnected' : lastUpdated ? 'connected' : 'reconnecting';
     const upcoming = queueData?.upcoming || [];
 
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
-            <Pane t={t} d={d} icon={<Music size={13} />} title={partyId ? `Song Queue · Party ${partyId}` : 'Song Queue'} flush
-                actions={<ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleReconnect} disabled={loading && !lastUpdated}>{loading && !lastUpdated ? 'Connecting…' : 'Refresh'}</ToolBtn>}>
+            <Pane t={t} d={d} icon={<Music size={13} />} title={partyId ? `Song Queue · Party ${partyId}` : 'Song Queue'} flush>
                 {!partyId ? (
                     <EmptyState icon={<Music size={32} />} title="No Party ID set." hint="Save your KaraFun Party ID in the panel on the right to start tracking the queue." />
                 ) : (
@@ -262,7 +137,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                                 </>
                             ) : (
                                 <div style={{ marginTop: 6, fontFamily: 'var(--font-sans)', fontSize: 13, color: t.faint }}>
-                                    {queueData?.playState === 'infoscreen' ? 'Waiting for a song to start…' : error || 'No song playing currently.'}
+                                    {queueData?.playState === 'infoscreen' ? 'Waiting for a song to start…' : !connected ? 'Party unreachable. Make sure the KaraFun app is open and the Remote is connected.' : 'No song playing currently.'}
                                 </div>
                             )}
                             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
