@@ -7,6 +7,15 @@ const io = require('socket.io-client');
 // write quota) needs. See docs/karafun-relay-design.md §3.2.
 const STATE_WRITE_DEBOUNCE_MS = 500;
 
+// 'serverUnreacheable' is KaraFun telling us the party channel isn't open
+// right now (e.g. the broadcaster's dashboard came up before they actually
+// started KaraFun) - it's an application-level rejection, not a transport
+// drop, so socket.io's own reconnection logic never fires for it. Without an
+// explicit retry here the connection sits inert forever once this fires.
+// PartyManager's presence-based idle close (IDLE_CLOSE_MS) is what bounds
+// this if the party never comes up - not a retry limit here.
+const UNREACHABLE_RETRY_MS = 5_000;
+
 // Mirrors one KaraFun party's live queue/status into
 // users/{userId}/karafun_state/live, replacing the direct client-side
 // socket.io connections previously opened independently by
@@ -29,6 +38,8 @@ class KaraFunConnection {
         this.state = { upcoming: [], currentSong: null, playState: null };
         this.writeTimer = null;
         this.dirty = false;
+        this.retryTimer = null;
+        this.stopped = false;
     }
 
     start() {
@@ -62,7 +73,12 @@ class KaraFunConnection {
         });
 
         this.socket.on('serverUnreacheable', () => {
-            console.error(`[karafun:${this.userId}] party unreachable: ${this.partyId}`);
+            console.error(`[karafun:${this.userId}] party unreachable: ${this.partyId}, retrying in ${UNREACHABLE_RETRY_MS}ms`);
+            this.socket.disconnect();
+            this.retryTimer = setTimeout(() => {
+                this.retryTimer = null;
+                if (!this.stopped) this.start();
+            }, UNREACHABLE_RETRY_MS);
         });
 
         this.socket.on('disconnect', (reason) => {
@@ -131,9 +147,14 @@ class KaraFunConnection {
     }
 
     stop() {
+        this.stopped = true;
         if (this.writeTimer) {
             clearTimeout(this.writeTimer);
             this.writeTimer = null;
+        }
+        if (this.retryTimer) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
         }
         if (this.socket) {
             this.socket.disconnect();
