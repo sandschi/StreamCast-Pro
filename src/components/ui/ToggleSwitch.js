@@ -25,7 +25,7 @@ export default function ToggleSwitch({ checked = false, onChange, label, descrip
 
     if (t) {
         return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 12, background: t.inset, border: `1px solid ${t.hair}`, ...bevel(t) }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: 12, background: t.inset, border: `1px solid ${t.hair}`, ...bevel(t) }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, color: t.text }}>{label}</span>
                     {description && <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: t.faint, fontStyle: 'italic' }}>{description}</span>}

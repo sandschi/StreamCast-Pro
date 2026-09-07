@@ -5,8 +5,21 @@ import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, orderBy, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, where, getDocs, writeBatch, orderBy, runTransaction } from 'firebase/firestore';
 import posthog from 'posthog-js';
+
+// Firestore caps a single batch at 500 writes - a prolific chatter's messages
+// spread across history/message_queue/suggestions can exceed that before a
+// mod times them out or bans them, so this chunks rather than queuing every
+// matched doc into one writeBatch (which would throw and leave the
+// Twitch-side deletion signal applied only partially, or not at all).
+async function deleteRefsInChunks(refs) {
+    for (let i = 0; i < refs.length; i += 500) {
+        const batch = writeBatch(db);
+        for (const ref of refs.slice(i, i + 500)) batch.delete(ref);
+        await batch.commit();
+    }
+}
 
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
@@ -36,6 +49,14 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const lastFetchedIdRef = useRef(null);
     const emotesRef = useRef({ sevenTV: [], bttv: [], ffz: [] });
     const channelRef = useRef(null);
+    // The tmi.js client is (re)created only when channelName/reconnectNonce
+    // change, not on every canManageQueue change - so the CLEARMSG/timeout
+    // handlers registered on it read canManageQueue through this ref rather
+    // than closing over a stale value from whenever connect() ran (a
+    // permission change should apply to an already-connected client
+    // immediately). The equivalent uid used to be read the same way, but
+    // that was wrong in the other direction: see connect() below.
+    const canManageQueueRef = useRef(canManageQueue);
     const [reconnectNonce, setReconnectNonce] = useState(0);
     const reconnect = () => setReconnectNonce(n => n + 1);
 
@@ -45,6 +66,53 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     useEffect(() => {
         emotesRef.current = thirdPartyEmotes;
     }, [thirdPartyEmotes]);
+
+    useEffect(() => {
+        canManageQueueRef.current = canManageQueue;
+    }, [canManageQueue]);
+
+    // Deletes every stored copy of one Twitch message (history, still-queued,
+    // and the currently-live overlay message) after Twitch reports it deleted
+    // via CLEARMSG. Deliberately per-message rather than reacting to a bare
+    // CLEARCHAT (full chat clear) too - honoring "you deleted it on Twitch, so
+    // it's gone here" shouldn't also mean a mod running /clear wipes a
+    // streamer's entire re-air history as a side effect.
+    const deleteMessagesByTwitchId = async (uid, twitchMessageId) => {
+        if (!uid || !twitchMessageId) return;
+        try {
+            const refs = [];
+            for (const col of ['history', 'message_queue', 'suggestions']) {
+                const snap = await getDocs(query(collection(db, 'users', uid, col), where('twitchMessageId', '==', twitchMessageId)));
+                snap.forEach(d => refs.push(d.ref));
+            }
+            const activeRef = doc(db, 'users', uid, 'active_message', 'current');
+            const activeSnap = await getDoc(activeRef);
+            if (activeSnap.exists() && activeSnap.data().twitchMessageId === twitchMessageId) {
+                refs.push(activeRef);
+            }
+            await deleteRefsInChunks(refs);
+        } catch (e) { console.error('Error deleting message after Twitch CLEARMSG:', e); }
+    };
+
+    // Same idea for a user timeout/ban (CLEARCHAT with a target user) -
+    // removes everything stored under that Twitch login, matching Twitch's
+    // own "this person's messages are gone" behavior.
+    const deleteMessagesByLogin = async (uid, login) => {
+        if (!uid || !login) return;
+        try {
+            const refs = [];
+            for (const col of ['history', 'message_queue', 'suggestions']) {
+                const snap = await getDocs(query(collection(db, 'users', uid, col), where('login', '==', login)));
+                snap.forEach(d => refs.push(d.ref));
+            }
+            const activeRef = doc(db, 'users', uid, 'active_message', 'current');
+            const activeSnap = await getDoc(activeRef);
+            if (activeSnap.exists() && activeSnap.data().login === login) {
+                refs.push(activeRef);
+            }
+            await deleteRefsInChunks(refs);
+        } catch (e) { console.error('Error deleting messages after Twitch timeout/ban:', e); }
+    };
 
     const displayMessages = useMemo(() => {
         return messages.map(msg => ({
@@ -86,9 +154,39 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             }
             connectingRef.current = true;
             setConnectionStatus('connecting');
+            // Captured once, here, rather than read live via a ref inside the
+            // handlers below - this client is only ever subscribed to
+            // `channelName`, so its moderation events must always resolve
+            // back to whichever broadcaster that channel belonged to when
+            // THIS client was created. A mod switching hosted channels
+            // updates effectiveUid (and eventually channelName, once the
+            // async username lookup resolves) before this client actually
+            // gets torn down and replaced - reading effectiveUid live here
+            // could attribute an old channel's CLEARMSG/timeout/ban event to
+            // whichever broadcaster the mod has since switched to.
+            const connectedUid = effectiveUid;
             const client = new tmi.Client({ connection: { secure: true, reconnect: true }, channels: [channelName] });
             clientRef.current = client;
             client.on('connected', () => { setConnectionStatus('connected'); connectingRef.current = false; });
+
+            // Rules already restrict these writes to isChannelModerator, so a
+            // viewer's own dashboard session hitting this would just fail
+            // server-side - checking canManageQueueRef here just avoids that
+            // pointless attempt rather than being the actual security boundary.
+            client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
+                if (!canManageQueueRef.current) return;
+                const targetMsgId = userstate?.['target-msg-id'];
+                if (targetMsgId) deleteMessagesByTwitchId(connectedUid, targetMsgId);
+            });
+            client.on('timeout', (channel, username) => {
+                if (!canManageQueueRef.current) return;
+                deleteMessagesByLogin(connectedUid, username);
+            });
+            client.on('ban', (channel, username) => {
+                if (!canManageQueueRef.current) return;
+                deleteMessagesByLogin(connectedUid, username);
+            });
+
             client.on('message', async (channel, tags, message) => {
                 const login = tags.username;
                 const displayName = tags['display-name'] || login;
@@ -129,6 +227,11 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         };
         connect();
         return () => { if (clientRef.current) { clientRef.current.removeAllListeners(); clientRef.current.disconnect().catch(() => { }); } connectingRef.current = false; };
+        // effectiveUid is deliberately omitted - connect() reads it once into
+        // connectedUid at call time (see above), and this effect must not
+        // re-run just because effectiveUid changed ahead of channelName; it
+        // already re-runs once the channelName lookup for the new uid lands.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, channelName, reconnectNonce]);
 
     useEffect(() => {
@@ -268,6 +371,12 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             timestamp: serverTimestamp(),
             suggestedBy: user.uid,
             suggestedByName: user.displayName,
+            // Twitch's own message id (tags.id from the live chat event, see
+            // above) - kept so a later CLEARMSG for this message can find and
+            // delete every stored copy of it. Absent for anything that didn't
+            // originate from a live tmi.js message (e.g. the Settings tab's
+            // synthetic test message).
+            twitchMessageId: msg.id || null,
         };
 
         if (permanent) {
@@ -314,6 +423,7 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             queuedAt: serverTimestamp(),
             suggestedBy: user.uid,
             suggestedByName: user.displayName,
+            twitchMessageId: msg.id || null,
         };
         if (permanent) payload.duration = -1;
 

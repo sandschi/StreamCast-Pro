@@ -59,6 +59,11 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYourKeyHere\n-----END PRIVATE
 DISCORD_WEBHOOK_URL=your_discord_webhook_url
 NEXT_PUBLIC_POSTHOG_KEY=your_posthog_key
 NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
+
+# Encrypts the stored Twitch OAuth token at rest (AES-256-GCM, see
+# src/lib/tokenCrypto.js). Must decode to exactly 32 bytes - generate with:
+# node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+TWITCH_TOKEN_ENCRYPTION_KEY=your_base64_32_byte_key
 ```
 
 ### Running Locally

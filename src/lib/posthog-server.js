@@ -15,6 +15,9 @@ export function getPostHogClient() {
     try {
         posthogClient = new PostHog(
             apiKey,
+            // See PostHogProvider.js - NEXT_PUBLIC_POSTHOG_HOST is either
+            // unset (PostHog's own EU endpoint) or cappybara.sandschi.xyz,
+            // a first-party proxy in front of that same EU cluster.
             { host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com', flushAt: 1, flushInterval: 0 }
         );
         return posthogClient;

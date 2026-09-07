@@ -83,10 +83,20 @@ export function AuthProvider({ children }) {
 
                 await setDoc(userRef, updateData, { merge: true });
 
-                // 2. Resolve Twitch Token (private)
-                const tokenDoc = await getDoc(doc(db, 'users', currentUser.uid, 'private', 'twitch'));
-                if (tokenDoc.exists()) {
-                    setTwitchToken(tokenDoc.data().accessToken);
+                // 2. Resolve Twitch Token (private, encrypted at rest - see
+                // /api/twitch-token). Goes through that route rather than a
+                // direct Firestore read: firestore.rules denies the client
+                // SDK access to this document, so the Admin-SDK-backed route
+                // is the only way to get the decrypted value back.
+                try {
+                    const tokenIdToken = await currentUser.getIdToken();
+                    const tokenRes = await fetch('/api/twitch-token', {
+                        headers: { Authorization: `Bearer ${tokenIdToken}` },
+                    });
+                    const tokenJson = await tokenRes.json();
+                    if (tokenJson.accessToken) setTwitchToken(tokenJson.accessToken);
+                } catch (e) {
+                    console.error('Error resolving Twitch token:', e);
                 }
 
                 const userDoc = await getDoc(userRef);
@@ -153,6 +163,23 @@ export function AuthProvider({ children }) {
 
                 await setDoc(doc(db, 'users', result.user.uid), userData, { merge: true });
 
+                // Public username -> uid lookup for karaoke.sandschi.xyz/{username}
+                // (see #27). Checked-then-written rather than gated on isNewUser:
+                // the mapping doc is create-only in firestore.rules (a username
+                // can't be reassigned once claimed, matching twitchUsername itself
+                // being locked after creation) so a blind setDoc would fail every
+                // login for anyone who already has one - but this also needs to
+                // self-backfill for every account that signed up before this
+                // lookup existed, which isNewUser alone could never catch.
+                try {
+                    const usernameRef = doc(db, 'usernames', cleanUsername);
+                    if (!(await getDoc(usernameRef)).exists()) {
+                        await setDoc(usernameRef, { uid: result.user.uid });
+                    }
+                } catch (usernameError) {
+                    console.error('Failed to write username lookup:', usernameError);
+                }
+
                 // Send Discord notification for new signups
                 if (isNewUser && !isSandschi) {
                     try {
@@ -174,14 +201,23 @@ export function AuthProvider({ children }) {
                 }
             }
 
-            // Capture & Persist Token to Cloud
+            // Capture & Persist Token to Cloud - encrypted at rest via
+            // /api/twitch-token rather than a direct Firestore write (see
+            // firestore.rules: the client SDK no longer has write access to
+            // this document at all).
             const credential = OAuthProvider.credentialFromResult(result);
             if (credential?.accessToken) {
                 setTwitchToken(credential.accessToken);
-                await setDoc(doc(db, 'users', result.user.uid, 'private', 'twitch'), {
-                    accessToken: credential.accessToken,
-                    updatedAt: new Date().toISOString()
-                });
+                try {
+                    const idToken = await result.user.getIdToken();
+                    await fetch('/api/twitch-token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                        body: JSON.stringify({ accessToken: credential.accessToken }),
+                    });
+                } catch (e) {
+                    console.error('Error storing Twitch token:', e);
+                }
             }
         } catch (error) {
             console.error('Login error:', error);

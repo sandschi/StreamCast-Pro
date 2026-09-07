@@ -1,4 +1,21 @@
 {
-    "indexes": [],
+    "indexes": [
+        {
+            "collectionGroup": "karaoke_requests",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "respondBy", "order": "ASCENDING" }
+            ]
+        },
+        {
+            "collectionGroup": "karaoke_requests",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "publicExpireBy", "order": "ASCENDING" }
+            ]
+        }
+    ],
     "fieldOverrides": []
 }

@@ -50,6 +50,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'cdn.frankerfacez.com',
         pathname: '/emote/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdnaws.recis.io',
+        pathname: '/**',
       }
     ]
   }

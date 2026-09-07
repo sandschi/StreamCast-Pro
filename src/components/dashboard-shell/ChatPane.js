@@ -159,7 +159,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
                             <ExternalLink size={14} /><span style={{ flex: 1 }}>Copy Overlay URL</span>
                         </button>
                         <button onClick={() => copy(`${origin}/dashboard?host=${effectiveUid}`)} style={ACTION_BTN(t)}>
-                            <LinkIcon size={14} /><span style={{ flex: 1 }}>Copy Mod Link</span>
+                            <LinkIcon size={14} /><span style={{ flex: 1 }}>Copy Dashboard Link</span>
                         </button>
                     </Pane>
                 </ResizableWidth>
