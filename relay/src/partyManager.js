@@ -94,20 +94,18 @@ class PartyManager {
         return active;
     }
 
-    // karafunEnabled stays a public settings/config toggle; karafunPartyId
-    // lives in private/config (owner-only) - see
-    // docs/karafun-relay-design.md §6. The Admin SDK reads both regardless
-    // of those client-facing rules; this split is about what a client is
-    // allowed to read, not what the relay needs.
+    // Both fields live on the public settings/config doc - karafunPartyId
+    // briefly moved to private/config (see git history) but that broke a
+    // mod/singer/viewer session's Karaoke tab entirely (private/config is
+    // owner-only by rule, so a non-owner session had no way to read it at
+    // all), for a security premise that didn't hold anyway: a KaraFun party
+    // ID is public-by-design, and the real fix for issue #29 was routing
+    // mutations through this relay's command queue, not hiding the ID.
     async _getKaraFunConfig(userId) {
-        const [settingsSnap, privateSnap] = await Promise.all([
-            this.db.collection('users').doc(userId).collection('settings').doc('config').get(),
-            this.db.collection('users').doc(userId).collection('private').doc('config').get(),
-        ]);
-        const karafunEnabled = settingsSnap.data()?.karafunEnabled;
-        const partyId = privateSnap.data()?.karafunPartyId;
-        if (karafunEnabled && partyId) {
-            return { partyId };
+        const settingsSnap = await this.db.collection('users').doc(userId).collection('settings').doc('config').get();
+        const cfg = settingsSnap.data();
+        if (cfg?.karafunEnabled && cfg?.karafunPartyId) {
+            return { partyId: cfg.karafunPartyId };
         }
         return null;
     }

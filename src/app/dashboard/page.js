@@ -208,11 +208,12 @@ function DashboardContent() {
             }
         });
 
-        // Live rather than one-time: karafunPartyId now lives here (see
-        // docs/karafun-relay-design.md §6), and useKaraFunData's
-        // handleSavePartyId needs a save to be reflected immediately without
-        // the hacky forced-remount handleReconnect used to need when the
-        // party ID lived on the settings/config listener above.
+        // Live rather than one-time: ApiPane's apiToken display/regenerate
+        // flow otherwise only reflected a change after a manual refetch.
+        // (karafunPartyId briefly lived on this doc too - see git history -
+        // moved back to the public settings/config listener above after a
+        // mod/singer/viewer session turned out to have no read access here
+        // at all, breaking their Karaoke tab entirely.)
         let unsubscribePrivate = () => { };
         if (user && (isMasterAdmin || userRole === 'broadcaster')) {
             const privateRef = doc(db, 'users', targetUid, 'private', 'config');
@@ -263,7 +264,7 @@ function DashboardContent() {
     // one real socket instead of two components separately reconnecting on
     // every tab switch, and so the status bar can show the party's actual
     // live connection state instead of just "is it configured".
-    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings, privateConfig });
+    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings });
 
     const allowed = useMemo(() => {
         // userRole is set to 'broadcaster' optimistically the moment someone reaches

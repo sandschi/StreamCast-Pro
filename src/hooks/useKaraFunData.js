@@ -25,32 +25,42 @@ export async function searchKaraFunSongs(partyId, query) {
 // commands through /api/karafun/[userId]/command, which re-derives role/
 // turn/ownership server-side instead of trusting this hook's caller - see
 // docs/karafun-relay-design.md §3/§7.
-export function useKaraFunData({ targetUid, userSettings, privateConfig }) {
+export function useKaraFunData({ targetUid, userSettings }) {
     const [queueData, setQueueData] = useState(null);
     // Mirrors the relay's own live KaraFun connection state (see
     // karafunConnection.js's `connected` field) - not this hook's own
     // connection, since it no longer has one.
     const [connected, setConnected] = useState(false);
-    const [tempPartyId, setTempPartyId] = useState(privateConfig?.karafunPartyId || '');
+    const [tempPartyId, setTempPartyId] = useState(userSettings?.karafunPartyId || '');
     const [isSavingId, setIsSavingId] = useState(false);
 
-    // Moved from settings/config (public read) to private/config (owner-only)
-    // per docs/karafun-relay-design.md §6 - once the relay is the only thing
-    // that ever dials KaraFun directly, the overlay has no more use for a
-    // public party ID, and the dashboard already has private/config access
-    // as the signed-in owner.
-    const partyId = privateConfig?.karafunPartyId;
+    // Stays in settings/config (public within the app), not private/config -
+    // an earlier version of this moved it to private/config on the reasoning
+    // that once the relay is the only thing dialing KaraFun directly, nobody
+    // client-side needs it anymore. That broke real usage: a mod/singer/
+    // viewer session (dashboard?host={broadcasterUid}) has no private/config
+    // access to someone else's channel (owner-only by rule, and rightly so -
+    // it also holds apiToken), so every non-owner role lost partyId entirely,
+    // and with it KaraokePane's search/self-add (searchKaraFunSongs needs it)
+    // and the "no party ID" gate. The premise didn't hold either: a KaraFun
+    // party ID is public-by-design (KaraFun's own UI shows it so people can
+    // join) - hiding it inside this app never closed a real gap, since
+    // anyone with the ID can already dial KaraFun directly regardless of
+    // what this app does. The actual security win (issue #29) was routing
+    // every mutation through the authenticated command queue, not obscuring
+    // the ID - found by testing with a real second (singer-role) account.
+    const partyId = userSettings?.karafunPartyId;
 
     useEffect(() => {
-        setTempPartyId(privateConfig?.karafunPartyId || '');
-    }, [privateConfig?.karafunPartyId]);
+        setTempPartyId(userSettings?.karafunPartyId || '');
+    }, [userSettings?.karafunPartyId]);
 
     const handleSavePartyId = async () => {
         if (!targetUid || !tempPartyId) return;
         setIsSavingId(true);
         try {
-            const privateRef = doc(db, 'users', targetUid, 'private', 'config');
-            await setDoc(privateRef, { karafunPartyId: tempPartyId }, { merge: true });
+            const configRef = doc(db, 'users', targetUid, 'settings', 'config');
+            await setDoc(configRef, { karafunPartyId: tempPartyId }, { merge: true });
         } catch (err) {
             console.error("Error saving Party ID:", err);
         } finally {
