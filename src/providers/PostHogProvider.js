@@ -68,7 +68,13 @@ export function PostHogProvider({ children }) {
         if (typeof window !== 'undefined') {
             if (alwaysOn) {
                 // Signed in, or the OBS overlay - no banner, no consent
-                // event to listen for, just run.
+                // event to listen for, just run. opt_in_capturing() first:
+                // if an earlier anonymous session on this page revoked
+                // consent (see syncWithLocalConsent) before signing in,
+                // initPostHogOnce() below is a no-op on the already-
+                // initialized SDK, and that opt-out would otherwise stick
+                // silently even after signing in.
+                posthog.opt_in_capturing();
                 initPostHogOnce();
             } else {
                 // localStorage is synchronous, unlike Zaraz's async-loaded

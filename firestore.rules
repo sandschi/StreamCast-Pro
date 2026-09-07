@@ -189,12 +189,30 @@ service cloud.firestore {
         allow update, delete: if isChannelModerator(userId);
 
         // The person a request/invite was actually sent to decides its
-        // outcome - acceptRequest/declineAsTarget/respondToDuetInvite all
-        // write as targetSingerUid, so this is deliberately unrestricted in
-        // which fields it may touch (declineAsTarget nulls targetSingerUid
-        // itself and rewrites the response-window timers as part of
-        // dropping back to public).
-        allow update: if request.auth != null && request.auth.uid == resource.data.targetSingerUid;
+        // outcome via acceptRequest/declineAsTarget/respondToDuetInvite -
+        // enumerated as three explicit pending->X transitions (rather than
+        // one open `auth.uid == targetSingerUid` clause) so the target
+        // can't rewrite requestedBy/kind/song data on their way through,
+        // only the exact fields each of those three functions actually
+        // sets. All three only ever fire from a 'pending' source - a
+        // public request has targetSingerUid == null, which can never
+        // equal request.auth.uid, so the separate claim rule below is the
+        // only path into 'accepted' from 'public'.
+        allow update: if request.auth != null && request.auth.uid == resource.data.targetSingerUid
+          && resource.data.status == 'pending'
+          && (
+            // acceptRequest / respondToDuetInvite(accept) - status only.
+            (request.resource.data.status == 'accepted'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+            // respondToDuetInvite(decline) - status only.
+            || (request.resource.data.status == 'declined'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+            // declineAsTarget - drops a plain request back to public,
+            // clearing the target and resetting the public-window timers.
+            || (request.resource.data.status == 'public'
+              && request.resource.data.targetSingerUid == null
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetSingerUid', 'publicExpireBy', 'respondBy']))
+          );
 
         // An eligible singer (or a mod) can "claim" a request that's already
         // public (no specific target) - the Public Requests panel's Claim

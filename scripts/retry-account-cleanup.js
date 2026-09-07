@@ -41,6 +41,29 @@ async function retryAccountCleanup() {
     return;
   }
 
+  // One full permissions/online collection-group scan for the whole run,
+  // not one per pending uid - the scan cost is the same either way, so
+  // repeating it per doc only multiplies read volume against a backlog
+  // that's already an edge case (a double Firestore failure at deletion
+  // time - see the pendingRef comment in delete-account/route.js).
+  const needsCrossChannelSweep = pendingSnapshot.docs.some((d) => d.data().crossChannelSweep?.pending);
+  let staleRefsByUid = null;
+  if (needsCrossChannelSweep) {
+    try {
+      const [permsSnap, onlineSnap] = await Promise.all([
+        db.collectionGroup('permissions').get(),
+        db.collectionGroup('online').get(),
+      ]);
+      staleRefsByUid = new Map();
+      for (const d of [...permsSnap.docs, ...onlineSnap.docs]) {
+        if (!staleRefsByUid.has(d.id)) staleRefsByUid.set(d.id, []);
+        staleRefsByUid.get(d.id).push(d.ref);
+      }
+    } catch (e) {
+      console.error('Cross-channel collection-group scan failed - all pending sweeps stay queued:', e);
+    }
+  }
+
   for (const pendingDoc of pendingSnapshot.docs) {
     const uid = pendingDoc.id;
     const data = pendingDoc.data();
@@ -48,26 +71,25 @@ async function retryAccountCleanup() {
     let stillPending = false;
 
     if (data.crossChannelSweep?.pending) {
-      try {
-        const [permsSnap, onlineSnap] = await Promise.all([
-          db.collectionGroup('permissions').get(),
-          db.collectionGroup('online').get(),
-        ]);
-        const staleRefs = [
-          ...permsSnap.docs.filter((d) => d.id === uid).map((d) => d.ref),
-          ...onlineSnap.docs.filter((d) => d.id === uid).map((d) => d.ref),
-        ];
-        if (staleRefs.length > 0) await deleteInChunks(staleRefs);
-        updates.crossChannelSweep = admin.firestore.FieldValue.delete();
-        console.log(`Finished cross-channel sweep for ${uid} (${staleRefs.length} refs).`);
-      } catch (e) {
-        console.error(`Cross-channel sweep still failing for ${uid}:`, e);
-        updates.crossChannelSweep = {
-          pending: true,
-          lastError: e instanceof Error ? e.message : String(e),
-          attempts: (data.crossChannelSweep.attempts || 0) + 1,
-        };
+      if (!staleRefsByUid) {
+        // The shared scan itself failed above - nothing to retry against
+        // this pass, leave the existing pending record untouched.
         stillPending = true;
+      } else {
+        try {
+          const staleRefs = staleRefsByUid.get(uid) || [];
+          if (staleRefs.length > 0) await deleteInChunks(staleRefs);
+          updates.crossChannelSweep = admin.firestore.FieldValue.delete();
+          console.log(`Finished cross-channel sweep for ${uid} (${staleRefs.length} refs).`);
+        } catch (e) {
+          console.error(`Cross-channel sweep still failing for ${uid}:`, e);
+          updates.crossChannelSweep = {
+            pending: true,
+            lastError: e instanceof Error ? e.message : String(e),
+            attempts: (data.crossChannelSweep.attempts || 0) + 1,
+          };
+          stillPending = true;
+        }
       }
     }
 
@@ -88,7 +110,10 @@ async function retryAccountCleanup() {
     }
 
     if (stillPending) {
-      await pendingDoc.ref.update(updates);
+      // A shared-scan failure with nothing else to record leaves `updates`
+      // empty - skip the no-op write rather than bumping updateTime for
+      // nothing.
+      if (Object.keys(updates).length > 0) await pendingDoc.ref.update(updates);
     } else {
       // Both sweeps (whichever applied) succeeded - nothing left to track.
       await pendingDoc.ref.delete();

@@ -80,7 +80,7 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         if (!uid || !twitchMessageId) return;
         try {
             const refs = [];
-            for (const col of ['history', 'message_queue']) {
+            for (const col of ['history', 'message_queue', 'suggestions']) {
                 const snap = await getDocs(query(collection(db, 'users', uid, col), where('twitchMessageId', '==', twitchMessageId)));
                 snap.forEach(d => refs.push(d.ref));
             }

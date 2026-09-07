@@ -72,7 +72,7 @@ export default function StatusBar({ t, d, tab, allowed, onAir, conn, role, queue
             {partyId && <span style={cell}>{L(t, `Party ${partyId}`)}</span>}
             <span style={{ ...cell, color: kfTone }}><Dot tone={kfTone} /> {L(t, kf.label)}</span>
             <span style={{ flex: 1 }} />
-            <span style={{ ...cell, color: t.faint }}>{L(t, NAV.find(n => n.id === tab)?.label || tab)} · Ctrl+{(allowed || NAV.map(n => n.id)).findIndex(id => id === tab) + 1}</span>
+            <span style={{ ...cell, color: t.faint }}>{L(t, NAV.find(n => n.id === tab)?.label || tab)} · ⌘/Ctrl+{(allowed || NAV.map(n => n.id)).findIndex(id => id === tab) + 1}</span>
             <CookiePreferencesButton t={t} />
         </div>
     );

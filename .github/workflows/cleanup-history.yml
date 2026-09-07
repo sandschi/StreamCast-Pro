@@ -26,16 +26,19 @@ jobs:
         run: node scripts/cleanup-history.js
 
       - name: Run karaoke requests cleanup script
+        if: ${{ always() }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/cleanup-karaoke-requests.js
 
       - name: Run chat-pipeline cleanup script (suggestions, queue, stale active message)
+        if: ${{ always() }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/cleanup-chat-pipeline.js
 
       - name: Retry queued account-deletion cleanups
+        if: ${{ always() }}
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/retry-account-cleanup.js

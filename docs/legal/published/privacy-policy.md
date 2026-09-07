@@ -243,6 +243,6 @@ We do not currently keep backups of our database, so deleted data does not persi
 
 14.1 The current version is always at https://overlay.sandschi.xyz/privacy with a "Last Updated" date.
 
-14.2 For material changes — new data categories, new purposes, new recipients, or longer retention — we will give at least 30 days' notice by prominent notice in the dashboard. Where a change requires consent, we will ask for it rather than assume it.
+14.2 For material changes — new data categories, new purposes, new recipients, or longer retention — we will give at least 30 days' notice by prominent notice on the public website and, for account holders, in the dashboard. Where a change requires consent, we will ask for it rather than assume it.
 
 14.3 We will not apply a new purpose retroactively to data already collected without a valid basis for doing so.
