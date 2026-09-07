@@ -83,7 +83,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     } = karaFun;
 
     const {
-        requests, onlineSingers, rotationOrder, permissions, getActiveSingerUid, nameFor,
+        requests, onlineSingers, rotationOrder, permissions, nameFor,
         submitRequest, acceptRequest, declineAsTarget,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
     } = useKaraokeData({ targetUid, user, userRole });
@@ -145,13 +145,16 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     const onAirNames = (queueData?.currentSong?.singer || '').split(/\s*&\s*/).map(s => s.trim()).filter(Boolean);
     const isDuetOnAir = onAirNames.length > 1;
 
-    // Who's actually singing right now, via useKaraokeData's shared
-    // getActiveSingerUid - not a value tracked in Firestore (that drifted
-    // from reality once), and not derived independently here either
-    // anymore (this and KaraFun Mod used to compute it two different ways
-    // and could disagree when presence lagged; see #27). "Next up" is one
-    // slot after them.
-    const activeSingerUid = getActiveSingerUid(queueData?.currentSong?.singer);
+    // Who's actually singing right now, via the relay's own resolved and
+    // mirrored karafun_state/live.activeSingerUid (relay/src/autoSort.js's
+    // resolveActiveUid) - not derived here from currentSong.singer directly.
+    // That used to default to rotationOrder[0] whenever nothing was actively
+    // playing (the gap between a skip and the next Play), forgetting whose
+    // turn it was and handing "next up" back to whoever's first in rotation
+    // on every gap. This and KaraFun Mod both just read the relay's answer
+    // now, so they can't disagree the way they used to when each derived it
+    // independently client-side (see #27). "Next up" is one slot after them.
+    const activeSingerUid = queueData?.activeSingerUid || null;
     const nextSingerUid = rotationOrder.length === 0 ? null : (() => {
         const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
         return rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length] || null;

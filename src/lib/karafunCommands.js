@@ -11,11 +11,6 @@
 // rather than imported, matching how both of those already do it.
 const MASTER_ADMIN_UID = 'WPifULbh4NePmKpojiAnKwv0rWY2';
 
-// Mirrors useKaraokeData.js's ELIGIBLE_ROTATION_ROLES and its >90s "offline"
-// presence threshold - see that file's own comments for why these values.
-const ELIGIBLE_ROTATION_ROLES = ['singer', 'mod', 'broadcaster'];
-const PRESENCE_STALE_MS = 90_000;
-
 function isFiniteNumber(v) {
     return typeof v === 'number' && Number.isFinite(v);
 }
@@ -145,62 +140,44 @@ async function resolveSingerName(db, callerUid, decodedToken) {
     return twitchUsername || decodedToken?.name || 'Singer';
 }
 
-// Ports useKaraokeData.js's onlineSingers/nameFor/getActiveSingerUid/isMyTurn
-// chain server-side, reading the same collections that hook subscribes to
-// client-side, plus karafun_state/live (this relay's own mirrored state) in
-// place of the client's local queueData.
+// Reads rotationOrder + the relay's mirrored karafun_state/live (queue,
+// current song, and activeSingerUid). Used to be onlineSingers/permissions/
+// nameFor too (ported from useKaraokeData.js to re-derive "who's active"
+// here) - dropped once activeSingerUid moved to being resolved once by the
+// relay and mirrored, rather than re-derived per-request. A fresh serverless
+// invocation per request can't see across the gap between songs the way the
+// relay's long-lived process can (see relay/src/autoSort.js's
+// resolveActiveUid) - re-deriving it here used to default to
+// rotationOrder[0] whenever nothing was actively playing, handing turn
+// authorization back to whoever's first in rotation on every gap instead of
+// whoever's actually next.
 async function buildKaraokeContext(db, userId) {
-    const [presenceSnap, permsSnap, settingsSnap, stateSnap] = await Promise.all([
-        db.collection(`users/${userId}/online`).get(),
-        db.collection(`users/${userId}/permissions`).get(),
+    const [settingsSnap, stateSnap] = await Promise.all([
         db.doc(`users/${userId}/settings/config`).get(),
         db.doc(`users/${userId}/karafun_state/live`).get(),
     ]);
 
-    const permissions = {};
-    permsSnap.forEach((d) => { permissions[d.id] = d.data(); });
-
-    const now = Date.now();
-    const onlineSingers = [];
-    presenceSnap.forEach((d) => {
-        const p = d.data();
-        const perm = permissions[d.id];
-        const role = perm?.role || (d.id === userId ? 'broadcaster' : null);
-        if (!ELIGIBLE_ROTATION_ROLES.includes(role)) return;
-        const participating = role === 'broadcaster' ? perm?.participating !== false : !!perm?.participating;
-        if (!participating) return;
-        const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
-        if (now - lastSeenMs >= PRESENCE_STALE_MS) return;
-        onlineSingers.push({ id: d.id, displayName: p.displayName, twitchUsername: p.twitchUsername });
-    });
-
     const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
     const state = stateSnap.exists ? stateSnap.data() : null;
 
-    const nameFor = (uid) => {
-        const online = onlineSingers.find((s) => s.id === uid);
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
+    return {
+        rotationOrder,
+        currentSong: state?.currentSong || null,
+        upcoming: state?.upcoming || [],
+        activeSingerUid: state?.activeSingerUid || null,
     };
-
-    const getActiveSingerUid = (currentSongSinger) => {
-        const primary = (currentSongSinger || '').split(/\s*&\s*/)[0].trim();
-        if (!primary) return null;
-        return rotationOrder.find((uid) => nameFor(uid) === primary) || null;
-    };
-
-    return { rotationOrder, currentSong: state?.currentSong || null, upcoming: state?.upcoming || [], getActiveSingerUid };
 }
 
-// Mirrors KaraokePane.js's isMyTurn exactly: already on air (their name is in
-// the current song's singer field, split on duet '&') or next up per
-// rotation order.
+// Mirrors KaraokePane.js's isMyTurn: already on air (their name is in the
+// current song's singer field, split on duet '&') or next up per rotation
+// order, using the relay's mirrored activeSingerUid (see buildKaraokeContext
+// above) rather than re-deriving it from currentSong alone.
 function isMyTurn(context, callerUid, singerName) {
     const onAirNames = (context.currentSong?.singer || '').split(/\s*&\s*/).map((s) => s.trim()).filter(Boolean);
     if (onAirNames.includes(singerName)) return true;
 
     if (context.rotationOrder.length === 0) return false;
-    const activeSingerUid = context.getActiveSingerUid(context.currentSong?.singer);
-    const activeIdx = activeSingerUid ? context.rotationOrder.indexOf(activeSingerUid) : -1;
+    const activeIdx = context.activeSingerUid ? context.rotationOrder.indexOf(context.activeSingerUid) : -1;
     const nextSingerUid = context.rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % context.rotationOrder.length] || null;
     return nextSingerUid === callerUid;
 }

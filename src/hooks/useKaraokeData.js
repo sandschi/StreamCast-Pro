@@ -154,15 +154,6 @@ export function useKaraokeData({ targetUid, user, userRole }) {
         return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
     }, [onlineSingers, permissions]);
 
-    // KaraFun's currentSong.singer is a plain string ("Alice" or, for a
-    // duet, "Alice & Bob" per our own queueAdd convention) - resolve its
-    // primary name back to a rotationOrder uid via nameFor above.
-    const getActiveSingerUid = useCallback((currentSongSinger) => {
-        const primary = (currentSongSinger || '').split(/\s*&\s*/)[0].trim();
-        if (!primary) return null;
-        return rotationOrder.find(uid => nameFor(uid) === primary) || null;
-    }, [rotationOrder, nameFor]);
-
     const submitRequest = async (song, targetSingerUid, requestedByName) => {
         if (!targetUid || !user) return;
         const now = Date.now();
@@ -276,7 +267,7 @@ export function useKaraokeData({ targetUid, user, userRole }) {
 
     return {
         requests, onlineSingers, rotationOrder, permissions,
-        nameFor, getActiveSingerUid,
+        nameFor,
         submitRequest, acceptRequest, declineAsTarget, modDecline, modForcePublic,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, reinviteDuet,
         setRotationOrder, toggleParticipating,

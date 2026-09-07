@@ -42,26 +42,42 @@ async function buildNameFor(db, userId) {
     };
 }
 
+// Resolves "who's actually up" from KaraFun's own live status, falling back
+// to the last singer KaraFun actually reported playing when nobody's
+// playing right now. KaraFun doesn't auto-start the next song after a skip -
+// there's a real gap (currentSong null) between "someone's turn just ended"
+// and "someone pressed Play on the next one" - so naively re-deriving this
+// from currentSong alone every time (defaulting to rotationOrder[0] when
+// it's null) would forget whose turn it was the moment they stopped playing
+// and hand priority back to whoever's first in rotation, on every gap, not
+// just cold start. Found by live-testing a skip against a real two-singer
+// rotation. This is the one place that resolves it - both the queue-
+// reordering logic below and (via the mirrored karafun_state/live.
+// activeSingerUid field) the dashboard's turn display and the command
+// route's isMyTurn authorization all read the same answer instead of each
+// re-deriving their own.
+function resolveActiveUid({ currentSong, rotationOrder, nameFor, lastActiveUid }) {
+    const ownerIndexOf = (singerField) => {
+        const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
+        if (!primary) return -1;
+        return rotationOrder.findIndex((uid) => nameFor(uid) === primary);
+    };
+    const liveActiveIdx = ownerIndexOf(currentSong?.singer);
+    return liveActiveIdx !== -1 ? rotationOrder[liveActiveIdx] : (lastActiveUid || null);
+}
+
 // Verbatim port of the dead client-side v2 algorithm (KaraFunPane.js, see
-// git history), with one real fix found by live-testing a skip against an
-// actual two-singer rotation: the original always derived the cursor from
-// currentSong.singer alone, defaulting to rotationOrder[0] whenever nothing
-// is currently playing. KaraFun doesn't auto-start the next song after a
-// skip - there's a real gap (currentSong null) between "someone's turn just
-// ended" and "someone pressed Play on the next one" - so that default
-// silently favored whoever's first in rotation on every single gap, not
-// just on cold start. Skip person B, and instead of B's turn passing to
-// whoever's next, the algorithm would forget B ever went and hand priority
-// back to rotationOrder[0]. Fixed by threading `lastActiveUid` through:
-// only update the remembered active singer when KaraFun actually reports
-// someone playing, and keep using the last real one across the gap.
-// Returns { move, activeUid } - move is { queueId, from, to } or null if
-// already in sync / nothing to do; activeUid is what the caller should pass
-// back in as lastActiveUid on the next tick.
-function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, lastActiveUid }) {
-    if (!upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) {
-        return { move: null, activeUid: lastActiveUid };
-    }
+// git history) - round-robin by rotation round, single move per tick
+// recomputed fresh from the latest queue, never targets whatever's
+// currently playing (KaraFun's own 'queue' event still lists the playing
+// item, matched here by title/artist/singer against currentSong - it has no
+// drag handle in KaraFun's own remote client and confirmed separately that
+// it can't actually be moved). `activeUid` is the already-resolved "who's
+// up" (see resolveActiveUid above) - cursor is one slot after them.
+// Returns { queueId, from, to } for the one move needed to converge upcoming
+// toward the desired order, or null if already in sync / nothing to do.
+function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid }) {
+    if (!upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return null;
 
     const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
     const playingIdx = upcoming.findIndex(isPlaying);
@@ -71,8 +87,6 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, las
         if (!primary) return -1;
         return rotationOrder.findIndex((uid) => nameFor(uid) === primary);
     };
-    const liveActiveIdx = ownerIndexOf(currentSong?.singer);
-    const activeUid = liveActiveIdx !== -1 ? rotationOrder[liveActiveIdx] : lastActiveUid;
     const activeIdx = activeUid ? rotationOrder.indexOf(activeUid) : -1;
     const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
 
@@ -94,21 +108,25 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, las
     if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
 
     const firstMismatch = desiredIds.findIndex((queueId, i) => currentIds[i] !== queueId);
-    if (firstMismatch === -1) return { move: null, activeUid };
+    if (firstMismatch === -1) return null;
 
     const queueId = desiredIds[firstMismatch];
     const from = currentIds.indexOf(queueId);
     const to = firstMismatch;
-    return { move: { queueId, from, to }, activeUid };
+    return { queueId, from, to };
 }
 
-// Runs the ported algorithm on a fixed interval for one party, only while
-// karafunAutoSortEnabled is set (see docs/karafun-relay-design.md §5/§9 -
-// off by default, opt-in per broadcaster). Issues moves through the same
-// karafun_commands queue manual commands use (§3.1) - never touches the
-// socket directly - so a manual mod reorder and an auto-sort pass are two
-// producers into the same FIFO queue on one consumer, never two sockets
-// racing each other.
+// Runs on a fixed interval for every party the relay holds a lease for,
+// regardless of the karafunAutoSortEnabled toggle - it always resolves and
+// mirrors activeSingerUid (see resolveActiveUid above; the dashboard's turn
+// display and the command route's isMyTurn both depend on this being
+// correct even when nobody has opted into actual reordering). The queue-
+// reordering part below stays gated on the toggle (see
+// docs/karafun-relay-design.md §5/§9 - off by default, opt-in per
+// broadcaster) and issues moves through the same karafun_commands queue
+// manual commands use, not the socket directly, so a manual mod reorder and
+// an auto-sort pass are two producers into one FIFO queue on one consumer,
+// never two sockets racing each other.
 class AutoSort {
     constructor({ db, userId, connection }) {
         this.db = db;
@@ -152,17 +170,27 @@ class AutoSort {
     async _tick() {
         const settingsSnap = await this.db.collection('users').doc(this.userId).collection('settings').doc('config').get();
         const settings = settingsSnap.data();
+        const rotationOrder = settings?.karaokeRotationOrder || [];
+        const { upcoming, currentSong } = this.connection.state;
+        const nameFor = await buildNameFor(this.db, this.userId);
+
+        // Always resolved and mirrored, independent of the toggle below -
+        // see the class comment for why the turn display/authorization need
+        // this even when nobody's opted into actual reordering.
+        const activeUid = resolveActiveUid({ currentSong, rotationOrder, nameFor, lastActiveUid: this.lastActiveUid });
+        if (activeUid !== this.lastActiveUid) {
+            this.lastActiveUid = activeUid;
+            await this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live')
+                .set({ activeSingerUid: activeUid }, { merge: true })
+                .catch((err) => console.error(`[autosort:${this.userId}] failed to mirror activeSingerUid:`, err.message));
+        }
+
         if (!settings?.karafunAutoSortEnabled) {
             this.pendingSignature = null;
             return;
         }
 
-        const rotationOrder = settings.karaokeRotationOrder || [];
-        const { upcoming, currentSong } = this.connection.state;
-        const nameFor = await buildNameFor(this.db, this.userId);
-
-        const { move, activeUid } = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, lastActiveUid: this.lastActiveUid });
-        this.lastActiveUid = activeUid;
+        const move = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid });
         if (!move) {
             this.pendingSignature = null;
             return;

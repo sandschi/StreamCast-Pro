@@ -109,7 +109,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         const unsubscribe = onSnapshot(stateRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
-                setQueueData({ upcoming: data.upcoming || [], currentSong: data.currentSong || null, playState: data.playState });
+                setQueueData({ upcoming: data.upcoming || [], currentSong: data.currentSong || null, playState: data.playState, activeSingerUid: data.activeSingerUid || null });
                 setConnected(!!data.connected);
             } else {
                 setQueueData(null);

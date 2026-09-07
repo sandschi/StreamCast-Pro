@@ -59,7 +59,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, nameFor, getActiveSingerUid,
+        requests, onlineSingers, rotationOrder, nameFor,
         modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user, userRole });
 
@@ -70,15 +70,17 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
 
     const modQueue = requests.filter(r => r.status === 'pending' || r.status === 'public');
 
-    // Who's actually singing right now, per KaraFun's own live status - the
-    // one source of truth for "position 0" in rotation terms. Not a value we
-    // maintain ourselves (an earlier version stored a separate Firestore
-    // cursor advanced by a reactive effect, which meant two things could
-    // describe "whose turn" and drift apart); derived fresh every render via
-    // useKaraokeData's shared getActiveSingerUid instead, so this and the
-    // Karaoke tab always resolve "whose turn" identically (see #27 - they
-    // used to derive it independently and could disagree).
-    const activeSingerUid = getActiveSingerUid(queueData?.currentSong?.singer);
+    // Who's actually singing right now, per the relay's own resolved and
+    // mirrored karafun_state/live.activeSingerUid (relay/src/autoSort.js's
+    // resolveActiveUid) - not derived here from currentSong.singer directly.
+    // That used to default to rotationOrder[0] whenever nothing was actively
+    // playing (the gap between a skip and the next Play), which forgot whose
+    // turn it was and pointed the arrow back at whoever's first in rotation
+    // on every gap. The relay is the one process that can see across that
+    // gap continuously; this and the Karaoke tab both just read its answer,
+    // so they always agree (see #27 - they used to derive it independently
+    // client-side and could disagree).
+    const activeSingerUid = queueData?.activeSingerUid || null;
 
     // A singer who's newly online/participating isn't in the persisted
     // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
