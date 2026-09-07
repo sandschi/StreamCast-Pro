@@ -355,27 +355,31 @@ move the way the relay is. For the record, what was checked and why it stays put
 So: this relay is the one piece of the app that actually needed what Dokploy uniquely offers here
 (a place to keep a socket open). Nothing else currently does.
 
-## 9. Phased implementation plan
+## 9. Implementation plan
 
-1. **Phase 0 — mirror only, no new writes.** Stand up the relay, one socket per party, mirroring
-   `queue`/`status` into `karafun_state/live`. Switch dashboard and overlay to read from there
-   instead of connecting directly. No command queue yet, no new client-facing behavior. This
-   alone collapses 2-3 direct KaraFun sockets per broadcaster down to 1, and is safe to ship
-   independently — it's a pure refactor of the read path, verifiable by comparing rendered
-   queue/now-playing against the old direct-connection UI before cutting over.
-2. **Phase 1 — command plumbing, manual actions only.** Add `/api/karafun/[userId]/command`,
-   the `karafun_commands` collection, role checks per §3.3 (broadcaster/mod only, no singer
-   tier yet), and wire real skip/play/reorder/pitch/tempo/volume controls into `KaraFunPane.js`.
-   Move `karafunPartyId` to `private/config` once phase 0's overlay cutover is confirmed stable
-   in production (so nothing is still reading the public copy).
-3. **Phase 2 — lease hardening.** Add the `karafun_relay/{userId}` lease (§4), verify it under an
-   intentional rolling-deploy test (two instances briefly up) before relying on it.
-4. **Phase 3 — auto-sort, opt-in.** Ship the round-robin pass + circuit breaker (§5) behind a
-   per-broadcaster setting, default off, announced separately from phases 1-2 so any issues are
-   attributable to the new feature and not the relay migration itself.
-5. **Phase 4 (optional) — singer self-service tier**, only if confirmed as wanted (see the note
-   in §3.3): add the role, extend the authorization matrix, extend `ROLE_TABS`.
+The earlier draft of this section staged the rollout into several sequential phases (mirroring,
+then commands, then lease hardening, each shipped and observed separately before the next). That
+reasoning was sized for a rollout with a real, unsupervised production user base you'd need to
+protect from breakage between deploys — it doesn't fit a very limited beta with a couple of known
+users. At that scale there's no meaningful "blast radius" to manage between shipping the mirroring
+change and shipping the commands change; the whole thing can be built and tested before either
+user touches it, and if something's broken, you just fix it directly. So this is one build, not a
+release schedule:
 
-Each phase should be independently shippable and revertable — in particular, phase 0 has no
-dependency on anything past it, so if the command/auth work in phase 1 stalls, the connection-count
-and race-condition-surface reduction from phase 0 still lands on its own.
+**Build together, ship once:** the relay (state mirroring + command queue processing), the
+`/api/karafun/[userId]/command` route with role checks (§3.3, broadcaster/mod only — no singer
+tier unless that's separately decided), the `karafun_relay/{userId}` lease (§4), the
+`useKaraFunData.js`/`KaraFunPane.js`/overlay changes (§7), and moving `karafunPartyId` to
+`private/config` (§6). These only make sense as one working system — there's no useful
+intermediate state to pause at and observe with 2 users, so building them as separate deploys
+would just add overhead without reducing real risk.
+
+**The one real gate: auto-sort stays behind its own switch, off by default, until after the manual
+path has actually been used.** This isn't about protecting users from a rollout — it's about not
+handing an autonomous feature the controls before the plumbing under it (relay, lease, role checks)
+has been exercised for real. Auto-sort is the one piece that issues `moveInQueue` calls without a
+human clicking anything each time, which is the exact shape of the original failure mode. Turn it
+on only after a few real sessions of plain manual commands (skip/reorder/etc.) have gone fine.
+
+Singer self-service (§3.3's open question) stays a separate later decision either way, since it's
+a product/role question independent of any of the above.
