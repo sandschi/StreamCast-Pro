@@ -50,10 +50,12 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const emotesRef = useRef({ sevenTV: [], bttv: [], ffz: [] });
     const channelRef = useRef(null);
     // The tmi.js client is (re)created only when channelName/reconnectNonce
-    // change, not on every effectiveUid/canManageQueue change - so the
-    // CLEARMSG/timeout handlers registered on it read these through refs
-    // rather than closing over stale values from whenever connect() ran.
-    const effectiveUidRef = useRef(effectiveUid);
+    // change, not on every canManageQueue change - so the CLEARMSG/timeout
+    // handlers registered on it read canManageQueue through this ref rather
+    // than closing over a stale value from whenever connect() ran (a
+    // permission change should apply to an already-connected client
+    // immediately). The equivalent uid used to be read the same way, but
+    // that was wrong in the other direction: see connect() below.
     const canManageQueueRef = useRef(canManageQueue);
     const [reconnectNonce, setReconnectNonce] = useState(0);
     const reconnect = () => setReconnectNonce(n => n + 1);
@@ -66,9 +68,8 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     }, [thirdPartyEmotes]);
 
     useEffect(() => {
-        effectiveUidRef.current = effectiveUid;
         canManageQueueRef.current = canManageQueue;
-    }, [effectiveUid, canManageQueue]);
+    }, [canManageQueue]);
 
     // Deletes every stored copy of one Twitch message (history, still-queued,
     // and the currently-live overlay message) after Twitch reports it deleted
@@ -153,6 +154,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             }
             connectingRef.current = true;
             setConnectionStatus('connecting');
+            // Captured once, here, rather than read live via a ref inside the
+            // handlers below - this client is only ever subscribed to
+            // `channelName`, so its moderation events must always resolve
+            // back to whichever broadcaster that channel belonged to when
+            // THIS client was created. A mod switching hosted channels
+            // updates effectiveUid (and eventually channelName, once the
+            // async username lookup resolves) before this client actually
+            // gets torn down and replaced - reading effectiveUid live here
+            // could attribute an old channel's CLEARMSG/timeout/ban event to
+            // whichever broadcaster the mod has since switched to.
+            const connectedUid = effectiveUid;
             const client = new tmi.Client({ connection: { secure: true, reconnect: true }, channels: [channelName] });
             clientRef.current = client;
             client.on('connected', () => { setConnectionStatus('connected'); connectingRef.current = false; });
@@ -164,15 +176,15 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
                 if (!canManageQueueRef.current) return;
                 const targetMsgId = userstate?.['target-msg-id'];
-                if (targetMsgId) deleteMessagesByTwitchId(effectiveUidRef.current, targetMsgId);
+                if (targetMsgId) deleteMessagesByTwitchId(connectedUid, targetMsgId);
             });
             client.on('timeout', (channel, username) => {
                 if (!canManageQueueRef.current) return;
-                deleteMessagesByLogin(effectiveUidRef.current, username);
+                deleteMessagesByLogin(connectedUid, username);
             });
             client.on('ban', (channel, username) => {
                 if (!canManageQueueRef.current) return;
-                deleteMessagesByLogin(effectiveUidRef.current, username);
+                deleteMessagesByLogin(connectedUid, username);
             });
 
             client.on('message', async (channel, tags, message) => {
@@ -215,6 +227,11 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         };
         connect();
         return () => { if (clientRef.current) { clientRef.current.removeAllListeners(); clientRef.current.disconnect().catch(() => { }); } connectingRef.current = false; };
+        // effectiveUid is deliberately omitted - connect() reads it once into
+        // connectedUid at call time (see above), and this effect must not
+        // re-run just because effectiveUid changed ahead of channelName; it
+        // already re-runs once the channelName lookup for the new uid lands.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, channelName, reconnectNonce]);
 
     useEffect(() => {

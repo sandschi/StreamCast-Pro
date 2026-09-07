@@ -209,7 +209,12 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
             // declineAsTarget - drops a plain request back to public,
             // clearing the target and resetting the public-window timers.
-            || (request.resource.data.status == 'public'
+            // Song-only: a duet invite has no 'public' state in the app
+            // (respondToDuetInvite only ever sets accepted/declined), so
+            // without this a duet's target could still write this exact
+            // transition directly and leave a duet-kind doc sitting at
+            // status 'public' that nothing else expects.
+            || (resource.data.kind == 'song' && request.resource.data.status == 'public'
               && request.resource.data.targetSingerUid == null
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetSingerUid', 'publicExpireBy', 'respondBy']))
           );
