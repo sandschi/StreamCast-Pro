@@ -1,0 +1,67 @@
+# StreamCast KaraFun Relay
+
+Persistent single-authority relay: one real `socket.io` connection to KaraFun per actively-used
+party, mirroring the live queue/status into Firestore. Design rationale, architecture, and the
+full plan (including the command-queue/API-route piece not yet in this slice) live in
+[`../docs/karafun-relay-design.md`](../docs/karafun-relay-design.md) — read that first.
+
+## Status: first slice only
+
+This currently implements **state mirroring and the per-party lease** (design doc §3.2/§4) —
+enough to replace the dashboard's and overlay's own direct KaraFun connections with reads from
+`users/{userId}/karafun_state/live`. It does **not** yet implement the command queue, the
+`/api/karafun/[userId]/command` route, or the auto-sort port (§3.1/§5/§9) — those come next, once
+this piece is confirmed working against a real party.
+
+**This has not been run against a live KaraFun party or production Firestore from the environment
+that wrote it** — no credentials for either were available there. Treat it as reviewed-but-unverified
+until it's actually been run for real.
+
+## How it works
+
+- `src/partyManager.js` polls (every 30s) for broadcasters with a recent presence heartbeat
+  (`users/{userId}/online`, the same signal `useKaraokeData.js` already uses, >90s = stale) who
+  also have `karafunEnabled` + a saved `karafunPartyId`. For each, it takes a Firestore-transaction
+  lease (`karafun_relay/{userId}`) and opens one `KaraFunConnection`.
+- `src/karafunConnection.js` is the actual socket - connects to `https://www.karafun.com`,
+  authenticates, listens for `queue`/`status`, and writes a debounced (max ~2/sec) mirror to
+  `users/{userId}/karafun_state/live`. The connect/transform logic is ported from
+  `src/hooks/useKaraFunData.js`, not reinvented.
+- `src/lease.js` is the per-party lock - see the design doc §4 for why it matters even with one
+  instance (deploy overlap).
+- `src/firebaseAdmin.js` ports the same defensive `FIREBASE_PRIVATE_KEY` PEM-reconstruction
+  `src/lib/firebase-admin.js` has in the main app, since this runs as its own process outside
+  Next.js's build.
+
+## Requires
+
+Before this can mirror anything for real:
+
+1. **The `firestore.indexes.json` change in this same change set deployed** — the presence query
+   is a `collectionGroup('online')` range query on `lastSeen`, which needs the field override
+   added there (`firebase deploy --only firestore:indexes`). Without it, the discovery query will
+   fail outright the first time it runs.
+2. **A Firebase service account** with Firestore access - same three env vars as the main app
+   (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`), set directly in
+   Dokploy's environment config, or in a local `relay/.env` (copy `.env.example`) for dev.
+
+## Local dev
+
+```bash
+cd relay
+npm install
+cp .env.example .env   # fill in the three Firebase Admin values
+npm start
+```
+
+With no real broadcaster online (no fresh `online` heartbeat), the discovery loop will find
+nothing and just idle, logging nothing new every 30s - that's expected, not a bug. To sanity-check
+the actual KaraFun connection logic without needing a real presence heartbeat, temporarily
+instantiate a `KaraFunConnection` directly against a known party ID rather than going through
+`PartyManager`'s discovery.
+
+## Deployment
+
+See design doc §8: deployed via Dokploy as its own service from this `relay/` subdirectory (own
+`Dockerfile`, own build), always-on (not scale-to-zero — see §8 for why that's the right call on
+already-owned infrastructure).

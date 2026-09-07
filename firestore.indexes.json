@@ -17,5 +17,13 @@
             ]
         }
     ],
-    "fieldOverrides": []
+    "fieldOverrides": [
+        {
+            "collectionGroup": "online",
+            "fieldPath": "lastSeen",
+            "indexes": [
+                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+            ]
+        }
+    ]
 }

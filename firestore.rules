@@ -274,6 +274,20 @@ service cloud.firestore {
         allow read: if true;
         allow write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // Mirrored KaraFun queue/status, written only by the relay service via
+      // the Admin SDK (which bypasses these rules entirely) - see
+      // relay/README.md and docs/karafun-relay-design.md §3.2/§6. Public
+      // read: the overlay (unauthenticated by design) reads this instead of
+      // opening its own direct KaraFun connection once relay/README.md's
+      // "next slice" (client cutover) ships; until then this is simply
+      // unread. `allow write: if false` here is what actually matters -
+      // it's what stops a client from writing fake queue state, not the
+      // absence of a client-facing write path in the app.
+      match /karafun_state/{document=**} {
+        allow read: if true;
+        allow write: if false;
+      }
     }
 
     // Twitch-username -> uid lookup so karaoke.sandschi.xyz/{username} (see #27)
