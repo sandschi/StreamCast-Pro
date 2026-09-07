@@ -293,6 +293,14 @@ Vercel (the Next.js app's implied host, given `next.config.mjs`/CLAUDE.md's serv
 doesn't support long-lived outbound socket.io connections in its function runtime, so this has to
 be a separate deployment, not a route.
 
+**Code lives in this repo**, as `relay/` — its own `package.json`/`node_modules`, same pattern
+`functions/` already establishes for a subdirectory with a different runtime/deploy target than the
+Next.js app. Rationale: this repo is what anyone self-hosting StreamCast Pro clones, and the relay
+isn't optional infrastructure for them the way, say, a CI workflow is — if they want KaraFun
+control features at all, they need the relay too, so it travels with the app rather than living in
+a separate repo only the original deployer knows to go find. Dokploy deploys it straight from that
+subdirectory of this repo (same repo, same branch, different build path than the Next.js app).
+
 **Decision: self-hosted Dokploy, always-on container, on the existing 8 vCPU / 16GB RAM / 400GB
 SSD box.** Confirmed against that box's actual Dokploy usage graphs (not just theoretical specs):
 1.86% CPU used, 8.98GiB/16GiB RAM used (~7GB free), 57GB/394GB disk used. The relay's realistic
