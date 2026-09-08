@@ -31,6 +31,12 @@ export default function OverlayPage() {
     const [karafunQueue, setKarafunQueue] = useState([]);
     const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
     const [karafunPlayState, setKarafunPlayState] = useState('stop');
+    // Mirrors relay/src/karafunConnection.js's own `connected` flag - the
+    // relay keeps the last-known queue/song in Firestore across a socket
+    // drop (so a brief blip doesn't blank the overlay), but that means this
+    // page must check connectivity itself before rendering stale data during
+    // a real outage, rather than trusting queue/song presence alone.
+    const [karafunConnected, setKarafunConnected] = useState(false);
     const [showNowPlaying, setShowNowPlaying] = useState(false);
     // Track the last song title+state that triggered the popup so we only fire on genuine song starts
     const lastTriggeredSongRef = useRef(null);
@@ -201,6 +207,7 @@ export default function OverlayPage() {
                 setKarafunQueue([]);
                 setKarafunNowPlaying(null);
                 setKarafunPlayState('stop');
+                setKarafunConnected(false);
                 return;
             }
             const data = snap.data();
@@ -217,6 +224,7 @@ export default function OverlayPage() {
             setKarafunQueue(transformed);
             setKarafunNowPlaying(data.currentSong || null);
             setKarafunPlayState(data.playState || 'stop');
+            setKarafunConnected(!!data.connected);
         });
 
         return () => unsubscribe();
@@ -281,13 +289,13 @@ export default function OverlayPage() {
                 without this the last queue/Now Playing card would stay
                 visible on stream after the broadcaster disables KaraFun. */}
             <AnimatePresence>
-                {settings.karafunEnabled && settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                {settings.karafunEnabled && karafunConnected && settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
                     <QueueCard queue={karafunQueue} settings={settings} />
                 )}
             </AnimatePresence>
 
             <AnimatePresence>
-                {settings.karafunEnabled && settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
+                {settings.karafunEnabled && karafunConnected && settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
                     <NowPlayingCard song={karafunNowPlaying} settings={settings} />
                 )}
             </AnimatePresence>

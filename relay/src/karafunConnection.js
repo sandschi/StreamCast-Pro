@@ -188,7 +188,11 @@ class KaraFunConnection {
         await ref.set({ ...this.state, connected: this.connected, updatedAt: Date.now() }, { merge: true });
     }
 
-    stop() {
+    // Awaited by PartyManager._stopParty before it releases this party's
+    // lease - a fire-and-forget final flush here could still be in flight
+    // when the lease frees up, letting a newly-started instance's own
+    // (merged) writes get clobbered by this stale one landing after it.
+    async stop() {
         this.stopped = true;
         this.connected = false;
         if (this.writeTimer) {
@@ -207,7 +211,7 @@ class KaraFunConnection {
         // connected:true mirrored forever - the debounced write above was
         // just cancelled, not flushed.
         this.dirty = true;
-        this._flush().catch((err) => console.error(`[karafun:${this.userId}] final flush failed`, err));
+        await this._flush().catch((err) => console.error(`[karafun:${this.userId}] final flush failed`, err));
     }
 }
 

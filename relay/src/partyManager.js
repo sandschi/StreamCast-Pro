@@ -27,6 +27,12 @@ class PartyManager {
         this.connections = new Map();
         this._discoveryTimer = null;
         this._ticking = false;
+        // Set only while a tick is actually in flight - stop() awaits this
+        // instead of racing an in-progress _tick() that could still call
+        // _maybeStartParty (Firestore round trips can easily outlast
+        // shutdown) and start a connection nothing ever gets around to
+        // stopping.
+        this._tickPromise = null;
     }
 
     async start() {
@@ -38,6 +44,12 @@ class PartyManager {
 
     async stop() {
         if (this._discoveryTimer) clearInterval(this._discoveryTimer);
+        // clearInterval only stops *future* ticks - one already in flight
+        // must be allowed to finish (and any party it started added to
+        // this.connections) before the stop-all sweep below enumerates keys,
+        // or a party it starts after this function returns would never get
+        // its lease released.
+        if (this._tickPromise) await this._tickPromise.catch(() => {});
         await Promise.all([...this.connections.keys()].map((userId) => this._stopParty(userId)));
     }
 
@@ -51,11 +63,11 @@ class PartyManager {
         // reintroducing the multi-consumer race this relay exists to close.
         if (this._ticking) return;
         this._ticking = true;
-        try {
-            await this._tick();
-        } finally {
+        this._tickPromise = this._tick().finally(() => {
             this._ticking = false;
-        }
+            this._tickPromise = null;
+        });
+        return this._tickPromise;
     }
 
     async _tick() {
@@ -174,7 +186,10 @@ class PartyManager {
         clearInterval(entry.renewTimer);
         entry.autoSort.stop();
         entry.cmdProcessor.stop();
-        entry.conn.stop();
+        // Awaited: conn.stop()'s final Firestore flush must land before the
+        // lease below frees up, or a newly-started instance's own writes
+        // could be overwritten by this stale one arriving late.
+        await entry.conn.stop();
         this.connections.delete(userId);
 
         await releaseLease(this.db, userId, instanceId).catch((err) => {
