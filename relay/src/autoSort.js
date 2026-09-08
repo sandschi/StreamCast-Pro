@@ -155,6 +155,12 @@ class AutoSort {
         // piece of this class - acceptable, bounded, and no worse than the
         // lease/connection state elsewhere already losing its memory too.
         this.lastActiveUid = null;
+        // Forces the very first tick's mirror write through even when the
+        // resolved value is null and happens to equal the fresh
+        // lastActiveUid=null above - without this, a restart while nothing
+        // is playing skips the write entirely and leaves whatever
+        // activeSingerUid the previous relay process last wrote in place.
+        this.mirroredOnce = false;
     }
 
     start() {
@@ -178,7 +184,8 @@ class AutoSort {
         // see the class comment for why the turn display/authorization need
         // this even when nobody's opted into actual reordering.
         const activeUid = resolveActiveUid({ currentSong, rotationOrder, nameFor, lastActiveUid: this.lastActiveUid });
-        if (activeUid !== this.lastActiveUid) {
+        if (!this.mirroredOnce || activeUid !== this.lastActiveUid) {
+            this.mirroredOnce = true;
             this.lastActiveUid = activeUid;
             await this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live')
                 .set({ activeSingerUid: activeUid }, { merge: true })

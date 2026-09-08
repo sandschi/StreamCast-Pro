@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import {
-    getKaraFunActionSpec, resolveRole, resolveSingerName, buildKaraokeContext, authorize, MASTER_ADMIN_UID,
+    getKaraFunActionSpec, resolveRole, resolveSingerName, resolveQueueSingerName, buildKaraokeContext, authorize, MASTER_ADMIN_UID,
 } from '@/lib/karafunCommands';
 import { getPostHogClient, captureEvent } from '@/lib/posthog-server';
 
@@ -56,6 +56,19 @@ export async function POST(request, { params }) {
         const role = isMasterAdminClaim ? 'broadcaster' : await resolveRole(db, userId, callerUid);
         const singerName = await resolveSingerName(db, callerUid, decoded);
         const context = await buildKaraokeContext(db, userId);
+
+        // addToQueue's singer field is otherwise just whatever the client
+        // sent - a singer-role caller could queue a song under someone
+        // else's name with nothing to stop them. Re-derive it server-side
+        // for that role only; broadcaster/mod may name anyone (see
+        // authorize()'s own exemption for those roles).
+        if (action === 'addToQueue' && role === 'singer' && !isMasterAdminClaim) {
+            const resolvedSinger = await resolveQueueSingerName(db, userId, callerUid, singerName, validatedParams.singer);
+            if (!resolvedSinger) {
+                return NextResponse.json({ success: false, error: 'singer must be your own name or an accepted duet invite' }, { status: 403 });
+            }
+            validatedParams = { ...validatedParams, singer: resolvedSinger };
+        }
 
         const decision = authorize({ action, params: validatedParams, role, isMasterAdminClaim, callerUid, singerName, context });
         if (!decision.ok) {

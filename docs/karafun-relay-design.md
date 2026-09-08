@@ -1,6 +1,9 @@
 # KaraFun Relay: Design Doc
 
-Status: **proposal, not implemented**. This document is for review before any code lands.
+Status: **as-built**. The relay, command queue, client cutover, and auto-sort port described
+below have all shipped and been verified against a real KaraFun party (PR #30) — treat this as a
+record of what's running, not a proposal awaiting review. Any section still describing something
+as future work is calling that out explicitly.
 
 ## 0. What's actually in the codebase (corrected)
 
@@ -185,9 +188,13 @@ Flow:
    party's socket **is** the fix for the auto-sort incident's suspect (a) from §0 — there is
    structurally only one writer of `queueMove` regardless of how many dashboard tabs/mods/singers
    have a socket-worthy session open, because none of them talk to KaraFun directly anymore.
-6. Relay executes the corresponding KaraFun socket.io emit, waits for KaraFun's ack/next
-   `queue`/`status` event (with a timeout), and updates the command doc: `status: 'done'` or
-   `status: 'failed', error`.
+6. Relay executes the corresponding KaraFun socket.io emit and immediately updates the command
+   doc to `status: 'done'` (or `'failed', error` if the emit itself throws — e.g. socket not
+   connected). KaraFun's real protocol has no per-command ack, so `'done'` only ever means "the
+   emit succeeded on a connected socket," not "KaraFun applied it" — this matches the fire-and-
+   forget behavior the client hook this was ported from already had (see
+   `relay/src/commandProcessor.js`'s own comment on `_process`), just with real authorization in
+   front of it now.
 7. Dashboard optionally listens on that one command doc (`onSnapshot`) to show inline
    success/failure instead of assuming success — cheap, since it's already paying for a Firestore
    listener per open pane.
@@ -301,7 +308,7 @@ it's being **relocated**:
 
 ## 6. Firestore rules changes
 
-```
+```firestore
 match /karafun_state/{document=**} {
   allow read: if true;                 // overlay still needs this, unauthenticated
   allow write: if false;               // Admin SDK only (relay bypasses rules)

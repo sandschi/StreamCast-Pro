@@ -182,6 +182,34 @@ function isMyTurn(context, callerUid, singerName) {
     return nextSingerUid === callerUid;
 }
 
+// addToQueue's params.singer is otherwise just whatever the client sent
+// (validate() only checks it's a non-empty string) - for a singer-role
+// caller that's an IDOR: nothing stopped them from queuing a song under
+// another participant's name, which then feeds auto-sort's name-based
+// ownerIndexOf attribution and the turn/queue displays. A caller may only
+// name themselves solo, or themselves as the second half of a duet ("Asker &
+// Them") when they're the invitee on a karaoke_requests doc (kind: 'duet')
+// that's actually been accepted - mirroring the exact string
+// respondToDuetInvite (useKaraokeData.js) writes on accept. Broadcaster/mod
+// are never routed through this - they're exempt in authorize() below, same
+// as every other ownership check.
+async function resolveQueueSingerName(db, userId, callerUid, singerName, requestedSinger) {
+    if (!requestedSinger || requestedSinger === singerName) return singerName;
+
+    const parts = requestedSinger.split(/\s*&\s*/).map((s) => s.trim());
+    if (parts.length !== 2 || parts[1] !== singerName) return null;
+
+    const inviteSnap = await db.collection(`users/${userId}/karaoke_requests`)
+        .where('kind', '==', 'duet')
+        .where('targetSingerUid', '==', callerUid)
+        .where('status', '==', 'accepted')
+        .where('requestedByName', '==', parts[0])
+        .limit(1)
+        .get();
+
+    return inviteSnap.empty ? null : requestedSinger;
+}
+
 // Mirrors KaraokePane.js's isMine: the queue entry's singer field (split on
 // '&' for duets) includes the caller's own name.
 function ownsQueueEntry(context, queueId, singerName) {
@@ -219,6 +247,7 @@ export {
     getKaraFunActionSpec,
     resolveRole,
     resolveSingerName,
+    resolveQueueSingerName,
     buildKaraokeContext,
     isMyTurn,
     ownsQueueEntry,

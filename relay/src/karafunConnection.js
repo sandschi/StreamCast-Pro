@@ -158,6 +158,12 @@ class KaraFunConnection {
     }
 
     _scheduleWrite() {
+        // stop() already does one best-effort final flush - without this
+        // guard, socket.disconnect() inside stop() fires the 'disconnect'
+        // handler (which calls _scheduleWrite() itself), arming a second
+        // 500ms timer after teardown that can flush stale state once
+        // another instance has already taken the party's lease.
+        if (this.stopped) return;
         this.dirty = true;
         if (this.writeTimer) return;
         this.writeTimer = setTimeout(() => {
@@ -171,7 +177,15 @@ class KaraFunConnection {
         this.dirty = false;
 
         const ref = this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live');
-        await ref.set({ ...this.state, connected: this.connected, updatedAt: Date.now() });
+        // merge:true - a plain set() here would replace the whole doc and
+        // silently drop activeSingerUid, which AutoSort owns and writes
+        // separately (see autoSort.js's own mirror write) - this fires far
+        // more often (every queue/status event) than that write, so without
+        // merge it would erase the field on almost every mirror tick.
+        // currentSong/upcoming are always assigned null/[] explicitly by the
+        // handlers above rather than omitted, so merge:true never leaves a
+        // stale value behind for those two fields.
+        await ref.set({ ...this.state, connected: this.connected, updatedAt: Date.now() }, { merge: true });
     }
 
     stop() {

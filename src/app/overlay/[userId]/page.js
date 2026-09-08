@@ -274,15 +274,20 @@ export default function OverlayPage() {
                 )}
             </AnimatePresence>
 
-            {/* KaraFun Overlays */}
+            {/* KaraFun Overlays - gated on karafunEnabled too, not just the two
+                overlay-widget toggles below: the mirror effect's early return
+                (karafunEnabled off) leaves karafunQueue/karafunNowPlaying in
+                whatever state they were last in rather than clearing them, so
+                without this the last queue/Now Playing card would stay
+                visible on stream after the broadcaster disables KaraFun. */}
             <AnimatePresence>
-                {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                {settings.karafunEnabled && settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
                     <QueueCard queue={karafunQueue} settings={settings} />
                 )}
             </AnimatePresence>
 
             <AnimatePresence>
-                {settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
+                {settings.karafunEnabled && settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
                     <NowPlayingCard song={karafunNowPlaying} settings={settings} />
                 )}
             </AnimatePresence>

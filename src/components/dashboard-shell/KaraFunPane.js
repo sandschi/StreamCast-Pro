@@ -101,11 +101,11 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // issue #27) - two independent "KaraFun Mod" sessions each polling and
     // reconciling the same live queue could fight each other, among other
     // suspects never fully ruled out client-side. docs/karafun-relay-
-    // design.md §5 relocates that logic into the relay instead, where
-    // there's structurally only one process per party issuing moves - not
-    // yet ported (ships later, off by default, only after the manual
-    // command path here has been used for real - see design doc §9). This
-    // component no longer holds any of that logic, dead or otherwise.
+    // design.md §5 has since relocated that logic into relay/src/autoSort.js,
+    // where there's structurally only one process per party issuing moves -
+    // opt-in via the karafunAutoSortEnabled toggle below (off by default, per
+    // design doc §9), not a component-side effect anymore. This component no
+    // longer holds any of that logic, dead or otherwise.
 
     if (!userSettings?.karafunEnabled) {
         return (

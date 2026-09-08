@@ -1,5 +1,16 @@
 'use strict';
 
+const { admin } = require('./firebaseAdmin');
+
+// Commands older than this were queued against a queue state that no longer
+// exists by the time the relay gets to them (e.g. it was down, or hadn't
+// acquired the party's lease yet) - replaying a stale skipSong/moveInQueue
+// against today's queue does more harm than skipping it silently. The
+// pending-query cutoff below just stops the relay from ever fetching these;
+// it doesn't mark them failed/expired in Firestore - see the follow-up task
+// flagged alongside this fix for that piece.
+const COMMAND_MAX_AGE_MS = 30_000;
+
 // JS-level action -> KaraFun wire event + payload shape, from
 // docs/karafun-relay-design.md §3.1 (verified live against KaraFun's real
 // remote client, issue #27). Mirrors src/lib/karafunCommands.js's
@@ -46,8 +57,10 @@ class CommandProcessor {
     }
 
     start() {
+        const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - COMMAND_MAX_AGE_MS);
         const ref = this.db.collection('users').doc(this.userId).collection('karafun_commands')
             .where('status', '==', 'pending')
+            .where('createdAt', '>', cutoff)
             .orderBy('createdAt', 'asc');
 
         this.unsubscribe = ref.onSnapshot((snap) => {

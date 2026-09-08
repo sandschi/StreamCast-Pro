@@ -1,21 +1,21 @@
 # StreamCast KaraFun Relay
 
 Persistent single-authority relay: one real `socket.io` connection to KaraFun per actively-used
-party, mirroring the live queue/status into Firestore. Design rationale, architecture, and the
-full plan (including the command-queue/API-route piece not yet in this slice) live in
+party, mirroring the live queue/status into Firestore and processing the authenticated command
+queue against it. Design rationale, architecture, and the full plan live in
 [`../docs/karafun-relay-design.md`](../docs/karafun-relay-design.md) — read that first.
 
-## Status: first slice only
+## Status: shipped
 
-This currently implements **state mirroring and the per-party lease** (design doc §3.2/§4) —
-enough to replace the dashboard's and overlay's own direct KaraFun connections with reads from
-`users/{userId}/karafun_state/live`. It does **not** yet implement the command queue, the
-`/api/karafun/[userId]/command` route, or the auto-sort port (§3.1/§5/§9) — those come next, once
-this piece is confirmed working against a real party.
+This implements **state mirroring, the per-party lease, the command queue, and the auto-sort
+port** (design doc §3.1/§3.2/§4/§5) — the dashboard and overlay no longer hold any direct KaraFun
+connection of their own; every read comes from `users/{userId}/karafun_state/live` and every
+mutation goes through `/api/karafun/[userId]/command` into `users/{userId}/karafun_commands`,
+which this relay is the sole consumer of.
 
-**This has not been run against a live KaraFun party or production Firestore from the environment
-that wrote it** — no credentials for either were available there. Treat it as reviewed-but-unverified
-until it's actually been run for real.
+**Verified against a real KaraFun party and production Firestore**, including live two-account
+testing (broadcaster + a second singer-role account) of the command queue's authorization and the
+turn-tracking logic — see PR #30.
 
 ## How it works
 
@@ -27,6 +27,12 @@ until it's actually been run for real.
   authenticates, listens for `queue`/`status`, and writes a debounced (max ~2/sec) mirror to
   `users/{userId}/karafun_state/live`. The connect/transform logic is ported from
   `src/hooks/useKaraFunData.js`, not reinvented.
+- `src/commandProcessor.js` is the one consumer of a party's `users/{userId}/karafun_commands`
+  queue - it processes pending commands FIFO against the same `KaraFunConnection` socket, which is
+  what actually closes issue #29 (the API route authorizes; this executes).
+- `src/autoSort.js` is the opt-in (`karafunAutoSortEnabled`, off by default) round-robin queue
+  reordering, ported into the relay so there's structurally one process issuing moves per party -
+  see design doc §5/§9.
 - `src/lease.js` is the per-party lock - see the design doc §4 for why it matters even with one
   instance (deploy overlap).
 - `src/firebaseAdmin.js` ports the same defensive `FIREBASE_PRIVATE_KEY` PEM-reconstruction

@@ -26,6 +26,7 @@ class PartyManager {
         // userId -> { conn: KaraFunConnection, renewTimer, lastPresenceAt }
         this.connections = new Map();
         this._discoveryTimer = null;
+        this._ticking = false;
     }
 
     async start() {
@@ -41,6 +42,23 @@ class PartyManager {
     }
 
     async tick() {
+        // A Firestore round trip inside a tick can outlast
+        // DISCOVERY_INTERVAL_MS - setInterval doesn't wait for the previous
+        // call, so without this guard two overlapping ticks can both see
+        // the same userId as untracked and both call _maybeStartParty,
+        // leaking the first KaraFunConnection/CommandProcessor (and its
+        // still-live socket) when the second overwrites this.connections -
+        // reintroducing the multi-consumer race this relay exists to close.
+        if (this._ticking) return;
+        this._ticking = true;
+        try {
+            await this._tick();
+        } finally {
+            this._ticking = false;
+        }
+    }
+
+    async _tick() {
         const activeBroadcasters = await this._findActiveBroadcasters();
         const now = Date.now();
 

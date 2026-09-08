@@ -7,4 +7,6 @@ RUN npm install --omit=dev
 
 COPY src ./src
 
+USER node
+
 CMD ["node", "src/index.js"]
