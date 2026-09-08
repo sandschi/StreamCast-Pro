@@ -160,25 +160,63 @@ async function buildKaraokeContext(db, userId) {
     const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
     const state = stateSnap.exists ? stateSnap.data() : null;
 
+    // Scoped to just the rotation's own members (not a full permissions
+    // collection scan) - this is a per-request serverless read, and it's
+    // only ever consulted for sittingOut (see isMyTurn below). A guest:*
+    // pseudo-id has no doc at this path at all - db.doc() on it still
+    // resolves to a (non-existent) ref harmlessly, so no special-casing is
+    // needed here; permissionsByUid[guestId] just stays undefined.
+    const permissionRefs = rotationOrder.map((uid) => db.doc(`users/${userId}/permissions/${uid}`));
+    const permissionSnaps = permissionRefs.length ? await db.getAll(...permissionRefs) : [];
+    const permissionsByUid = {};
+    permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[rotationOrder[i]] = snap.data(); });
+
     return {
         rotationOrder,
         currentSong: state?.currentSong || null,
         upcoming: state?.upcoming || [],
         activeSingerUid: state?.activeSingerUid || null,
+        permissionsByUid,
     };
+}
+
+// Walks forward from activeIdx+1 (or 0 if nobody's active), returns the
+// index of the first rotation slot where isEligible(uid) is true. Bounded
+// to rotationOrder.length iterations, so it can never infinite-loop even if
+// every member is ineligible. Returns -1 if no slot is eligible - the
+// caller decides what that means (see isMyTurn vs. relay/src/autoSort.js's
+// computeDesiredMove, which fall back differently). Duplicated identically
+// in relay/src/commandProcessor.js and relay/src/autoSort.js - relay and
+// this Next.js app are separate runtimes with no shared module, same
+// pattern as isMyTurn/ownsQueueEntry/MASTER_ADMIN_UID below.
+function resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible) {
+    const n = rotationOrder.length;
+    if (n === 0) return -1;
+    const startIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % n;
+    for (let step = 0; step < n; step++) {
+        const idx = (startIdx + step) % n;
+        if (isEligible(rotationOrder[idx])) return idx;
+    }
+    return -1;
 }
 
 // Mirrors KaraokePane.js's isMyTurn: already on air (their name is in the
 // current song's singer field, split on duet '&') or next up per rotation
 // order, using the relay's mirrored activeSingerUid (see buildKaraokeContext
-// above) rather than re-deriving it from currentSong alone.
+// above) rather than re-deriving it from currentSong alone. The "next up"
+// walk skips anyone with sittingOut:true (see useKaraokeData.js's
+// toggleSittingOut) - a guest:* id is never sitting out (no permissions doc
+// exists for it), and can never BE the caller either (nobody authenticates
+// as a guest), so a guest's turn is only ever actionable by broadcaster/mod.
 function isMyTurn(context, callerUid, singerName) {
     const onAirNames = (context.currentSong?.singer || '').split(/\s*&\s*/).map((s) => s.trim()).filter(Boolean);
     if (onAirNames.includes(singerName)) return true;
 
     if (context.rotationOrder.length === 0) return false;
+    const isEligible = (uid) => context.permissionsByUid[uid]?.sittingOut !== true;
     const activeIdx = context.activeSingerUid ? context.rotationOrder.indexOf(context.activeSingerUid) : -1;
-    const nextSingerUid = context.rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % context.rotationOrder.length] || null;
+    const nextIdx = resolveNextEligibleIdx(context.rotationOrder, activeIdx, isEligible);
+    const nextSingerUid = nextIdx === -1 ? null : context.rotationOrder[nextIdx];
     return nextSingerUid === callerUid;
 }
 

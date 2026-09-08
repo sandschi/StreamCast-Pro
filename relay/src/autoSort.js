@@ -36,10 +36,31 @@ async function buildNameFor(db, userId) {
         onlineSingers.push({ id: d.id, displayName: p.displayName, twitchUsername: p.twitchUsername });
     });
 
-    return (uid) => {
+    // guest:{name} entries (see src/hooks/useKaraokeData.js) have no
+    // presence/permissions doc at all - their "name" is the id itself. This
+    // has to match the client-side nameFor's own guest: branch exactly,
+    // since it's what lets ownerIndexOf (below) and resolveActiveUid
+    // recognize a guest's queued song as theirs.
+    const nameFor = (uid) => {
+        if (uid?.startsWith('guest:')) return uid.slice(6);
         const online = onlineSingers.find((s) => s.id === uid);
         return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
     };
+    return { nameFor, permissionsByUid: permissions };
+}
+
+// Same helper as src/lib/karafunCommands.js's resolveNextEligibleIdx -
+// duplicated, not imported (relay and the Next.js app are separate
+// runtimes). See that file for the full comment.
+function resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible) {
+    const n = rotationOrder.length;
+    if (n === 0) return -1;
+    const startIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % n;
+    for (let step = 0; step < n; step++) {
+        const idx = (startIdx + step) % n;
+        if (isEligible(rotationOrder[idx])) return idx;
+    }
+    return -1;
 }
 
 // Resolves "who's actually up" from KaraFun's own live status, falling back
@@ -76,7 +97,7 @@ function resolveActiveUid({ currentSong, rotationOrder, nameFor, lastActiveUid }
 // up" (see resolveActiveUid above) - cursor is one slot after them.
 // Returns { queueId, from, to } for the one move needed to converge upcoming
 // toward the desired order, or null if already in sync / nothing to do.
-function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid }) {
+function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid, permissionsByUid }) {
     if (!upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return null;
 
     const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
@@ -88,7 +109,15 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, act
         return rotationOrder.findIndex((uid) => nameFor(uid) === primary);
     };
     const activeIdx = activeUid ? rotationOrder.indexOf(activeUid) : -1;
-    const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
+    // Skips anyone with sittingOut:true when picking the cursor slot - this
+    // is cosmetic queue-sort only (no authorization at stake, unlike
+    // isMyTurn's identical walk in src/lib/karafunCommands.js and
+    // relay/src/commandProcessor.js), so on the -1 "everyone's sitting out"
+    // edge case this falls back to the old naive cursor rather than
+    // producing an unusable index.
+    const isEligible = (uid) => permissionsByUid?.[uid]?.sittingOut !== true;
+    const nextIdx = resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible);
+    const cursorIdx = nextIdx === -1 ? (activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length) : nextIdx;
 
     const seenRounds = {};
     const currentIds = upcoming.map((s) => s.queueId);
@@ -178,7 +207,7 @@ class AutoSort {
         const settings = settingsSnap.data();
         const rotationOrder = settings?.karaokeRotationOrder || [];
         const { upcoming, currentSong } = this.connection.state;
-        const nameFor = await buildNameFor(this.db, this.userId);
+        const { nameFor, permissionsByUid } = await buildNameFor(this.db, this.userId);
 
         // Always resolved and mirrored, independent of the toggle below -
         // see the class comment for why the turn display/authorization need
@@ -197,7 +226,7 @@ class AutoSort {
             return;
         }
 
-        const move = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid });
+        const move = computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, activeUid, permissionsByUid });
         if (!move) {
             this.pendingSignature = null;
             return;

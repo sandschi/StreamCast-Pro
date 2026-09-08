@@ -201,24 +201,52 @@ class CommandProcessor {
             this.db.doc(`users/${this.userId}/settings/config`).get(),
             this.db.doc(`users/${this.userId}/karafun_state/live`).get(),
         ]);
+        const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
+
+        // Scoped read, same reasoning as src/lib/karafunCommands.js's
+        // buildKaraokeContext - a guest:* id never has a doc here, so
+        // permissionsByUid[guestId] just stays undefined (always eligible).
+        const permissionRefs = rotationOrder.map((uid) => this.db.doc(`users/${this.userId}/permissions/${uid}`));
+        const permissionSnaps = permissionRefs.length ? await this.db.getAll(...permissionRefs) : [];
+        const permissionsByUid = {};
+        permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[rotationOrder[i]] = snap.data(); });
+
         return {
-            rotationOrder: settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [],
+            rotationOrder,
             currentSong: this.connection.state.currentSong,
             activeSingerUid: stateSnap.exists ? (stateSnap.data().activeSingerUid || null) : null,
+            permissionsByUid,
         };
     }
 }
 
+// Same helper as src/lib/karafunCommands.js's resolveNextEligibleIdx -
+// duplicated, not imported (relay and the Next.js app are separate
+// runtimes). See that file for the full comment.
+function resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible) {
+    const n = rotationOrder.length;
+    if (n === 0) return -1;
+    const startIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % n;
+    for (let step = 0; step < n; step++) {
+        const idx = (startIdx + step) % n;
+        if (isEligible(rotationOrder[idx])) return idx;
+    }
+    return -1;
+}
+
 // Mirrors src/lib/karafunCommands.js's isMyTurn - see that file's own
 // comment for why activeSingerUid (not currentSong alone) is required to
-// get "who's next" right across the gap between songs.
-function isMyTurn({ currentSong, rotationOrder, activeSingerUid }, callerUid, singerName) {
+// get "who's next" right across the gap between songs, and for the
+// sittingOut skip-walk / guest-id reasoning.
+function isMyTurn({ currentSong, rotationOrder, activeSingerUid, permissionsByUid }, callerUid, singerName) {
     const onAirNames = (currentSong?.singer || '').split(/\s*&\s*/).map((s) => s.trim()).filter(Boolean);
     if (onAirNames.includes(singerName)) return true;
 
     if (rotationOrder.length === 0) return false;
+    const isEligible = (uid) => permissionsByUid[uid]?.sittingOut !== true;
     const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
-    const nextSingerUid = rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length] || null;
+    const nextIdx = resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible);
+    const nextSingerUid = nextIdx === -1 ? null : rotationOrder[nextIdx];
     return nextSingerUid === callerUid;
 }
 

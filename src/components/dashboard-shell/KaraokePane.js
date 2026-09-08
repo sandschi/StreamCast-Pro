@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
+import SingerPicker from './SingerPicker';
 import { tiny } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import TextInput from '@/components/ui/TextInput';
@@ -19,28 +20,8 @@ import Avatar from '@/components/ui/Avatar';
 const row = (t) => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: `1px solid ${t.hair}` });
 const btnRow = { display: 'flex', gap: 6, flex: 'none' };
 
-function SingerPicker({ t, singers, onPick, onCancel, allowPublic }) {
-    return (
-        <div style={{ position: 'absolute', zIndex: 5, top: '100%', right: 0, marginTop: 4, width: 220, background: t.pane, border: `1px solid ${t.edge}`, boxShadow: '0 10px 26px -12px rgba(0,0,0,.7)' }}>
-            {allowPublic && (
-                <button onClick={() => onPick(null)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent', border: 'none', borderBottom: `1px solid ${t.hair}`, color: t.text, cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 12 }}>
-                    Anyone (public request)
-                </button>
-            )}
-            {singers.length === 0 && <div style={{ padding: 10, ...tiny(t), color: t.faint }}>No singers online right now.</div>}
-            {singers.map(s => (
-                <button key={s.id} onClick={() => onPick(s.id, s)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent', border: 'none', borderBottom: `1px solid ${t.hair}`, color: t.text, cursor: 'pointer' }}>
-                    <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={18} />
-                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>{s.twitchUsername || s.displayName}</span>
-                </button>
-            ))}
-            <button onClick={onCancel} style={{ display: 'block', width: '100%', textAlign: 'center', padding: '6px 10px', background: 'transparent', border: 'none', color: t.faint, cursor: 'pointer', ...tiny(t) }}>Cancel</button>
-        </div>
-    );
-}
-
-function SongRow({ t, song, canSelfAdd, canRequest, onlineSingers, onSelfAdd, onRequest }) {
-    const [picker, setPicker] = useState(null); // 'request' | 'duet' | null
+function SongRow({ t, song, canSelfAdd, canRequest, isMod, onlineSingers, rotationMembers, onSelfAdd, onRequest, onAddForOther }) {
+    const [picker, setPicker] = useState(null); // 'request' | 'duet' | 'attribute' | null
 
     return (
         <div style={{ ...row(t), position: 'relative' }}>
@@ -57,6 +38,14 @@ function SongRow({ t, song, canSelfAdd, canRequest, onlineSingers, onSelfAdd, on
                     </>
                 )}
                 {canRequest && <ToolBtn t={t} onClick={() => setPicker(picker === 'request' ? null : 'request')}>Request…</ToolBtn>}
+                {/* Mod-only - lets a mod queue a song attributed to someone who
+                    can't run their own dashboard, for someone already in the
+                    rotation (not the broader chat/freeform pool the rotation
+                    Add button draws from - see RotationOrderPane). No
+                    server-side change needed: route.js's singer-name binding
+                    check only applies to role 'singer', mod/broadcaster
+                    already pass params.singer through unchecked. */}
+                {isMod && <ToolBtn t={t} icon={<UserPlus size={11} />} onClick={() => setPicker(picker === 'attribute' ? null : 'attribute')}>Add for…</ToolBtn>}
             </div>
             {picker === 'duet' && (
                 <SingerPicker t={t} singers={onlineSingers} allowPublic={false}
@@ -66,6 +55,11 @@ function SongRow({ t, song, canSelfAdd, canRequest, onlineSingers, onSelfAdd, on
             {picker === 'request' && (
                 <SingerPicker t={t} singers={onlineSingers} allowPublic
                     onPick={(uid) => { onRequest(song, uid); setPicker(null); }}
+                    onCancel={() => setPicker(null)} />
+            )}
+            {picker === 'attribute' && (
+                <SingerPicker t={t} singers={rotationMembers}
+                    onPick={(id) => { onAddForOther(song, id); setPicker(null); }}
                     onCancel={() => setPicker(null)} />
             )}
         </div>
@@ -83,9 +77,10 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     } = karaFun;
 
     const {
-        requests, onlineSingers, rotationOrder, permissions, nameFor,
+        requests, onlineSingers, rotationOrder, rotationMembers, permissions, nameFor,
         submitRequest, acceptRequest, declineAsTarget,
-        selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, toggleParticipating,
+        selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet,
+        toggleParticipating, toggleSittingOut,
     } = useKaraokeData({ targetUid, user, userRole });
 
     const isMod = userRole === 'broadcaster' || userRole === 'mod';
@@ -155,15 +150,23 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // now, so they can't disagree the way they used to when each derived it
     // independently client-side (see #27). "Next up" is one slot after them.
     const activeSingerUid = queueData?.activeSingerUid || null;
+    // Mirrors src/lib/karafunCommands.js's isMyTurn skip-walk (a sitting-out
+    // singer is never "next") - this copy is display-only (gates which
+    // panel shows here), the server-side one is the actual authorization
+    // boundary, but leaving this one naive would show the Play/Skip panel
+    // to someone the server would then reject with "not your turn".
     const nextSingerUid = rotationOrder.length === 0 ? null : (() => {
         const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
-        return rotationOrder[activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length] || null;
+        const n = rotationOrder.length;
+        const startIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % n;
+        for (let step = 0; step < n; step++) {
+            const idx = (startIdx + step) % n;
+            const candidate = rotationOrder[idx];
+            if (permissions[candidate]?.sittingOut !== true) return candidate;
+        }
+        return null;
     })();
 
-    // A singer who's newly online/participating isn't in the persisted
-    // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
-    // last, jumping them ahead of everyone who's actually been waiting.
-    const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
     // Access opens up to whoever's turn is next per rotation, not only once
     // KaraFun's own status event confirms something is already playing -
     // otherwise the one person who'd actually need Play (to start their own
@@ -188,6 +191,11 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
 
     const handleSelfAdd = (song, duetUid) => duetUid ? inviteDuet(song, singerName, duetUid) : selfAdd(song, singerName, addToQueue);
     const handleRequest = (song, targetUid_) => submitRequest(song, targetUid_, singerName);
+    // id may be a real uid or a guest:{name} pseudo-id (see
+    // useKaraokeData.js) - nameFor(id) resolves either correctly, at
+    // click-time rather than from the picker's own snapshot data, matching
+    // every other name-resolution path in the app.
+    const handleAddForOther = (song, id) => addToQueue(song.songId, nameFor(id));
 
     if (!userSettings?.karaokeEnabled) {
         return (
@@ -218,8 +226,9 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 {searching && <div style={{ padding: d.pad, ...tiny(t), color: t.faint }}>Searching…</div>}
                 {!searching && searchTerm && visibleResults.length === 0 && <EmptyState icon={<Search size={28} />} title="No matches." />}
                 {visibleResults.map(song => (
-                    <SongRow key={song.songId} t={t} song={song} canSelfAdd={canSelfAdd} canRequest={requestsOpen}
-                        onlineSingers={onlineSingers} onSelfAdd={handleSelfAdd} onRequest={handleRequest} />
+                    <SongRow key={song.songId} t={t} song={song} canSelfAdd={canSelfAdd} canRequest={requestsOpen} isMod={isMod}
+                        onlineSingers={onlineSingers} rotationMembers={rotationMembers}
+                        onSelfAdd={handleSelfAdd} onRequest={handleRequest} onAddForOther={handleAddForOther} />
                 ))}
             </Pane>
 
@@ -263,15 +272,20 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 </Pane>
 
                 <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
-                    {onlineSingers.length === 0 ? (
-                        <EmptyState icon={<Users size={28} />} title="No participating singers online." />
-                    ) : [...onlineSingers].sort((a, b) => rotationRank(a.id) - rotationRank(b.id)).map((s, i) => (
-                        <div key={s.id} style={row(t)}>
+                    {/* Read-only here (management lives on the KaraFun Mod tab's
+                        Rotation Order panel) - sourced from the shared
+                        rotationMembers so offline singers and guest entries
+                        (no account, added straight from chat) show up
+                        correctly, not just currently-online people. */}
+                    {rotationMembers.length === 0 ? (
+                        <EmptyState icon={<Users size={28} />} title="Nobody in the rotation yet." />
+                    ) : rotationMembers.map((s, i) => (
+                        <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                             <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
                                 {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
                             </span>
                             <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
-                            <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
+                            <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}{s.sittingOut ? ' (sitting out)' : ''}</span>
                         </div>
                     ))}
                 </Pane>
@@ -279,6 +293,11 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                 {(isSinger || isMod) && (
                     <Pane t={t} d={d} icon={<Mic size={13} />} title="My Participation">
                         <ToggleSwitch t={t} checked={iAmParticipating} onChange={toggleParticipating} label="Participating tonight" description={isMod ? "On = you're in Rotation Order and pickable for requests/duets." : "Off = you can still request songs, but won't be pickable."} />
+                        {iAmParticipating && (
+                            <div style={{ marginTop: 8 }}>
+                                <ToggleSwitch t={t} checked={!!myPerm?.sittingOut} onChange={toggleSittingOut} label="Sitting out" description="Skip me for turns until I turn this back off. Keeps my place and queued songs." />
+                            </div>
+                        )}
                     </Pane>
                 )}
 

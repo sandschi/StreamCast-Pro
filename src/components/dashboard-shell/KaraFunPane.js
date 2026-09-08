@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Music, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Music, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, UserPlus, Ban, X, Trash2 } from 'lucide-react';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
+import SingerPicker from './SingerPicker';
+import RemoveFromRotationModal from './RemoveFromRotationModal';
 import { MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import TextInput from '@/components/ui/TextInput';
@@ -47,7 +49,7 @@ function useDebouncedSetting(propValue, onCommit) {
     return [value, handleChange];
 }
 
-export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, isMasterAdmin }) {
+export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, chat, isMasterAdmin }) {
     const {
         queueData, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
         handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
@@ -59,7 +61,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, nameFor,
+        requests, rotationOrder, fullRotationOrder, rotationMembers, permissions, nameFor,
         modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user, userRole });
 
@@ -82,19 +84,59 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // client-side and could disagree).
     const activeSingerUid = queueData?.activeSingerUid || null;
 
-    // A singer who's newly online/participating isn't in the persisted
-    // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
-    // last, jumping them ahead of everyone who's actually been waiting.
-    const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
+    // Candidates for the "Add to rotation" picker: whoever's shown up in
+    // chat recently (useChatData.js's own rolling last-50 window, passed
+    // down from dashboard/page.js), deduped by login, most recent first -
+    // reusing data that's already being tracked rather than standing up a
+    // separate "who's chatting" tracker. Freeform typing (see SingerPicker's
+    // allowFreeform) covers anyone not currently chatting.
+    const recentChatters = useMemo(() => {
+        const seen = new Map();
+        for (const m of [...(chat?.messages || [])].reverse()) {
+            if (!m.login || seen.has(m.login)) continue;
+            seen.set(m.login, { id: m.login, twitchUsername: m.login, displayName: m.displayName || m.login, photoURL: m.avatarUrl });
+        }
+        return [...seen.values()];
+    }, [chat?.messages]);
 
-    // The persisted order, extended with any online singer it doesn't know
-    // about yet (appended at the end, same as rotationRank's tie-break
-    // above). The Rotation Order arrows below swap two singers' positions
-    // within THIS array and persist the whole thing back - swapping within
-    // arr.map(x => x.id) instead (the visible, online-only list) would drop
-    // every temporarily offline singer from karaokeRotationOrder on the very
-    // next reorder.
-    const fullRotationOrder = [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))];
+    const [addingToRotation, setAddingToRotation] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState(null); // { id, name } | null
+
+    // A chatter whose Twitch login matches an existing account gets added by
+    // that real uid, not wrapped as a guest - so if they ever do open the
+    // dashboard, their own self-service controls (sit-out, self turn-taking)
+    // keep working instead of being stuck behind a disconnected placeholder.
+    const handleAddPick = (uid, singerObj) => {
+        let id = uid;
+        if (!id) {
+            const typedName = singerObj?.freeformName?.trim();
+            if (!typedName) return;
+            id = `guest:${typedName}`;
+        } else {
+            // uid here is a chatter's Twitch login (from recentChatters), not
+            // necessarily their Firebase uid - reconcile against every known
+            // account on this channel (not just current rotation members) by
+            // twitchUsername before falling back to a guest entry.
+            const knownEntry = Object.entries(permissions).find(([, p]) => p.twitchUsername === uid);
+            id = knownEntry ? knownEntry[0] : `guest:${uid}`;
+        }
+        if (fullRotationOrder.includes(id)) { setAddingToRotation(false); return; }
+        setRotationOrder([...fullRotationOrder, id]);
+        setAddingToRotation(false);
+    };
+
+    const queuedCountFor = (name) => (queueData?.upcoming || [])
+        .filter((song) => (song.singer || '').split(/\s*&\s*/).map((s) => s.trim()).includes(name)).length;
+
+    const confirmRemoveFromRotation = () => {
+        if (!removeTarget) return;
+        const { id, name } = removeTarget;
+        setRotationOrder(fullRotationOrder.filter((x) => x !== id));
+        (queueData?.upcoming || [])
+            .filter((song) => (song.singer || '').split(/\s*&\s*/).map((s) => s.trim()).includes(name))
+            .forEach((song) => { if (song.queueId) removeFromQueue(song.queueId); });
+        setRemoveTarget(null);
+    };
 
     // Auto-sort (round-robin queue reordering) previously lived here as a
     // client-side effect, disabled since a real incident (see git history,
@@ -220,15 +262,29 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                             ))}
                         </Pane>
 
-                        <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
-                            {onlineSingers.length === 0 && <EmptyState icon={<Users size={28} />} title="No participating singers online." />}
-                            {[...onlineSingers].sort((a, b) => rotationRank(a.id) - rotationRank(b.id)).map((s, i, arr) => (
-                                <div key={s.id} style={row(t)}>
+                        <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order" actions={
+                            <div style={{ position: 'relative' }}>
+                                <ToolBtn t={t} icon={<UserPlus size={12} />} onClick={() => setAddingToRotation(v => !v)}>Add</ToolBtn>
+                                {addingToRotation && (
+                                    <SingerPicker t={t} allowFreeform
+                                        singers={recentChatters.filter(c => !rotationMembers.some(m => (m.isGuest ? m.displayName : m.twitchUsername) === c.id))}
+                                        onPick={handleAddPick}
+                                        onCancel={() => setAddingToRotation(false)} />
+                                )}
+                            </div>
+                        }>
+                            {rotationMembers.length === 0 && <EmptyState icon={<Users size={28} />} title="Nobody in the rotation yet." hint="Use Add above, or wait for a singer to opt in from the Karaoke tab." />}
+                            {rotationMembers.map((s, i, arr) => (
+                                <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                                     <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
                                         {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
                                     </span>
                                     <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
-                                    <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
+                                    <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>
+                                        {s.twitchUsername || s.displayName}
+                                        {s.isGuest && <span style={{ color: t.faint }}> (guest)</span>}
+                                        {s.sittingOut && <span style={{ color: t.faint }}> (sitting out)</span>}
+                                    </span>
                                     <div style={btnRow}>
                                         <ToolBtn t={t} icon={<ArrowUp size={11} />} disabled={i === 0} onClick={() => {
                                             const order = [...fullRotationOrder];
@@ -244,12 +300,17 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                                             [order[curIdx], order[neighborIdx]] = [order[neighborIdx], order[curIdx]];
                                             setRotationOrder(order);
                                         }} />
+                                        <ToolBtn t={t} icon={<Ban size={11} />} onClick={() => setRemoveTarget({ id: s.id, name: s.twitchUsername || s.displayName })} />
                                     </div>
                                 </div>
                             ))}
                         </Pane>
                     </>
                 )}
+
+                <RemoveFromRotationModal t={t} open={!!removeTarget} name={removeTarget?.name}
+                    queuedCount={removeTarget ? queuedCountFor(removeTarget.name) : 0}
+                    onCancel={() => setRemoveTarget(null)} onConfirm={confirmRemoveFromRotation} />
 
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">

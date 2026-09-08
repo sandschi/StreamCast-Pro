@@ -151,9 +151,12 @@ service cloud.firestore {
         // rather than one `allow write` so this never has to evaluate
         // resource.data against a not-yet-existing document.
         allow create, delete: if isChannelModerator(userId);
+        // sittingOut (src/hooks/useKaraokeData.js's toggleSittingOut) is
+        // self-service only - "so the user can pass rounds" - same
+        // self-write carve-out as participating, not mod-controllable.
         allow update: if isChannelModerator(userId) || (
           request.auth != null && request.auth.uid == permissionId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participating'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participating', 'sittingOut'])
         );
       }
 

@@ -460,7 +460,7 @@ function DashboardContent() {
                                         userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
                                         isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
                                         uiScale={uiScale} setUiScale={setUiScale}
-                                        activeSection={settingsSection} karaFun={karaFun}
+                                        activeSection={settingsSection} karaFun={karaFun} chat={chat}
                                     />
                                 )}
                             </>
