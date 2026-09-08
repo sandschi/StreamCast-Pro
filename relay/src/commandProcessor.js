@@ -204,12 +204,18 @@ class CommandProcessor {
         const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
 
         // Scoped read, same reasoning as src/lib/karafunCommands.js's
-        // buildKaraokeContext - a guest:* id never has a doc here, so
-        // permissionsByUid[guestId] just stays undefined (always eligible).
-        const permissionRefs = rotationOrder.map((uid) => this.db.doc(`users/${this.userId}/permissions/${uid}`));
+        // buildKaraokeContext - a guest:* id never has a doc here, so it's
+        // skipped entirely rather than passed to db.doc(), since a guest
+        // name containing '/' would otherwise make db.doc() parse it as
+        // extra path segments and throw. That throw would land outside
+        // _process()'s try/catch (this method is awaited from
+        // _reauthorize(), called before the try block) as an unhandled
+        // rejection with no .catch() anywhere up the chain to _drain().
+        const nonGuestRotationUids = rotationOrder.filter((uid) => !uid.startsWith('guest:'));
+        const permissionRefs = nonGuestRotationUids.map((uid) => this.db.doc(`users/${this.userId}/permissions/${uid}`));
         const permissionSnaps = permissionRefs.length ? await this.db.getAll(...permissionRefs) : [];
         const permissionsByUid = {};
-        permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[rotationOrder[i]] = snap.data(); });
+        permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[nonGuestRotationUids[i]] = snap.data(); });
 
         return {
             rotationOrder,

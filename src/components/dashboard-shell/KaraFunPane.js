@@ -110,7 +110,13 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
         let id = uid;
         if (!id) {
             const typedName = singerObj?.freeformName?.trim();
-            if (!typedName) return;
+            // SingerPicker already rejects these characters before calling
+            // onPick - this is a second, cheap guard against '/' (breaks
+            // db.doc()'s path parsing wherever a guest id gets looked up)
+            // and '&' (collides with the duet-split convention every
+            // ownership/attribution check uses), not something a mod should
+            // be able to bypass by calling this handler some other way.
+            if (!typedName || /[/&]/.test(typedName)) return;
             id = `guest:${typedName}`;
         } else {
             // uid here is a chatter's Twitch login (from recentChatters), not

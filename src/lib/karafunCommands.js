@@ -163,13 +163,16 @@ async function buildKaraokeContext(db, userId) {
     // Scoped to just the rotation's own members (not a full permissions
     // collection scan) - this is a per-request serverless read, and it's
     // only ever consulted for sittingOut (see isMyTurn below). A guest:*
-    // pseudo-id has no doc at this path at all - db.doc() on it still
-    // resolves to a (non-existent) ref harmlessly, so no special-casing is
-    // needed here; permissionsByUid[guestId] just stays undefined.
-    const permissionRefs = rotationOrder.map((uid) => db.doc(`users/${userId}/permissions/${uid}`));
+    // pseudo-id never has a doc at this path - skipped entirely rather than
+    // passed to db.doc(), since a guest name containing '/' would otherwise
+    // make db.doc() parse it as extra path segments and throw ("Document
+    // references must have an even number of segments"); permissionsByUid
+    // just stays undefined for any guest, which is what we want anyway.
+    const nonGuestRotationUids = rotationOrder.filter((uid) => !uid.startsWith('guest:'));
+    const permissionRefs = nonGuestRotationUids.map((uid) => db.doc(`users/${userId}/permissions/${uid}`));
     const permissionSnaps = permissionRefs.length ? await db.getAll(...permissionRefs) : [];
     const permissionsByUid = {};
-    permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[rotationOrder[i]] = snap.data(); });
+    permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[nonGuestRotationUids[i]] = snap.data(); });
 
     return {
         rotationOrder,
