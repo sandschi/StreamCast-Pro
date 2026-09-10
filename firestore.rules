@@ -151,9 +151,12 @@ service cloud.firestore {
         // rather than one `allow write` so this never has to evaluate
         // resource.data against a not-yet-existing document.
         allow create, delete: if isChannelModerator(userId);
+        // sittingOut (src/hooks/useKaraokeData.js's toggleSittingOut) is
+        // self-service only - "so the user can pass rounds" - same
+        // self-write carve-out as participating, not mod-controllable.
         allow update: if isChannelModerator(userId) || (
           request.auth != null && request.auth.uid == permissionId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participating'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participating', 'sittingOut'])
         );
       }
 
@@ -273,6 +276,35 @@ service cloud.firestore {
       match /overlay_triggers/{document=**} {
         allow read: if true;
         allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Mirrored KaraFun queue/status, written only by the relay service via
+      // the Admin SDK (which bypasses these rules entirely) - see
+      // relay/README.md and docs/karafun-relay-design.md §3.2/§6. Public
+      // read: the overlay (unauthenticated by design) reads this instead of
+      // opening its own direct KaraFun connection once relay/README.md's
+      // "next slice" (client cutover) ships; until then this is simply
+      // unread. `allow write: if false` here is what actually matters -
+      // it's what stops a client from writing fake queue state, not the
+      // absence of a client-facing write path in the app.
+      match /karafun_state/{document=**} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Command queue for KaraFun playback control - see
+      // docs/karafun-relay-design.md §3.1/§6. Only
+      // src/app/api/karafun/[userId]/command/route.js (Admin SDK, real
+      // role/turn/ownership checks) ever writes a command doc; the relay
+      // (also Admin SDK) is the only thing that ever updates one to
+      // done/failed. Read is scoped to mods/broadcaster for the optimistic-
+      // UI listener in §3.1 step 7 - a plain singer/viewer isn't meant to
+      // see the whole channel's command history, just whether their own
+      // request (surfaced client-side from the route's response) went
+      // through.
+      match /karafun_commands/{commandId} {
+        allow read: if isChannelModerator(userId);
+        allow write: if false;
       }
     }
 

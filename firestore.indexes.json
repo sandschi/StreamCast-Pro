@@ -15,7 +15,23 @@
                 { "fieldPath": "status", "order": "ASCENDING" },
                 { "fieldPath": "publicExpireBy", "order": "ASCENDING" }
             ]
+        },
+        {
+            "collectionGroup": "karafun_commands",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "createdAt", "order": "ASCENDING" }
+            ]
         }
     ],
-    "fieldOverrides": []
+    "fieldOverrides": [
+        {
+            "collectionGroup": "online",
+            "fieldPath": "lastSeen",
+            "indexes": [
+                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+            ]
+        }
+    ]
 }

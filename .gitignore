@@ -48,5 +48,9 @@ firebase-debug.log
 firebase-debug.*.log
 server.log
 
+# karafun relay (see relay/README.md)
+relay/node_modules
+relay/.env
+
 # design system source (local reference only, not part of the app)
 /Designsystem

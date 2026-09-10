@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Music, RefreshCw, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, X, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Music, Save, Link as LinkIcon, Eye, EyeOff, Play, Pause, SkipForward, Users, Mic, ArrowUp, ArrowDown, ArrowRight, UserPlus, Ban, X, Trash2 } from 'lucide-react';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import Pane from './Pane';
 import Field from './Field';
 import ToolBtn from './ToolBtn';
+import SingerPicker from './SingerPicker';
+import RemoveFromRotationModal from './RemoveFromRotationModal';
 import { MONO, tiny, L } from './treatments';
 import EmptyState from '@/components/ui/EmptyState';
 import TextInput from '@/components/ui/TextInput';
@@ -47,11 +49,11 @@ function useDebouncedSetting(propValue, onCommit) {
     return [value, handleChange];
 }
 
-export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, isMasterAdmin }) {
+export default function KaraFunPane({ t, d, targetUid, user, userRole, userSettings, karaFun, chat, isMasterAdmin }) {
     const {
-        queueData, loading, error, lastUpdated, tempPartyId, setTempPartyId, isSavingId, partyId,
-        handleReconnect, handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
-        moveInQueue, removeFromQueue, playSong, skipSong,
+        queueData, connected, tempPartyId, setTempPartyId, isSavingId, partyId,
+        handleSavePartyId, handleToggleSetting, handleShowNowPlaying, handleHideNowPlaying,
+        removeFromQueue, playSong, skipSong,
     } = karaFun;
 
     // Karaoke request oversight (see #27) - deliberately gated on
@@ -59,7 +61,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // guard further down, since a broadcaster can run the KaraFun overlay
     // without ever opening viewer requests at all.
     const {
-        requests, onlineSingers, rotationOrder, nameFor, getActiveSingerUid,
+        requests, rotationOrder, fullRotationOrder, rotationMembers, permissions, nameFor,
         modDecline, modForcePublic, setRotationOrder,
     } = useKaraokeData({ targetUid, user, userRole });
 
@@ -70,163 +72,89 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
 
     const modQueue = requests.filter(r => r.status === 'pending' || r.status === 'public');
 
-    // Who's actually singing right now, per KaraFun's own live status - the
-    // one source of truth for "position 0" in rotation terms. Not a value we
-    // maintain ourselves (an earlier version stored a separate Firestore
-    // cursor advanced by a reactive effect, which meant two things could
-    // describe "whose turn" and drift apart); derived fresh every render via
-    // useKaraokeData's shared getActiveSingerUid instead, so this and the
-    // Karaoke tab always resolve "whose turn" identically (see #27 - they
-    // used to derive it independently and could disagree).
-    const activeSingerUid = getActiveSingerUid(queueData?.currentSong?.singer);
+    // Who's actually singing right now, per the relay's own resolved and
+    // mirrored karafun_state/live.activeSingerUid (relay/src/autoSort.js's
+    // resolveActiveUid) - not derived here from currentSong.singer directly.
+    // That used to default to rotationOrder[0] whenever nothing was actively
+    // playing (the gap between a skip and the next Play), which forgot whose
+    // turn it was and pointed the arrow back at whoever's first in rotation
+    // on every gap. The relay is the one process that can see across that
+    // gap continuously; this and the Karaoke tab both just read its answer,
+    // so they always agree (see #27 - they used to derive it independently
+    // client-side and could disagree).
+    const activeSingerUid = queueData?.activeSingerUid || null;
+    const displayedSingerUid = activeSingerUid ?? rotationMembers.find((member) => !member.sittingOut)?.id;
 
-    // A singer who's newly online/participating isn't in the persisted
-    // rotationOrder yet - indexOf(-1) would otherwise sort them first, not
-    // last, jumping them ahead of everyone who's actually been waiting.
-    const rotationRank = (id) => { const idx = rotationOrder.indexOf(id); return idx === -1 ? Infinity : idx; };
+    // Candidates for the "Add to rotation" picker: whoever's shown up in
+    // chat recently (useChatData.js's own rolling last-50 window, passed
+    // down from dashboard/page.js), deduped by login, most recent first -
+    // reusing data that's already being tracked rather than standing up a
+    // separate "who's chatting" tracker. Freeform typing (see SingerPicker's
+    // allowFreeform) covers anyone not currently chatting.
+    const recentChatters = useMemo(() => {
+        const seen = new Map();
+        for (const m of [...(chat?.messages || [])].reverse()) {
+            if (!m.login || seen.has(m.login)) continue;
+            seen.set(m.login, { id: m.login, twitchUsername: m.login, displayName: m.displayName || m.login, photoURL: m.avatarUrl });
+        }
+        return [...seen.values()];
+    }, [chat?.messages]);
 
-    // The persisted order, extended with any online singer it doesn't know
-    // about yet (appended at the end, same as rotationRank's tie-break
-    // above). The Rotation Order arrows below swap two singers' positions
-    // within THIS array and persist the whole thing back - swapping within
-    // arr.map(x => x.id) instead (the visible, online-only list) would drop
-    // every temporarily offline singer from karaokeRotationOrder on the very
-    // next reorder.
-    const fullRotationOrder = [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))];
+    const [addingToRotation, setAddingToRotation] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState(null); // { id, name } | null
 
-    // Auto-sort v2 (see #27 - v1 caused a live runaway reorder loop against a
-    // real party, "switching songs around in rapid succession", and had to
-    // be killed by turning the party off). Redesigned around three changes,
-    // any one of which might have been the actual cause - rather than bet on
-    // a single diagnosis against a production party again, all three ship
-    // together:
-    //
-    // 1. Polls on a fixed 5s interval via refs, instead of reacting to every
-    //    dependency change. v1 re-ran on every Firestore tick (presence,
-    //    permissions, settings all update independently of the real KaraFun
-    //    queue), and nameFor/onlineSingers are new references each time -
-    //    plausible on their own for far more frequent re-evaluation than
-    //    intended, especially since v1 evaluated the correction and re-sent
-    //    it inline in the same effect that also re-created a `working` array
-    //    just from `current`, no fresher than what was already lined up.
-    // 2. Applies at most ONE move per tick, computed fresh from the latest
-    //    server-reported queue each time - not a whole batch derived from a
-    //    local simulation of how earlier moves in the same batch land. If
-    //    KaraFun applies a move differently than simulated (index semantics,
-    //    async ordering, a rejected move), a multi-move batch has nothing to
-    //    notice or recover from; a single move re-evaluated 5s later does.
-    // 3. Never targets whatever KaraFun currently reports as playing - it
-    //    has no drag handle in KaraFun's own remote client and confirmed
-    //    separately that it can't actually be moved; a desired order that
-    //    displaces it could never be satisfied.
-    //
-    // On top of all three: a circuit breaker. If the exact same move keeps
-    // getting proposed without the queue ever reflecting it, that means
-    // something is blocking it that this code doesn't understand yet - stop
-    // and log rather than retry forever.
-    const liveRef = useRef({});
-    useEffect(() => {
-        liveRef.current = { upcoming: queueData?.upcoming, currentSong: queueData?.currentSong, rotationOrder, nameFor, moveInQueue };
-    }, [queueData?.upcoming, queueData?.currentSong, rotationOrder, nameFor, moveInQueue]);
-    const stallCountRef = useRef(0);
-    const lastMoveSignatureRef = useRef(null);
+    // A chatter whose Twitch login matches an existing account gets added by
+    // that real uid, not wrapped as a guest - so if they ever do open the
+    // dashboard, their own self-service controls (sit-out, self turn-taking)
+    // keep working instead of being stuck behind a disconnected placeholder.
+    const handleAddPick = (uid, singerObj) => {
+        let id = uid;
+        if (!id) {
+            const typedName = singerObj?.freeformName?.trim();
+            // SingerPicker already rejects these characters before calling
+            // onPick - this is a second, cheap guard against '/' (breaks
+            // db.doc()'s path parsing wherever a guest id gets looked up)
+            // and '&' (collides with the duet-split convention every
+            // ownership/attribution check uses), not something a mod should
+            // be able to bypass by calling this handler some other way.
+            if (!typedName || /[/&]/.test(typedName)) return;
+            id = `guest:${typedName}`;
+        } else {
+            // uid here is a chatter's Twitch login (from recentChatters), not
+            // necessarily their Firebase uid - reconcile against every known
+            // account on this channel (not just current rotation members) by
+            // twitchUsername before falling back to a guest entry.
+            const knownEntry = Object.entries(permissions).find(([, p]) => p.twitchUsername === uid);
+            id = knownEntry ? knownEntry[0] : `guest:${uid}`;
+        }
+        if (fullRotationOrder.includes(id)) { setAddingToRotation(false); return; }
+        setRotationOrder([...fullRotationOrder, id]);
+        setAddingToRotation(false);
+    };
 
-    // DISABLED AGAIN (2026-09-05, second incident): still swapped two
-    // songs every ~5s against a real party even after the v2 rewrite above.
-    // The per-tick logic is a pure, deterministic function of (upcoming
-    // order, rotationOrder, rotationCursor, nameFor) - if none of those
-    // actually change between ticks, a single instance of this effect
-    // cannot oscillate on its own. Two live candidates for what IS still
-    // changing, neither ruled out yet: (a) more than one mod session had
-    // "KaraFun Mod" open at once, each independently polling and reconciling
-    // the same live queue against its own view of it, fighting each other -
-    // this session alone had it open the whole time the second incident was
-    // reported; (b) presence for a participating singer flickering across
-    // the 90s online threshold in useKaraokeData's onlineSingers, which
-    // would make nameFor/ownerIndexOf intermittently fail to match that
-    // person's queue items and bounce them to "unranked, sort last" and
-    // back. Needs a real fix - likely a per-target lock/lease (only one
-    // session acts) and/or requiring a discrepancy to persist across 2+
-    // consecutive ticks before acting on it, not just disabling the retry -
-    // before this can safely re-enable. Do not remove the early return
-    // below without a concrete fix for one of these, confirmed against a
-    // real party, not just reasoned about.
-    useEffect(() => {
-        return;
-        // (kept below, unreachable, for the fix - see disable note above)
-        const AUTO_SORT_INTERVAL_MS = 5000;
-        const MAX_STALLED_ATTEMPTS = 3;
+    const queuedCountFor = (name) => (queueData?.upcoming || [])
+        .filter((song) => (song.singer || '').split(/\s*&\s*/).map((s) => s.trim()).includes(name)).length;
 
-        const tick = () => {
-            const { upcoming, currentSong, rotationOrder, nameFor, moveInQueue } = liveRef.current;
-            if (!moveInQueue || !upcoming || upcoming.length < 2 || !rotationOrder || rotationOrder.length === 0) return;
+    const confirmRemoveFromRotation = () => {
+        if (!removeTarget) return;
+        const { id, name } = removeTarget;
+        setRotationOrder(fullRotationOrder.filter((x) => x !== id));
+        (queueData?.upcoming || [])
+            .filter((song) => (song.singer || '').split(/\s*&\s*/).map((s) => s.trim()).includes(name))
+            .forEach((song) => { if (song.queueId) removeFromQueue(song.queueId); });
+        setRemoveTarget(null);
+    };
 
-            const isPlaying = (item) => !!currentSong && item.title === currentSong.title && item.artist === currentSong.artist && item.singer === currentSong.singer;
-            const playingIdx = upcoming.findIndex(isPlaying);
-
-            const ownerIndexOf = (singerField) => {
-                const primary = (singerField || '').split(/\s*&\s*/)[0].trim();
-                if (!primary) return -1;
-                return rotationOrder.findIndex(uid => nameFor(uid) === primary);
-            };
-            // Whoever's actually singing right now (KaraFun's own live status,
-            // not a value we track ourselves - see activeSingerUid above)
-            // decides where round-robin distance is measured from; "next up"
-            // is one slot after them. Nobody currently on air defaults to 0.
-            const activeIdx = ownerIndexOf(currentSong?.singer);
-            const cursorIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length;
-
-            // Round-robin, not a static priority ranking: everyone's FIRST
-            // queued song (round 0) comes before anyone's SECOND (round 1),
-            // so one singer adding several songs in a row can't bury
-            // everyone else - it just claims one slot per lap, starting from
-            // whoever's turn is actually next (the cursor), not always
-            // rotationOrder[0].
-            const seenRounds = {};
-            const currentIds = upcoming.map(s => s.queueId);
-            const restSorted = upcoming
-                .map((s, i) => {
-                    const ownerIdx = ownerIndexOf(s.singer);
-                    if (ownerIdx === -1) return { queueId: s.queueId, round: Infinity, distance: Infinity, origIndex: i };
-                    const round = seenRounds[ownerIdx] || 0;
-                    seenRounds[ownerIdx] = round + 1;
-                    const distance = (ownerIdx - cursorIdx + rotationOrder.length) % rotationOrder.length;
-                    return { queueId: s.queueId, round, distance, origIndex: i };
-                })
-                .filter((_, i) => i !== playingIdx)
-                .sort((a, b) => a.round - b.round || a.distance - b.distance || a.origIndex - b.origIndex)
-                .map(x => x.queueId);
-            const desiredIds = [...restSorted];
-            if (playingIdx !== -1) desiredIds.splice(playingIdx, 0, currentIds[playingIdx]);
-
-            const firstMismatch = desiredIds.findIndex((queueId, i) => currentIds[i] !== queueId);
-            if (firstMismatch === -1) {
-                stallCountRef.current = 0;
-                lastMoveSignatureRef.current = null;
-                return;
-            }
-
-            const queueId = desiredIds[firstMismatch];
-            const from = currentIds.indexOf(queueId);
-            const to = firstMismatch;
-            const signature = `${queueId}:${from}->${to}`;
-
-            if (signature === lastMoveSignatureRef.current) {
-                stallCountRef.current += 1;
-                if (stallCountRef.current >= MAX_STALLED_ATTEMPTS) {
-                    console.error('Karaoke auto-sort: the same move keeps being proposed without the live queue ever reflecting it - stopping instead of retrying indefinitely.', signature);
-                    return;
-                }
-            } else {
-                stallCountRef.current = 0;
-            }
-            lastMoveSignatureRef.current = signature;
-            moveInQueue(queueId, from, to);
-        };
-
-        const id = setInterval(tick, AUTO_SORT_INTERVAL_MS);
-        return () => clearInterval(id);
-    }, []);
+    // Auto-sort (round-robin queue reordering) previously lived here as a
+    // client-side effect, disabled since a real incident (see git history,
+    // issue #27) - two independent "KaraFun Mod" sessions each polling and
+    // reconciling the same live queue could fight each other, among other
+    // suspects never fully ruled out client-side. docs/karafun-relay-
+    // design.md §5 has since relocated that logic into relay/src/autoSort.js,
+    // where there's structurally only one process per party issuing moves -
+    // opt-in via the karafunAutoSortEnabled toggle below (off by default, per
+    // design doc §9), not a component-side effect anymore. This component no
+    // longer holds any of that logic, dead or otherwise.
 
     if (!userSettings?.karafunEnabled) {
         return (
@@ -236,13 +164,11 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
         );
     }
 
-    const conn = error ? 'disconnected' : lastUpdated ? 'connected' : 'reconnecting';
     const upcoming = queueData?.upcoming || [];
 
     return (
         <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', gap: d.gutter }}>
-            <Pane t={t} d={d} icon={<Music size={13} />} title={partyId ? `Song Queue · Party ${partyId}` : 'Song Queue'} flush
-                actions={<ToolBtn t={t} icon={<RefreshCw size={12} />} onClick={handleReconnect} disabled={loading && !lastUpdated}>{loading && !lastUpdated ? 'Connecting…' : 'Refresh'}</ToolBtn>}>
+            <Pane t={t} d={d} icon={<Music size={13} />} title={partyId ? `Song Queue · Party ${partyId}` : 'Song Queue'} flush>
                 {!partyId ? (
                     <EmptyState icon={<Music size={32} />} title="No Party ID set." hint="Save your KaraFun Party ID in the panel on the right to start tracking the queue." />
                 ) : (
@@ -262,7 +188,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                                 </>
                             ) : (
                                 <div style={{ marginTop: 6, fontFamily: 'var(--font-sans)', fontSize: 13, color: t.faint }}>
-                                    {queueData?.playState === 'infoscreen' ? 'Waiting for a song to start…' : error || 'No song playing currently.'}
+                                    {queueData?.playState === 'infoscreen' ? 'Waiting for a song to start…' : !connected ? 'Party unreachable. Make sure the KaraFun app is open and the Remote is connected.' : 'No song playing currently.'}
                                 </div>
                             )}
                             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -343,15 +269,29 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                             ))}
                         </Pane>
 
-                        <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order">
-                            {onlineSingers.length === 0 && <EmptyState icon={<Users size={28} />} title="No participating singers online." />}
-                            {[...onlineSingers].sort((a, b) => rotationRank(a.id) - rotationRank(b.id)).map((s, i, arr) => (
-                                <div key={s.id} style={row(t)}>
+                        <Pane t={t} d={d} icon={<Users size={13} />} title="Rotation Order" actions={
+                            <div style={{ position: 'relative' }}>
+                                <ToolBtn t={t} icon={<UserPlus size={12} />} onClick={() => setAddingToRotation(v => !v)}>Add</ToolBtn>
+                                {addingToRotation && (
+                                    <SingerPicker t={t} allowFreeform
+                                        singers={recentChatters.filter(c => !rotationMembers.some(m => (m.isGuest ? m.displayName : m.twitchUsername) === c.id))}
+                                        onPick={handleAddPick}
+                                        onCancel={() => setAddingToRotation(false)} />
+                                )}
+                            </div>
+                        }>
+                            {rotationMembers.length === 0 && <EmptyState icon={<Users size={28} />} title="Nobody in the rotation yet." hint="Use Add above, or wait for a singer to opt in from the Karaoke tab." />}
+                            {rotationMembers.map((s, i, arr) => (
+                                <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                                     <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                        {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                        {s.id === displayedSingerUid && <ArrowRight size={13} color="var(--primary-500)" />}
                                     </span>
                                     <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
-                                    <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}</span>
+                                    <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>
+                                        {s.twitchUsername || s.displayName}
+                                        {s.isGuest && <span style={{ color: t.faint }}> (guest)</span>}
+                                        {s.sittingOut && <span style={{ color: t.faint }}> (sitting out)</span>}
+                                    </span>
                                     <div style={btnRow}>
                                         <ToolBtn t={t} icon={<ArrowUp size={11} />} disabled={i === 0} onClick={() => {
                                             const order = [...fullRotationOrder];
@@ -367,6 +307,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                                             [order[curIdx], order[neighborIdx]] = [order[neighborIdx], order[curIdx]];
                                             setRotationOrder(order);
                                         }} />
+                                        <ToolBtn t={t} icon={<Ban size={11} />} onClick={() => setRemoveTarget({ id: s.id, name: s.twitchUsername || s.displayName })} />
                                     </div>
                                 </div>
                             ))}
@@ -374,14 +315,42 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                     </>
                 )}
 
+                <RemoveFromRotationModal t={t} open={!!removeTarget} name={removeTarget?.name}
+                    queuedCount={removeTarget ? queuedCountFor(removeTarget.name) : 0}
+                    onCancel={() => setRemoveTarget(null)} onConfirm={confirmRemoveFromRotation} />
+
                 <Pane t={t} d={d} icon={<LinkIcon size={13} />} title="Party Connection">
                     <Field t={t} label="Party ID">
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <div style={{ width: 100, flex: 'none' }}>
-                                <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                        {/* flex-wrap, not a rigid row - this column can shrink to
+                            210px (see Overlay visibility below, same reasoning in
+                            its own comment). Auto-sort sits alongside Party ID/Save
+                            at comfortable widths and drops to its own line once it
+                            can't fit. Broadcaster/master-admin only - firestore.rules
+                            only lets the owner write karafunAutoSortEnabled (same
+                            owner-only default the Karaoke Access toggles above rely
+                            on), so a mod would just get permission-denied. */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 'none' }}>
+                                <div style={{ width: 100, flex: 'none' }}>
+                                    <TextInput t={t} mono value={tempPartyId} onChange={setTempPartyId} placeholder="e.g. 727383" />
+                                </div>
+                                <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save'}</ToolBtn>
                             </div>
-                            <ToolBtn t={t} icon={<Save size={12} />} primary onClick={handleSavePartyId} disabled={isSavingId}>{isSavingId ? 'Saving…' : 'Save'}</ToolBtn>
+                            {(userRole === 'broadcaster' || isMasterAdmin) && (
+                                <div style={{ flex: '1 1 190px', minWidth: 190 }}>
+                                    <ToggleSwitch t={t} checked={!!userSettings?.karafunAutoSortEnabled} onChange={(v) => handleToggleSetting('karafunAutoSortEnabled', v)} label="Auto-sort" description="Round-robin reorder by rotation." />
+                                </div>
+                            )}
                         </div>
+                        {/* The relay flips this same toggle off itself if auto-sort
+                            trips its circuit breaker (see relay/src/autoSort.js) -
+                            surfacing why beats the silent disable this used to be a
+                            code comment about (docs/karafun-relay-design.md §5). */}
+                        {!userSettings?.karafunAutoSortEnabled && userSettings?.karafunAutoSortDisabledReason && (
+                            <div style={{ marginTop: 6, ...tiny(t), color: 'var(--danger)' }}>
+                                Auto-sort turned off: {userSettings.karafunAutoSortDisabledReason}
+                            </div>
+                        )}
                     </Field>
                     <Field t={t} label="Overlay visibility">
                         {/* This inspector column can be as narrow as 210px (ResizableWidth

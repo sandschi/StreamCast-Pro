@@ -208,28 +208,26 @@ function DashboardContent() {
             }
         });
 
-        const fetchPrivateConfig = async () => {
-            if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) {
+        // Live rather than one-time: ApiPane's apiToken display/regenerate
+        // flow otherwise only reflected a change after a manual refetch.
+        // (karafunPartyId briefly lived on this doc too - see git history -
+        // moved back to the public settings/config listener above after a
+        // mod/singer/viewer session turned out to have no read access here
+        // at all, breaking their Karaoke tab entirely.)
+        let unsubscribePrivate = () => { };
+        if (user && (isMasterAdmin || userRole === 'broadcaster')) {
+            const privateRef = doc(db, 'users', targetUid, 'private', 'config');
+            unsubscribePrivate = onSnapshot(privateRef, (docSnap) => {
+                setPrivateConfig(docSnap.exists() ? docSnap.data() : { apiToken: null });
+            }, (err) => {
+                console.error("Error subscribing to private config:", err);
                 setPrivateConfig({ apiToken: null });
-                return;
-            }
-            try {
-                const privateRef = doc(db, 'users', targetUid, 'private', 'config');
-                const privateSnap = await getDoc(privateRef);
-                if (privateSnap.exists()) {
-                    setPrivateConfig(privateSnap.data());
-                } else {
-                    setPrivateConfig({ apiToken: null });
-                }
-            } catch (err) {
-                console.error("Error fetching private config:", err);
-                setPrivateConfig({ apiToken: null });
-            }
-        };
+            });
+        } else {
+            setPrivateConfig({ apiToken: null });
+        }
 
-        fetchPrivateConfig();
-
-        return () => unsubscribe();
+        return () => { unsubscribe(); unsubscribePrivate(); };
     }, [targetUid, user, isMasterAdmin, userRole]);
 
     useEffect(() => {
@@ -266,7 +264,7 @@ function DashboardContent() {
     // one real socket instead of two components separately reconnecting on
     // every tab switch, and so the status bar can show the party's actual
     // live connection state instead of just "is it configured".
-    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings, userRole, isMasterAdmin });
+    const karaFun = useKaraFunData({ targetUid: chatEnabled ? targetUid : null, userSettings });
 
     const allowed = useMemo(() => {
         // userRole is set to 'broadcaster' optimistically the moment someone reaches
@@ -462,7 +460,7 @@ function DashboardContent() {
                                         userSettings={userSettings} privateConfig={privateConfig} setPrivateConfig={setPrivateConfig}
                                         isMasterAdmin={isMasterAdmin} isModeratorMode={isModeratorMode}
                                         uiScale={uiScale} setUiScale={setUiScale}
-                                        activeSection={settingsSection} karaFun={karaFun}
+                                        activeSection={settingsSection} karaFun={karaFun} chat={chat}
                                     />
                                 )}
                             </>
@@ -474,9 +472,8 @@ function DashboardContent() {
                 <StatusBar
                     t={t} d={d} tab={current} allowed={allowed} onAir={chat.activeMessage} conn={conn}
                     role={isMasterAdmin ? 'broadcaster' : (userRole || 'waiting')}
-                    queueDepth={chat.suggestions?.length || 0} partyId={userSettings?.karafunPartyId}
+                    queueDepth={chat.suggestions?.length || 0} partyId={karaFun.partyId}
                     karafunEnabled={userSettings?.karafunEnabled}
-                    karaFunLoading={karaFun.loading} karaFunError={karaFun.error} karaFunLastUpdated={karaFun.lastUpdated}
                     karaFunConnected={karaFun.connected}
                     blocked={isVerifying || !!gate}
                 />
