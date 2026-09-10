@@ -83,6 +83,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // so they always agree (see #27 - they used to derive it independently
     // client-side and could disagree).
     const activeSingerUid = queueData?.activeSingerUid || null;
+    const displayedSingerUid = activeSingerUid ?? rotationMembers.find((member) => !member.sittingOut)?.id;
 
     // Candidates for the "Add to rotation" picker: whoever's shown up in
     // chat recently (useChatData.js's own rolling last-50 window, passed
@@ -283,7 +284,7 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
                             {rotationMembers.map((s, i, arr) => (
                                 <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                                     <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                        {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                        {s.id === displayedSingerUid && <ArrowRight size={13} color="var(--primary-500)" />}
                                     </span>
                                     <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                                     <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>
