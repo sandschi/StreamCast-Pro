@@ -328,8 +328,16 @@ export function useKaraokeData({ targetUid, user, userRole }) {
 
     const respondToDuetInvite = async (request, accept, myName, addToQueue) => {
         if (accept) {
-            addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
+            // Firestore write first, then the command - src/lib/karafunCommands.js's
+            // resolveQueueSingerName requires this invite's status to already be
+            // 'accepted' when it validates the duet name server-side. Queuing
+            // first raced that write: if addToQueue's command reached the API
+            // before this updateDoc committed, the server saw a still-'pending'
+            // invite, rejected the duet name, and no song was queued - but this
+            // updateDoc still ran afterward and marked it accepted anyway, so
+            // nothing here surfaced the failure.
             await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
+            addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
         } else {
             await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'declined' });
         }
