@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Mic, Search, UserPlus, Check, X, Play, Pause, SkipForward, Users, Music, Trash2, ArrowRight } from 'lucide-react';
+import { Mic, Search, UserPlus, Check, X, Play, Pause, SkipForward, Users, Music, Trash2, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { searchKaraFunSongs } from '@/hooks/useKaraFunData';
 import { useKaraokeData } from '@/hooks/useKaraokeData';
 import { useAuth } from '@/context/AuthContext';
@@ -72,7 +72,7 @@ function SongRow({ t, song, canSelfAdd, canRequest, isMod, onlineSingers, rotati
 // tab rather than mixed into the same sidebar - see #27.
 export default function KaraokePane({ t, d, targetUid, userRole, user, userSettings, karaFun }) {
     const {
-        queueData, partyId, addToQueue, removeFromQueue,
+        queueData, partyId, addToQueue, removeFromQueue, moveInQueue,
         adjustPitch, adjustTempo, setVolume, setBackingVocalsVolume, setLeadVocalVolume, playSong, skipSong,
     } = karaFun;
 
@@ -261,6 +261,16 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.title}</div>
                                     <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: t.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{song.singer}</div>
                                 </div>
+                                {isMine && (
+                                    <>
+                                        <button type="button" disabled={!song.queueId || i === 0} title="Move up" onClick={() => moveInQueue(song.queueId, i, i - 1)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: (song.queueId && i !== 0) ? 'pointer' : 'default', opacity: (song.queueId && i !== 0) ? 1 : 0.4 }}>
+                                            <ArrowUp size={13} />
+                                        </button>
+                                        <button type="button" disabled={!song.queueId || i === queueData.upcoming.length - 1} title="Move down" onClick={() => moveInQueue(song.queueId, i, i + 1)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: (song.queueId && i !== queueData.upcoming.length - 1) ? 'pointer' : 'default', opacity: (song.queueId && i !== queueData.upcoming.length - 1) ? 1 : 0.4 }}>
+                                            <ArrowDown size={13} />
+                                        </button>
+                                    </>
+                                )}
                                 {(isMod || isMine) && (
                                     <button type="button" disabled={!song.queueId} title={song.queueId ? 'Remove from queue' : 'Not removable yet'} onClick={() => removeFromQueue(song.queueId)} style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 22, height: 22, appearance: 'none', border: 'none', background: 'transparent', color: t.faint, cursor: song.queueId ? 'pointer' : 'default', opacity: song.queueId ? 1 : 0.4 }}>
                                         <Trash2 size={13} />
@@ -282,7 +292,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                     ) : rotationMembers.map((s, i) => (
                         <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                             <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                {(activeSingerUid ? s.id === activeSingerUid : i === 0) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                {s.id === (activeSingerUid ?? nextSingerUid) && <ArrowRight size={13} color="var(--primary-500)" />}
                             </span>
                             <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}{s.sittingOut ? ' (sitting out)' : ''}</span>

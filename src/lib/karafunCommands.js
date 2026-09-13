@@ -38,7 +38,13 @@ const KARAFUN_ACTIONS = {
     },
     moveInQueue: {
         wireEvent: 'queueMove',
-        modOnly: true,
+        ownershipScoped: true,
+        // A singer may only nudge their own entry into the immediately
+        // adjacent slot (see docs/karafun-relay-design.md-style reasoning in
+        // the queue-reorder plan) - a clean, single-call, race-free swap.
+        // Mod/broadcaster bypass this (and ownershipScoped) entirely in
+        // authorize() below.
+        singerAdjacentOnly: true,
         validate(params) {
             if (!isNonEmptyString(params?.queueId)) throw new Error('queueId is required');
             if (!isFiniteNumber(params?.from)) throw new Error('from must be a number');
@@ -277,6 +283,9 @@ function authorize({ action, params, role, isMasterAdminClaim, callerUid, singer
         }
         if (spec.ownershipScoped && !ownsQueueEntry(context, params.queueId, singerName)) {
             return { ok: false, reason: 'not your queue entry' };
+        }
+        if (spec.singerAdjacentOnly && Math.abs(params.from - params.to) !== 1) {
+            return { ok: false, reason: 'can only move one slot at a time' };
         }
         return { ok: true };
     }

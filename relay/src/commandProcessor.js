@@ -22,8 +22,13 @@ const MASTER_ADMIN_UID = 'WPifULbh4NePmKpojiAnKwv0rWY2';
 // _reauthorize below - kept separate from ACTION_TO_WIRE so that table's
 // existing shape doesn't have to change.
 const TURN_SCOPED_ACTIONS = new Set(['adjustPitch', 'adjustTempo', 'setVolume', 'setBackingVocalsVolume', 'setLeadVocalVolume', 'playSong', 'skipSong']);
-const OWNERSHIP_SCOPED_ACTIONS = new Set(['removeFromQueue']);
-const MOD_ONLY_ACTIONS = new Set(['moveInQueue']);
+const OWNERSHIP_SCOPED_ACTIONS = new Set(['removeFromQueue', 'moveInQueue']);
+const MOD_ONLY_ACTIONS = new Set([]);
+// A singer may only move their own queue entry into the immediately
+// adjacent slot - see src/lib/karafunCommands.js's authorize() for the full
+// reasoning (a clean, single-call, race-free swap vs. a multi-step one that
+// would need trusting client-declared intent).
+const SINGER_ADJACENT_ONLY_ACTIONS = new Set(['moveInQueue']);
 
 // JS-level action -> KaraFun wire event + payload shape, from
 // docs/karafun-relay-design.md §3.1 (verified live against KaraFun's real
@@ -180,6 +185,10 @@ class CommandProcessor {
             if (!ownsQueueEntry(this.connection.state.upcoming, data.params?.queueId, singerName)) {
                 return { ok: false, reason: 'not your queue entry' };
             }
+        }
+
+        if (SINGER_ADJACENT_ONLY_ACTIONS.has(data.action) && Math.abs(data.params?.from - data.params?.to) !== 1) {
+            return { ok: false, reason: 'can only move one slot at a time' };
         }
 
         return { ok: true };
