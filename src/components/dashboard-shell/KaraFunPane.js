@@ -83,7 +83,32 @@ export default function KaraFunPane({ t, d, targetUid, user, userRole, userSetti
     // so they always agree (see #27 - they used to derive it independently
     // client-side and could disagree).
     const activeSingerUid = queueData?.activeSingerUid || null;
-    const displayedSingerUid = activeSingerUid ?? rotationMembers.find((member) => !member.sittingOut)?.id;
+    // activeSingerUid is deliberately sticky (see resolveActiveUid's own
+    // comment) - it keeps naming whoever was last active through the gap
+    // between a skip/song-end and the next Play, rather than resetting to
+    // null. That's correct for authorization (isMyTurn walks one slot past
+    // it to find who's next), but showing the sticky value directly as the
+    // arrow target during that gap contradicts both isMyTurn's answer and
+    // auto-sort's own queue order - both have already moved on to whoever's
+    // next, while the arrow would still point at whoever just finished.
+    // Only show activeSingerUid itself while a song is actually playing;
+    // otherwise walk to the next eligible (non-sitting-out) member after
+    // it - same skip-walk relay/src/autoSort.js's resolveNextEligibleIdx
+    // and this app's own isMyTurn already use, ported here since this is a
+    // display-only mirror of that same "who's actually next" answer.
+    const nextEligibleUid = (() => {
+        const isEligible = (uid) => permissions[uid]?.sittingOut !== true;
+        const n = rotationOrder.length;
+        if (n === 0) return null;
+        const activeIdx = activeSingerUid ? rotationOrder.indexOf(activeSingerUid) : -1;
+        const startIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % n;
+        for (let step = 0; step < n; step++) {
+            const idx = (startIdx + step) % n;
+            if (isEligible(rotationOrder[idx])) return rotationOrder[idx];
+        }
+        return null;
+    })();
+    const displayedSingerUid = queueData?.currentSong ? activeSingerUid : nextEligibleUid;
 
     // Candidates for the "Add to rotation" picker: whoever's shown up in
     // chat recently (useChatData.js's own rolling last-50 window, passed

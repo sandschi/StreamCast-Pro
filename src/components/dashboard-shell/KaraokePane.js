@@ -292,7 +292,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
                     ) : rotationMembers.map((s, i) => (
                         <div key={s.id} style={{ ...row(t), opacity: s.sittingOut ? 0.55 : 1 }}>
                             <span style={{ width: 14, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                                {s.id === (activeSingerUid ?? nextSingerUid) && <ArrowRight size={13} color="var(--primary-500)" />}
+                                {s.id === (queueData?.currentSong ? activeSingerUid : nextSingerUid) && <ArrowRight size={13} color="var(--primary-500)" />}
                             </span>
                             <Avatar photoURL={s.photoURL} username={s.twitchUsername} size={20} />
                             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, color: t.text }}>{s.twitchUsername || s.displayName}{s.sittingOut ? ' (sitting out)' : ''}</span>
