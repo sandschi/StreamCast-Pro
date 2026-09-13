@@ -16,6 +16,22 @@ const STATE_WRITE_DEBOUNCE_MS = 500;
 // this if the party never comes up - not a retry limit here.
 const UNREACHABLE_RETRY_MS = 5_000;
 
+// A restarted KaraFun party doesn't reliably fire 'disconnect' or
+// 'serverUnreacheable' on this socket - the transport can stay technically
+// connected while the room session behind it is gone, and even a real
+// 'disconnect' has no app-level retry of its own (it depends entirely on
+// socket.io-client's built-in reconnection, which can get stuck retrying a
+// session that will never come back). Rather than guess at a staleness
+// threshold from event silence - a healthy, idle party can legitimately go
+// quiet for a long time with zero events - this unconditionally tears down
+// and re-establishes the connection on a fixed cadence, regardless of
+// believed connection state. 60s: short enough to bound recovery well under
+// what was observed live (stuck indefinitely, no self-recovery), long
+// enough that the brief reconnect blip this causes (any command emitted in
+// that window fails, same as any other transient failure) stays rare over a
+// multi-hour stream.
+const HARD_REFRESH_INTERVAL_MS = 60_000;
+
 // Mirrors one KaraFun party's live queue/status into
 // users/{userId}/karafun_state/live, replacing the direct client-side
 // socket.io connections previously opened independently by
@@ -39,6 +55,11 @@ class KaraFunConnection {
         this.writeTimer = null;
         this.dirty = false;
         this.retryTimer = null;
+        // Created once in start() and left running across internal
+        // re-starts (a retry, or the refresh itself) - see start()'s own
+        // comment for why this fires unconditionally rather than only when
+        // this.connected is false.
+        this.refreshTimer = null;
         this.stopped = false;
         // Tracks the transport-level connection only (fires on 'connect'),
         // not "has KaraFun confirmed this party is real" - a
@@ -50,6 +71,24 @@ class KaraFunConnection {
     }
 
     start() {
+        // Created once and left running across internal re-starts (this
+        // method runs again on every retry/refresh) - guarded so it's never
+        // duplicated. See the HARD_REFRESH_INTERVAL_MS comment for why this
+        // fires unconditionally rather than only when this.connected is
+        // false: a plain 'disconnect' has no app-level retry of its own
+        // (socket.io-client's built-in reconnection can get stuck retrying a
+        // session that will never come back), so gating on this.connected
+        // would leave exactly that failure mode - connected stuck false
+        // forever - uncovered.
+        if (!this.refreshTimer) {
+            this.refreshTimer = setInterval(() => {
+                if (this.stopped || this.retryTimer) return;
+                console.log(`[karafun:${this.userId}] periodic refresh reconnect`);
+                if (this.socket) this.socket.disconnect();
+                this.start();
+            }, HARD_REFRESH_INTERVAL_MS);
+        }
+
         // Unique login per connection - avoids duplicate-name rejection on
         // reconnects, same reasoning as the client-side hook.
         const suffix = Math.floor(1000 + Math.random() * 9000);
@@ -202,6 +241,10 @@ class KaraFunConnection {
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
+        }
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+            this.refreshTimer = null;
         }
         if (this.socket) {
             this.socket.disconnect();

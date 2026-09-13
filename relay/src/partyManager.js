@@ -183,14 +183,25 @@ class PartyManager {
         const entry = this.connections.get(userId);
         if (!entry) return;
 
+        // Deleted up front, before any teardown step that could throw - a
+        // discovery tick must always be free to call _maybeStartParty fresh
+        // for this user on its next pass, regardless of what fails below.
+        // Without this, a throw from conn.stop() would leave a zombie entry
+        // that _tick() treats as "already tracked" forever, since it only
+        // ever starts a party when this.connections has no entry for it.
+        this.connections.delete(userId);
+
         clearInterval(entry.renewTimer);
         entry.autoSort.stop();
         entry.cmdProcessor.stop();
-        // Awaited: conn.stop()'s final Firestore flush must land before the
-        // lease below frees up, or a newly-started instance's own writes
-        // could be overwritten by this stale one arriving late.
-        await entry.conn.stop();
-        this.connections.delete(userId);
+        try {
+            // Awaited: conn.stop()'s final Firestore flush must land before
+            // the lease below frees up, or a newly-started instance's own
+            // writes could be overwritten by this stale one arriving late.
+            await entry.conn.stop();
+        } catch (err) {
+            console.error(`[partyManager] error stopping KaraFun connection for ${userId}:`, err.message);
+        }
 
         await releaseLease(this.db, userId, instanceId).catch((err) => {
             console.error(`[partyManager] failed to release lease for ${userId}:`, err.message);
