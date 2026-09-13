@@ -141,6 +141,57 @@ export function useKaraokeData({ targetUid, user, userRole }) {
             .map(p => ({ id: p.id, displayName: p.displayName, twitchUsername: p.twitchUsername, photoURL: p.photoURL }));
     }, [presence, permissions, now, targetUid]);
 
+    // Session-lifetime cache of the last good name/avatar seen for each uid,
+    // consulted only as a last-resort fallback below. The `online` and
+    // `permissions` collections are two independent onSnapshot listeners
+    // (see the effect above) - a brief Firestore reconnect (a network blip,
+    // or the browser tab getting backgrounded/foregrounded, common while
+    // alt-tabbing to OBS mid-stream) can have one listener's snapshot catch
+    // up a moment before the other's, or briefly redeliver an incomplete
+    // result while re-establishing. Without this, that transient gap made
+    // an already-known singer's name flash blank/"someone" in Rotation Order
+    // and everywhere else nameFor is used, even though nothing about them
+    // actually changed - reported as "really really annoying" during a live
+    // stream. Only ever updated by adding/filling in real data (the upsert
+    // below keeps whatever was already cached when the new value is blank),
+    // never by removing an entry, so it can't itself go stale into showing a
+    // wrong name for a genuinely different person - a uid's name essentially
+    // doesn't change once set as long as the browser tab stays open. Plain
+    // state rather than a ref: reading a ref during render (rotationMembers/
+    // nameFor both need this value while computing what to return) trips
+    // this project's react-hooks/refs lint rule. Merged during render
+    // itself, not in an effect (react-hooks/set-state-in-effect flags a
+    // setState call synchronously inside useEffect) - this is React's own
+    // documented "adjusting state during rendering" pattern: comparing
+    // against the last-seen inputs (also state, not a ref) and calling
+    // setState conditionally in the render body bails out and re-renders
+    // immediately without committing/painting the stale pass, and only
+    // actually runs when onlineSingers/permissions change - exactly when
+    // nameFor/rotationMembers need to recompute anyway.
+    const [lastKnown, setLastKnown] = useState({});
+    const [mergedInputs, setMergedInputs] = useState(null);
+    if (mergedInputs?.onlineSingers !== onlineSingers || mergedInputs?.permissions !== permissions) {
+        setMergedInputs({ onlineSingers, permissions });
+        const upsert = (next, uid, name) => {
+            if (!name.twitchUsername && !name.displayName) return;
+            const prevEntry = next[uid];
+            const merged = {
+                twitchUsername: name.twitchUsername || prevEntry?.twitchUsername,
+                displayName: name.displayName || prevEntry?.displayName,
+                photoURL: name.photoURL || prevEntry?.photoURL,
+            };
+            if (!prevEntry || prevEntry.twitchUsername !== merged.twitchUsername || prevEntry.displayName !== merged.displayName || prevEntry.photoURL !== merged.photoURL) {
+                next[uid] = merged;
+            }
+        };
+        setLastKnown((prev) => {
+            const next = { ...prev };
+            onlineSingers.forEach((s) => upsert(next, s.id, s));
+            Object.entries(permissions).forEach(([uid, perm]) => upsert(next, uid, perm || {}));
+            return next;
+        });
+    }
+
     // uid -> display name, falling back to the permissions doc for a
     // participating singer who isn't currently online (e.g. their next-up
     // slot is showing while they're between songs). Shared by KaraFun Mod
@@ -157,8 +208,9 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     const nameFor = useCallback((uid) => {
         if (uid?.startsWith('guest:')) return uid.slice(6);
         const online = onlineSingers.find(s => s.id === uid);
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
-    }, [onlineSingers, permissions]);
+        const cached = lastKnown[uid];
+        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || cached?.twitchUsername || cached?.displayName || 'someone';
+    }, [onlineSingers, permissions, lastKnown]);
 
     // The persisted order, extended with any online singer it doesn't know
     // about yet (appended at the end). Both KaraFun Mod's and the Karaoke
@@ -183,16 +235,17 @@ export function useKaraokeData({ targetUid, user, userRole }) {
         }
         const online = onlineSingers.find(s => s.id === id);
         const perm = permissions[id];
+        const cached = lastKnown[id];
         return {
             id,
-            photoURL: online?.photoURL || perm?.photoURL,
-            twitchUsername: online?.twitchUsername || perm?.twitchUsername,
-            displayName: online?.displayName || perm?.displayName,
+            photoURL: online?.photoURL || perm?.photoURL || cached?.photoURL,
+            twitchUsername: online?.twitchUsername || perm?.twitchUsername || cached?.twitchUsername,
+            displayName: online?.displayName || perm?.displayName || cached?.displayName,
             isOnline: !!online,
             isGuest: false,
             sittingOut: !!perm?.sittingOut,
         };
-    }), [fullRotationOrder, onlineSingers, permissions]);
+    }), [fullRotationOrder, onlineSingers, permissions, lastKnown]);
 
     const submitRequest = async (song, targetSingerUid, requestedByName) => {
         if (!targetUid || !user) return;
