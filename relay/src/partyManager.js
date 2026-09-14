@@ -25,6 +25,22 @@ class PartyManager {
         this.db = getDb();
         // userId -> { conn: KaraFunConnection, renewTimer, lastPresenceAt }
         this.connections = new Map();
+        // userId -> in-flight _stopParty() promise. _stopParty removes its
+        // entry from this.connections before it finishes tearing down (see
+        // that method's own comment) - a concurrent discovery tick would
+        // otherwise see no entry and start a replacement while the old one's
+        // releaseLease() call is still pending. Since releaseLease only
+        // checks the lease doc's instanceId (this whole relay PROCESS, not
+        // the specific connection that asked for it), the replacement's own
+        // fresh acquireLease() (which trivially succeeds against a lease
+        // this same process still holds) can then get its lease deleted out
+        // from under it by the original call arriving late - freeing the
+        // lease for a different relay instance to acquire while this
+        // process's replacement connection is still running, exactly the
+        // multi-consumer race this relay exists to prevent. Tracked here so
+        // _tick() can wait for a teardown to fully finish before starting a
+        // replacement for the same user.
+        this.stopping = new Map();
         this._discoveryTimer = null;
         this._ticking = false;
         // Set only while a tick is actually in flight - stop() awaits this
@@ -50,7 +66,15 @@ class PartyManager {
         // or a party it starts after this function returns would never get
         // its lease released.
         if (this._tickPromise) await this._tickPromise.catch(() => {});
-        await Promise.all([...this.connections.keys()].map((userId) => this._stopParty(userId)));
+        await Promise.all([
+            ...[...this.connections.keys()].map((userId) => this._stopParty(userId)),
+            // A teardown triggered from outside this sweep (the lease-
+            // renewal-failure path) may already be in flight and no longer
+            // have an entry in this.connections for the sweep above to
+            // find - wait for it too, or a party it's still tearing down
+            // could outlive this whole PartyManager's shutdown.
+            ...[...this.stopping.values()].map((p) => p.catch(() => {})),
+        ]);
     }
 
     async tick() {
@@ -77,6 +101,15 @@ class PartyManager {
         for (const [userId, cfg] of activeBroadcasters) {
             const entry = this.connections.get(userId);
             if (!entry) {
+                // A teardown triggered from outside _tick() (the lease-
+                // renewal-failure path) can be mid-flight for this exact
+                // user with no entry left to see - wait for it to fully
+                // finish (including its releaseLease()) before starting a
+                // replacement, or the replacement's own lease acquisition
+                // can get clobbered by the original teardown's later
+                // release. See the this.stopping field's own comment.
+                const inFlight = this.stopping.get(userId);
+                if (inFlight) await inFlight.catch(() => {});
                 await this._maybeStartParty(userId);
                 continue;
             }
@@ -191,6 +224,25 @@ class PartyManager {
         // ever starts a party when this.connections has no entry for it.
         this.connections.delete(userId);
 
+        // Tracked so a concurrent discovery tick (see the this.stopping
+        // field's own comment) waits for this to fully finish - including
+        // releaseLease() below - before starting a replacement for the same
+        // user, rather than racing this call's own later release against
+        // the replacement's fresh lease acquisition.
+        const donePromise = this._teardown(userId, entry);
+        this.stopping.set(userId, donePromise);
+        try {
+            await donePromise;
+        } finally {
+            // Only clear if we're still the current entry - a fresh
+            // start+immediate-restop cycle for this user could otherwise
+            // have this stale cleanup delete a newer in-flight teardown's
+            // tracking out from under it.
+            if (this.stopping.get(userId) === donePromise) this.stopping.delete(userId);
+        }
+    }
+
+    async _teardown(userId, entry) {
         clearInterval(entry.renewTimer);
         entry.autoSort.stop();
         entry.cmdProcessor.stop();
