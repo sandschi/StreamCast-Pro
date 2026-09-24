@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server';
-import admin from 'firebase-admin';
-import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { encryptToken, decryptToken } from '@/lib/tokenCrypto';
 
-// Twitch OAuth token, encrypted at rest (see src/lib/tokenCrypto.js).
-// firestore.rules denies the client SDK direct access to
-// users/{uid}/private/twitch - this route (Admin SDK, which bypasses those
-// rules) is the only read/write path, and it only ever acts on the caller's
-// own uid, taken from their verified ID token, never a client-supplied one.
+// Twitch OAuth token, encrypted at rest (see src/lib/tokenCrypto.js, unchanged
+// - pure Node crypto, fully DB-agnostic). RLS denies the client SDK any
+// access to private_twitch_tokens at all - this route (service-role, which
+// bypasses RLS) is the only read/write path, and it only ever acts on the
+// caller's own uid, taken from their verified access token, never a
+// client-supplied one.
 async function verifyCaller(request) {
     const authHeader = request.headers.get('authorization') || '';
-    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!idToken) return null;
+    const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!accessToken) return null;
     try {
-        const adminAuth = await getAdminAuth();
-        const decoded = await adminAuth.verifyIdToken(idToken);
-        return decoded.uid;
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+        if (error || !user) return null;
+        return user.id;
     } catch (e) {
         return null;
     }
@@ -31,14 +32,13 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Missing accessToken' }, { status: 400 });
         }
 
-        const db = await getAdminDb();
-        await db.doc(`users/${uid}/private/twitch`).set({
-            accessTokenEncrypted: encryptToken(accessToken),
-            // Clears any pre-encryption plaintext copy from before this route
-            // existed - a no-op if the field was never there.
-            accessToken: admin.firestore.FieldValue.delete(),
-            updatedAt: new Date().toISOString(),
-        }, { merge: true });
+        const supabaseAdmin = getSupabaseAdmin();
+        const { error } = await supabaseAdmin.from('private_twitch_tokens').upsert({
+            user_id: uid,
+            access_token_encrypted: encryptToken(accessToken),
+            updated_at: new Date().toISOString(),
+        });
+        if (error) throw error;
 
         return NextResponse.json({ success: true });
     } catch (error) {
@@ -52,28 +52,18 @@ export async function GET(request) {
         const uid = await verifyCaller(request);
         if (!uid) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-        const db = await getAdminDb();
-        const ref = db.doc(`users/${uid}/private/twitch`);
-        const snap = await ref.get();
-        if (!snap.exists) return NextResponse.json({ success: true, accessToken: null });
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data, error } = await supabaseAdmin
+            .from('private_twitch_tokens')
+            .select('access_token_encrypted')
+            .eq('user_id', uid)
+            .maybeSingle();
+        if (error) throw error;
 
-        const data = snap.data();
-        if (data.accessTokenEncrypted) {
-            return NextResponse.json({ success: true, accessToken: decryptToken(data.accessTokenEncrypted) });
+        if (!data?.access_token_encrypted) {
+            return NextResponse.json({ success: true, accessToken: null });
         }
-
-        // Legacy doc written before this route existed (plaintext
-        // accessToken field). Serve it once, and transparently migrate it to
-        // the encrypted field so it's never read back in plaintext again.
-        if (data.accessToken) {
-            await ref.set({
-                accessTokenEncrypted: encryptToken(data.accessToken),
-                accessToken: admin.firestore.FieldValue.delete(),
-            }, { merge: true });
-            return NextResponse.json({ success: true, accessToken: data.accessToken });
-        }
-
-        return NextResponse.json({ success: true, accessToken: null });
+        return NextResponse.json({ success: true, accessToken: decryptToken(data.access_token_encrypted) });
     } catch (error) {
         console.error('Error reading Twitch token:', error);
         return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
