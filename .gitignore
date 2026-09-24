@@ -52,5 +52,9 @@ server.log
 relay/node_modules
 relay/.env
 
+# self-hosted supabase (see supabase/ - migration plan §7): runtime Postgres
+# data directory, never committed
+supabase/volumes/db/data
+
 # design system source (local reference only, not part of the app)
 /Designsystem
