@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import posthog from 'posthog-js';
 
@@ -12,6 +12,14 @@ export function AuthProvider({ children }) {
     const [twitchToken, setTwitchToken] = useState(null);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
+    // supabase.auth.refreshSession() itself fires a new onAuthStateChange
+    // event unconditionally, every time it's called - without this guard,
+    // step 3 below calls refreshSession() on every fire, which fires a new
+    // event, which calls refreshSession() again, forever. Only needs to run
+    // once per browser session (the claim doesn't change again after that),
+    // so a ref (not React state, which is stale inside this closure) tracks
+    // whether it already ran.
+    const masterAdminClaimResolved = useRef(false);
 
     useEffect(() => {
         if (!supabase) {
@@ -89,20 +97,28 @@ export function AuthProvider({ children }) {
 
                 // 3. Master-admin claim resolution: same "safe every login,
                 // no-op for everyone else" shape as before - see
-                // /api/set-admin-claim.
-                try {
-                    const { data: { session: currentSession } } = await supabase.auth.getSession();
-                    await fetch('/api/set-admin-claim', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${currentSession.access_token}` },
-                    });
-                    // Force-refresh to pick up a just-set app_metadata claim -
-                    // same reasoning as Firebase's getIdTokenResult(true).
-                    const { data: refreshed } = await supabase.auth.refreshSession();
-                    setIsMasterAdmin(refreshed?.session?.user?.app_metadata?.is_master_admin === true);
-                } catch (e) {
-                    console.error('Error resolving master-admin claim:', e);
-                    setIsMasterAdmin(false);
+                // /api/set-admin-claim. Only ever attempted once per browser
+                // session (see masterAdminClaimResolved above) - otherwise
+                // refreshSession()'s own resulting event re-enters this whole
+                // handler and calls refreshSession() again indefinitely.
+                if (!masterAdminClaimResolved.current) {
+                    masterAdminClaimResolved.current = true;
+                    try {
+                        const { data: { session: currentSession } } = await supabase.auth.getSession();
+                        await fetch('/api/set-admin-claim', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${currentSession.access_token}` },
+                        });
+                        // Force-refresh to pick up a just-set app_metadata claim -
+                        // same reasoning as Firebase's getIdTokenResult(true).
+                        const { data: refreshed } = await supabase.auth.refreshSession();
+                        setIsMasterAdmin(refreshed?.session?.user?.app_metadata?.is_master_admin === true);
+                    } catch (e) {
+                        console.error('Error resolving master-admin claim:', e);
+                        setIsMasterAdmin(false);
+                    }
+                } else {
+                    setIsMasterAdmin(currentUser.app_metadata?.is_master_admin === true);
                 }
 
                 // 4. Resolve Twitch token (private, encrypted at rest - see
