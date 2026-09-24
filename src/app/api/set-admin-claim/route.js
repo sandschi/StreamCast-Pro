@@ -7,7 +7,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // table-field value. Firebase's UID doesn't carry over to Supabase's UUIDs
 // (see migration plan §8), so this is the new value from the master admin's
 // real Twitch login against the new stack.
-const MASTER_ADMIN_UID = '0188e698-0c06-4a17-9068-f8901285bb6a';
+const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
 
 // Safe to call on every login for every user: the caller's identity comes
 // only from their own verified access token (never a client-supplied uid),
