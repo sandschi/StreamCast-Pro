@@ -83,8 +83,13 @@ grant select, insert, update on public.users to authenticated;
 create policy users_select on public.users for select to authenticated
   using (auth.uid() = id or is_master_admin());
 
+-- Master admin bypasses the status='waiting' constraint: unlike every other
+-- broadcaster, their own row is inserted (or re-inserted, after a data-loss
+-- event) with status already 'approved' - and PostgREST's upsert re-checks
+-- this INSERT policy's WITH CHECK even when it resolves to an UPDATE via
+-- ON CONFLICT, so this isn't just a one-time bootstrap concern.
 create policy users_insert on public.users for insert to authenticated
-  with check (auth.uid() = id and (status is null or status = 'waiting'));
+  with check ((auth.uid() = id and (status is null or status = 'waiting')) or is_master_admin());
 
 create policy users_update on public.users for update to authenticated
   using (auth.uid() = id or is_master_admin())

@@ -19,7 +19,14 @@ export function AuthProvider({ children }) {
             return;
         }
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Supabase-js deadlocks if any supabase.auth.* method (getSession,
+        // refreshSession, etc.) is awaited synchronously inside this callback -
+        // it internally serializes auth state-change processing, and a nested
+        // call blocks on a lock the SDK itself is still holding. Deferring the
+        // whole body with setTimeout(0) is the documented workaround (this
+        // handler calls getSession()/refreshSession() below).
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          setTimeout(async () => {
             const currentUser = session?.user ?? null;
             if (currentUser) {
                 console.log('Auth State: Active', currentUser.id);
@@ -168,6 +175,7 @@ export function AuthProvider({ children }) {
                 setTwitchToken(null);
             }
             setLoading(false);
+          }, 0);
         });
 
         return () => subscription.unsubscribe();
