@@ -6,7 +6,6 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AnimatePresence } from 'framer-motion';
 import { useParams } from 'next/navigation';
-import io from 'socket.io-client';
 import MessageBubble from '@/components/overlay/MessageBubble';
 import QueueCard from '@/components/overlay/QueueCard';
 import NowPlayingCard from '@/components/overlay/NowPlayingCard';
@@ -32,6 +31,12 @@ export default function OverlayPage() {
     const [karafunQueue, setKarafunQueue] = useState([]);
     const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
     const [karafunPlayState, setKarafunPlayState] = useState('stop');
+    // Mirrors relay/src/karafunConnection.js's own `connected` flag - the
+    // relay keeps the last-known queue/song in Firestore across a socket
+    // drop (so a brief blip doesn't blank the overlay), but that means this
+    // page must check connectivity itself before rendering stale data during
+    // a real outage, rather than trusting queue/song presence alone.
+    const [karafunConnected, setKarafunConnected] = useState(false);
     const [showNowPlaying, setShowNowPlaying] = useState(false);
     // Track the last song title+state that triggered the popup so we only fire on genuine song starts
     const lastTriggeredSongRef = useRef(null);
@@ -181,72 +186,49 @@ export default function OverlayPage() {
         }
     }, [activeMessage, settings.soundEnabled, settings.soundType, settings.soundVolume]);
 
-    // 4. KaraFun Integration
+    // 4. KaraFun Integration - reads users/{userId}/karafun_state/live,
+    // mirrored by relay/ (the one process that still holds a real KaraFun
+    // socket) instead of opening its own connection. This overlay used to
+    // dial KaraFun directly with its own public, unauthenticated socket -
+    // see docs/karafun-relay-design.md §0/§2/§7 for why that's gone: it was
+    // one of up to three simultaneous direct sockets per broadcaster
+    // (alongside every verified dashboard session), and karafunPartyId
+    // (previously read here from the public settings/config) has moved to
+    // owner-only private/config, which this unauthenticated page can't read
+    // anyway - it doesn't need to anymore.
     useEffect(() => {
-        if (!settings.karafunEnabled || (!settings.karafunOverlayQueueEnabled && !settings.karafunOverlayNowPlayingEnabled)) {
+        if (!userId || !settings.karafunEnabled || (!settings.karafunOverlayQueueEnabled && !settings.karafunOverlayNowPlayingEnabled)) {
             return;
         }
 
-        const partyId = settings.karafunPartyId;
-        if (!partyId) return;
-
-        const suffix = Math.floor(1000 + Math.random() * 9000);
-        const loginName = `StreamCastOverlay${suffix}`;
-
-        const socket = io('https://www.karafun.com', {
-            query: { remote: `kf${partyId}` },
-            transports: ['polling', 'websocket'],
-            forceNew: true,
-            reconnection: true,
-        });
-
-        socket.on('connect', () => {
-            socket.emit('authenticate', {
-                login: loginName,
-                channel: partyId,
-                role: 'participant',
-                app: 'karafun',
-                socket_id: null,
-            }, null);
-        });
-
-        socket.on('serverUnreacheable', () => {
-            console.warn('KaraFun Sync: Party unreachable', partyId);
-        });
-
-        socket.on('queue', (items) => {
-            if (!Array.isArray(items)) {
+        const stateRef = doc(db, 'users', userId, 'karafun_state', 'live');
+        const unsubscribe = onSnapshot(stateRef, (snap) => {
+            if (!snap.exists()) {
                 setKarafunQueue([]);
+                setKarafunNowPlaying(null);
+                setKarafunPlayState('stop');
+                setKarafunConnected(false);
                 return;
             }
-            const transformed = items.map((item, idx) => ({
-                id: item.queueId || item.songId || `${item.title}-${item.artist}-${idx}`,
+            const data = snap.data();
+            // Idle/infoscreen/stop ambiguity is already resolved by the
+            // relay before it writes this doc (see karafunConnection.js's
+            // own 'status' handler) - currentSong here is only ever a real
+            // song or null, nothing left to re-derive client-side.
+            const transformed = (data.upcoming || []).map((item, idx) => ({
+                id: item.queueId || `${item.title}-${item.artist}-${idx}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
             })).slice(0, 5); // next 5 songs only
             setKarafunQueue(transformed);
+            setKarafunNowPlaying(data.currentSong || null);
+            setKarafunPlayState(data.playState || 'stop');
+            setKarafunConnected(!!data.connected);
         });
 
-        socket.on('status', (status) => {
-            const cur = status?.songPlaying || status?.current || null;
-            if (cur) {
-                setKarafunNowPlaying({
-                    title: cur.title || cur.song?.title || 'Unknown',
-                    artist: cur.artist || cur.song?.artist || '',
-                    singer: cur.singer || cur.singerName || cur.options?.singer || '',
-                });
-                setKarafunPlayState(status.state);
-            } else {
-                setKarafunNowPlaying((status?.state === 'infoscreen' || status?.state === 'stop') ? null : (prev => prev));
-                setKarafunPlayState(status?.state);
-            }
-        });
-
-        return () => {
-            socket.disconnect();
-        };
-    }, [settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled, settings.karafunPartyId]);
+        return () => unsubscribe();
+    }, [userId, settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled]);
 
     // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
     useEffect(() => {
@@ -300,15 +282,20 @@ export default function OverlayPage() {
                 )}
             </AnimatePresence>
 
-            {/* KaraFun Overlays */}
+            {/* KaraFun Overlays - gated on karafunEnabled too, not just the two
+                overlay-widget toggles below: the mirror effect's early return
+                (karafunEnabled off) leaves karafunQueue/karafunNowPlaying in
+                whatever state they were last in rather than clearing them, so
+                without this the last queue/Now Playing card would stay
+                visible on stream after the broadcaster disables KaraFun. */}
             <AnimatePresence>
-                {settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
+                {settings.karafunEnabled && karafunConnected && settings.karafunOverlayQueueEnabled && karafunQueue.length > 0 && (
                     <QueueCard queue={karafunQueue} settings={settings} />
                 )}
             </AnimatePresence>
 
             <AnimatePresence>
-                {settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
+                {settings.karafunEnabled && karafunConnected && settings.karafunOverlayNowPlayingEnabled && showNowPlaying && karafunNowPlaying && (
                     <NowPlayingCard song={karafunNowPlaying} settings={settings} />
                 )}
             </AnimatePresence>

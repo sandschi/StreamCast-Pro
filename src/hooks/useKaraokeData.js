@@ -141,6 +141,57 @@ export function useKaraokeData({ targetUid, user, userRole }) {
             .map(p => ({ id: p.id, displayName: p.displayName, twitchUsername: p.twitchUsername, photoURL: p.photoURL }));
     }, [presence, permissions, now, targetUid]);
 
+    // Session-lifetime cache of the last good name/avatar seen for each uid,
+    // consulted only as a last-resort fallback below. The `online` and
+    // `permissions` collections are two independent onSnapshot listeners
+    // (see the effect above) - a brief Firestore reconnect (a network blip,
+    // or the browser tab getting backgrounded/foregrounded, common while
+    // alt-tabbing to OBS mid-stream) can have one listener's snapshot catch
+    // up a moment before the other's, or briefly redeliver an incomplete
+    // result while re-establishing. Without this, that transient gap made
+    // an already-known singer's name flash blank/"someone" in Rotation Order
+    // and everywhere else nameFor is used, even though nothing about them
+    // actually changed - reported as "really really annoying" during a live
+    // stream. Only ever updated by adding/filling in real data (the upsert
+    // below keeps whatever was already cached when the new value is blank),
+    // never by removing an entry, so it can't itself go stale into showing a
+    // wrong name for a genuinely different person - a uid's name essentially
+    // doesn't change once set as long as the browser tab stays open. Plain
+    // state rather than a ref: reading a ref during render (rotationMembers/
+    // nameFor both need this value while computing what to return) trips
+    // this project's react-hooks/refs lint rule. Merged during render
+    // itself, not in an effect (react-hooks/set-state-in-effect flags a
+    // setState call synchronously inside useEffect) - this is React's own
+    // documented "adjusting state during rendering" pattern: comparing
+    // against the last-seen inputs (also state, not a ref) and calling
+    // setState conditionally in the render body bails out and re-renders
+    // immediately without committing/painting the stale pass, and only
+    // actually runs when onlineSingers/permissions change - exactly when
+    // nameFor/rotationMembers need to recompute anyway.
+    const [lastKnown, setLastKnown] = useState({});
+    const [mergedInputs, setMergedInputs] = useState(null);
+    if (mergedInputs?.onlineSingers !== onlineSingers || mergedInputs?.permissions !== permissions) {
+        setMergedInputs({ onlineSingers, permissions });
+        const upsert = (next, uid, name) => {
+            if (!name.twitchUsername && !name.displayName) return;
+            const prevEntry = next[uid];
+            const merged = {
+                twitchUsername: name.twitchUsername || prevEntry?.twitchUsername,
+                displayName: name.displayName || prevEntry?.displayName,
+                photoURL: name.photoURL || prevEntry?.photoURL,
+            };
+            if (!prevEntry || prevEntry.twitchUsername !== merged.twitchUsername || prevEntry.displayName !== merged.displayName || prevEntry.photoURL !== merged.photoURL) {
+                next[uid] = merged;
+            }
+        };
+        setLastKnown((prev) => {
+            const next = { ...prev };
+            onlineSingers.forEach((s) => upsert(next, s.id, s));
+            Object.entries(permissions).forEach(([uid, perm]) => upsert(next, uid, perm || {}));
+            return next;
+        });
+    }
+
     // uid -> display name, falling back to the permissions doc for a
     // participating singer who isn't currently online (e.g. their next-up
     // slot is showing while they're between songs). Shared by KaraFun Mod
@@ -149,19 +200,52 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     // (KaraFun Mod's version had this fallback, Karaoke's didn't, so a
     // presence lapse on the active singer could hand turn control to the
     // wrong person on one tab but not the other; see #27).
+    //
+    // A `guest:{name}` id (see setRotationOrder/rotationMembers below) has no
+    // account behind it at all - a mod added someone straight from chat, or
+    // typed a name freeform. Its "name" is the id itself; there's nothing to
+    // look up.
     const nameFor = useCallback((uid) => {
+        if (uid?.startsWith('guest:')) return uid.slice(6);
         const online = onlineSingers.find(s => s.id === uid);
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
-    }, [onlineSingers, permissions]);
+        const cached = lastKnown[uid];
+        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || cached?.twitchUsername || cached?.displayName || 'someone';
+    }, [onlineSingers, permissions, lastKnown]);
 
-    // KaraFun's currentSong.singer is a plain string ("Alice" or, for a
-    // duet, "Alice & Bob" per our own queueAdd convention) - resolve its
-    // primary name back to a rotationOrder uid via nameFor above.
-    const getActiveSingerUid = useCallback((currentSongSinger) => {
-        const primary = (currentSongSinger || '').split(/\s*&\s*/)[0].trim();
-        if (!primary) return null;
-        return rotationOrder.find(uid => nameFor(uid) === primary) || null;
-    }, [rotationOrder, nameFor]);
+    // The persisted order, extended with any online singer it doesn't know
+    // about yet (appended at the end). Both KaraFun Mod's and the Karaoke
+    // tab's Rotation Order panels reorder/display THIS array and persist the
+    // whole thing back via setRotationOrder - swapping within an
+    // online-only view would drop every temporarily offline singer (and
+    // every guest, who's never "online") from karaokeRotationOrder on the
+    // next reorder.
+    const fullRotationOrder = useMemo(
+        () => [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))],
+        [rotationOrder, onlineSingers],
+    );
+
+    // Resolved rotation membership - real accounts (online or not) and guest
+    // placeholders alike - shared by both Rotation Order panels (KaraFun Mod
+    // for full management, Karaoke tab read-only) and by the mod's "add song
+    // for X" attribution picker, so all three agree on who's actually in
+    // rotation right now instead of each re-deriving it.
+    const rotationMembers = useMemo(() => fullRotationOrder.map((id) => {
+        if (id.startsWith('guest:')) {
+            return { id, twitchUsername: null, displayName: id.slice(6), photoURL: null, isOnline: false, isGuest: true, sittingOut: false };
+        }
+        const online = onlineSingers.find(s => s.id === id);
+        const perm = permissions[id];
+        const cached = lastKnown[id];
+        return {
+            id,
+            photoURL: online?.photoURL || perm?.photoURL || cached?.photoURL,
+            twitchUsername: online?.twitchUsername || perm?.twitchUsername || cached?.twitchUsername,
+            displayName: online?.displayName || perm?.displayName || cached?.displayName,
+            isOnline: !!online,
+            isGuest: false,
+            sittingOut: !!perm?.sittingOut,
+        };
+    }), [fullRotationOrder, onlineSingers, permissions, lastKnown]);
 
     const submitRequest = async (song, targetSingerUid, requestedByName) => {
         if (!targetUid || !user) return;
@@ -244,8 +328,16 @@ export function useKaraokeData({ targetUid, user, userRole }) {
 
     const respondToDuetInvite = async (request, accept, myName, addToQueue) => {
         if (accept) {
-            addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
+            // Firestore write first, then the command - src/lib/karafunCommands.js's
+            // resolveQueueSingerName requires this invite's status to already be
+            // 'accepted' when it validates the duet name server-side. Queuing
+            // first raced that write: if addToQueue's command reached the API
+            // before this updateDoc committed, the server saw a still-'pending'
+            // invite, rejected the duet name, and no song was queued - but this
+            // updateDoc still ran afterward and marked it accepted anyway, so
+            // nothing here surfaced the failure.
             await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
+            addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
         } else {
             await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'declined' });
         }
@@ -274,11 +366,24 @@ export function useKaraokeData({ targetUid, user, userRole }) {
         await setDoc(doc(db, 'users', targetUid, 'permissions', user.uid), { participating: value }, { merge: true });
     };
 
+    // Self-service only ("so the user can pass rounds if they go on a
+    // break") - independent of `participating`. Doesn't remove them from
+    // rotation and doesn't touch anything they already have queued; it only
+    // affects who the turn-skip logic (isMyTurn / autoSort's cursor, both
+    // server/relay-side) treats as eligible for "next". A guest entry can
+    // never call this - there's no account to call it from - which is
+    // correct: guests are always turn-eligible by default (see
+    // src/lib/karafunCommands.js).
+    const toggleSittingOut = async (value) => {
+        if (!user) return;
+        await setDoc(doc(db, 'users', targetUid, 'permissions', user.uid), { sittingOut: value }, { merge: true });
+    };
+
     return {
-        requests, onlineSingers, rotationOrder, permissions,
-        nameFor, getActiveSingerUid,
+        requests, onlineSingers, rotationOrder, fullRotationOrder, rotationMembers, permissions,
+        nameFor,
         submitRequest, acceptRequest, declineAsTarget, modDecline, modForcePublic,
         selfAdd, inviteDuet, respondToDuetInvite, singSoloAfterDecline, dropDeclinedDuet, reinviteDuet,
-        setRotationOrder, toggleParticipating,
+        setRotationOrder, toggleParticipating, toggleSittingOut,
     };
 }

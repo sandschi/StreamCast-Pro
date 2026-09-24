@@ -23,29 +23,27 @@ function CookiePreferencesButton({ t }) {
     );
 }
 
-// Mirrors the actual socket state (lifted to dashboard/page.js and shared
-// with KaraokePane.js/KaraFunPane.js as `karaFun`, same reasoning as `chat`
-// above it) rather than just echoing settings - a party that's configured
-// but unreachable must not read as "ready" (confirmed live: KaraFun's own
-// 'serverUnreacheable' event fires - and sets error - well after
-// karafunEnabled/partyId both look fine). Uses `connected` rather than
-// `lastUpdated`: lastUpdated is a timestamp that's only ever set, never
-// cleared, so after a real socket drop (which doesn't always also fire
-// 'serverUnreacheable'/'connect_error') it would keep reading as live
-// indefinitely.
-function karaFunStatus(karafunEnabled, partyId, loading, error, connected) {
+// Mirrors the relay's own live KaraFun connection state (relay/src/
+// karafunConnection.js's `connected` field, written into
+// users/{uid}/karafun_state/live and surfaced here via useKaraFunData's
+// `connected` - see docs/karafun-relay-design.md §3.2/§7) rather than just
+// echoing settings - a party that's configured but unreachable must not
+// read as "ready". Binary now (Live/Unreachable) rather than the previous
+// four-state Connecting/Idle/Live/Unreachable: the dashboard no longer holds
+// its own socket to observe a distinct "connecting" phase from - the relay
+// owns reconnection entirely and this just reflects its last-known state.
+function karaFunStatus(karafunEnabled, partyId, connected) {
     if (!karafunEnabled) return { label: 'KaraFun Off', tone: 'faint' };
     if (!partyId) return { label: 'No Party ID', tone: 'warning' };
-    if (error) return { label: 'KaraFun Unreachable', tone: 'danger' };
     if (connected) return { label: 'KaraFun Live', tone: 'primary' };
-    return { label: loading ? 'KaraFun Connecting…' : 'KaraFun Idle', tone: 'warning' };
+    return { label: 'KaraFun Unreachable', tone: 'danger' };
 }
 
-export default function StatusBar({ t, d, tab, allowed, onAir, conn, role, queueDepth = 0, partyId, karafunEnabled, karaFunLoading, karaFunError, karaFunConnected, latencyMs, blocked = false }) {
+export default function StatusBar({ t, d, tab, allowed, onAir, conn, role, queueDepth = 0, partyId, karafunEnabled, karaFunConnected, latencyMs, blocked = false }) {
     const serviceStatus = useServiceStatus();
     const cell = { display: 'flex', alignItems: 'center', gap: 6, padding: '0 11px', borderRight: `1px solid ${t.hair}`, height: '100%' };
     const textStyle = t.modern ? { fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 500 } : { fontFamily: MONO, fontSize: 11 };
-    const kf = karaFunStatus(karafunEnabled, partyId, karaFunLoading, karaFunError, karaFunConnected);
+    const kf = karaFunStatus(karafunEnabled, partyId, karaFunConnected);
     const kfTone = kf.tone === 'faint' ? t.faint : kf.tone === 'warning' ? 'var(--warning)' : kf.tone === 'danger' ? 'var(--danger)' : 'var(--primary-500)';
 
     if (blocked || role === 'waiting') return (
