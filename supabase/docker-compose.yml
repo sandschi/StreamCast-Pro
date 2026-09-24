@@ -80,8 +80,11 @@ services:
     depends_on:
       studio:
         condition: service_healthy
-    ports:
-      - ${API_GW_HTTP_PORT:-8000}:8000/tcp
+    # No host port published - Traefik/Dokploy reaches this container over the
+    # internal Docker network via the domain registered against it (port 8000
+    # is the container-internal port there). Publishing 8000 directly to the
+    # host conflicted with an unrelated service already bound to it on this
+    # shared box.
     volumes:
       - ./volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
       - ./volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
@@ -288,9 +291,15 @@ services:
     container_name: supabase-pooler
     image: supabase/supavisor:2.9.12
     restart: unless-stopped
+    # Host ports deliberately decoupled from POSTGRES_PORT/POOLER_PROXY_PORT_TRANSACTION
+    # (which stay 5432/6543 for internal service-to-service use) - the
+    # standard 5432 host port was already taken by an unrelated project's own
+    # Postgres on this shared box. SUPAVISOR_HOST_PORT/SUPAVISOR_HOST_POOLER_PORT
+    # are what the relay's direct-Postgres-connection advisory-lock design
+    # (migration plan §5) will actually connect to.
     ports:
-      - ${POSTGRES_PORT}:5432
-      - ${POOLER_PROXY_PORT_TRANSACTION}:6543
+      - ${SUPAVISOR_HOST_PORT:-5433}:5432
+      - ${SUPAVISOR_HOST_POOLER_PORT:-6544}:6543
     volumes:
       - ./volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:

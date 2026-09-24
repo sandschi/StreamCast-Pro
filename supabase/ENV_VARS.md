@@ -47,7 +47,8 @@ live only in Dokploy.
 | `ENABLE_EMAIL_AUTOCONFIRM` | `false` |
 | `STUDIO_DEFAULT_ORGANIZATION` / `STUDIO_DEFAULT_PROJECT` | `StreamCast Pro` / `Beta` |
 | `PGRST_DB_SCHEMAS` | `public` |
-| `API_GW_HTTP_PORT` | `8000` (internal container port; Traefik fronts this with TLS) |
+| `SUPAVISOR_HOST_PORT` | `5433` (host port was already taken by another project's Postgres on this box; internal `POSTGRES_PORT` stays 5432) |
+| `SUPAVISOR_HOST_POOLER_PORT` | `6544` |
 | `MAILER_URLPATHS_*` | `/auth/v1/verify` (all four) |
 | `SMTP_*` | Left at .env.example placeholders - no real mail sending needed since email signup is just a fallback path |
 
