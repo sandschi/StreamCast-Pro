@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { bevel, tiny, L } from './treatments';
 
 // A one-off overlay dialog rather than the shared ui/Modal.js - that one is
@@ -18,7 +19,7 @@ export default function DeleteAccountModal({ t, open, onClose }) {
 
     if (!open) return null;
 
-    const expected = (userData?.twitchUsername || user?.displayName || '').trim();
+    const expected = (userData?.twitch_username || user?.user_metadata?.name || '').trim();
     const matches = expected.length > 0 && confirmText.trim().toLowerCase() === expected.toLowerCase();
 
     const handleDelete = async () => {
@@ -26,10 +27,13 @@ export default function DeleteAccountModal({ t, open, onClose }) {
         setDeleting(true);
         setError(null);
         try {
-            const idToken = await user.getIdToken();
+            // NOTE: /api/delete-account is still Firebase-backed (migration
+            // plan Phase 5, not yet ported) - this Supabase access token will
+            // be rejected server-side until that route is ported too.
+            const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch('/api/delete-account', {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${idToken}` },
+                headers: { Authorization: `Bearer ${session?.access_token}` },
             });
             const json = await res.json();
             if (!res.ok || !json.success) {

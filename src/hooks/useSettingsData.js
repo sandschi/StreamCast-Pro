@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
+import { mapSettingsRowToFlat, buildSettingsUpdate, buildSettingsRowFromFlat } from '@/lib/settingsMapping';
+import { computeExpiresAt } from '@/lib/activeMessage';
 import posthog from 'posthog-js';
 
 export const SOUNDS = {
@@ -19,7 +20,7 @@ export const SOUNDS = {
     note: 'https://assets.mixkit.co/active_storage/sfx/2858/2858-preview.mp3',
 };
 
-// Appearance (dashboard chrome) fields live on the same settings/config doc but,
+// Appearance (dashboard chrome) fields live on the same settings row but,
 // unlike the overlay fields below, write immediately — they're a live dashboard
 // preference, not something staged behind the overlay's Save button.
 const APPEARANCE_DEFAULTS = {
@@ -34,7 +35,7 @@ const APPEARANCE_DEFAULTS = {
 // plus the new appearance fields the dashboard-app-shell redesign needs persisted.
 export function useSettingsData({ targetUid, isModeratorMode }) {
     const { user } = useAuth();
-    const effectiveUid = targetUid || user?.uid;
+    const effectiveUid = targetUid || user?.id;
 
     const [settings, setSettings] = useState({
         textColor: '#ffffff',
@@ -61,14 +62,18 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
     const [twitchUsername, setTwitchUsername] = useState('');
     const [saving, setSaving] = useState(false);
     const [activeMessage, setActiveMessage] = useState(null);
-    // Last Firestore-synced bubbleStyle, so handleSave can tell whether this
-    // save actually changed it (bubbleStyle is staged locally via updateSetting
+    // Last-synced bubbleStyle, so handleSave can tell whether this save
+    // actually changed it (bubbleStyle is staged locally via updateSetting
     // and only committed on Save, so most edits here don't touch it at all).
     // Initialized to the same default as settings.bubbleStyle above, not null -
     // otherwise a brand-new broadcaster with no saved config yet would have
     // their very first Save (even without touching the style picker) treated
     // as a change, since 'classic' !== null.
     const lastSyncedBubbleStyleRef = useRef('classic');
+    // Raw last-seen settings row, so updateAppearanceSetting/handleSave can
+    // merge into the `appearance` jsonb column without clobbering the rest of
+    // it - see src/lib/settingsMapping.js.
+    const settingsRowRef = useRef(null);
 
     useEffect(() => {
         if (!settings.fontFamily) return;
@@ -82,72 +87,99 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
     }, [settings.fontFamily]);
 
     useEffect(() => {
-        if (!effectiveUid) return;
-        const configRef = doc(db, 'users', effectiveUid, 'settings', 'config');
-        const unsubscribeConfig = onSnapshot(configRef, (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                // Migration: If old positionVertical/Horizontal exists, map them to percentages.
-                // posX/posY of 0 is a valid position (the literal left/top edge) — check for
-                // null/undefined specifically, not falsiness, or a saved 0 gets overwritten.
-                if (data.posX == null && data.positionHorizontal) {
-                    data.posX = data.positionHorizontal === 'right' ? 95 : data.positionHorizontal === 'center' ? 50 : 5;
-                }
-                if (data.posY == null && data.positionVertical) {
-                    data.posY = data.positionVertical === 'top' ? 5 : data.positionVertical === 'center' ? 50 : 90;
-                }
-                if (data.bubbleStyle) lastSyncedBubbleStyleRef.current = data.bubbleStyle;
-                setSettings(prev => ({ ...prev, ...data }));
+        if (!effectiveUid || !supabase) return;
+
+        const applyRow = (row) => {
+            settingsRowRef.current = row;
+            if (!row) return;
+            const data = mapSettingsRowToFlat(row);
+            // Migration: If old positionVertical/Horizontal exists, map them to percentages.
+            // posX/posY of 0 is a valid position (the literal left/top edge) — check for
+            // null/undefined specifically, not falsiness, or a saved 0 gets overwritten.
+            if (data.posX == null && data.positionHorizontal) {
+                data.posX = data.positionHorizontal === 'right' ? 95 : data.positionHorizontal === 'center' ? 50 : 5;
             }
-        });
-        const userRef = doc(db, 'users', effectiveUid);
-        const unsubscribeUser = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) setTwitchUsername(doc.data().twitchUsername || '');
-        });
-        return () => { unsubscribeConfig(); unsubscribeUser(); };
+            if (data.posY == null && data.positionVertical) {
+                data.posY = data.positionVertical === 'top' ? 5 : data.positionVertical === 'center' ? 50 : 90;
+            }
+            if (data.bubbleStyle) lastSyncedBubbleStyleRef.current = data.bubbleStyle;
+            setSettings(prev => ({ ...prev, ...data }));
+        };
+
+        supabase.from('settings').select('*').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => applyRow(data));
+
+        const settingsChannel = supabase
+            .channel(`settings-data-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                applyRow(payload.eventType === 'DELETE' ? null : payload.new);
+            })
+            .subscribe();
+
+        supabase.from('users').select('twitch_username').eq('id', effectiveUid).maybeSingle()
+            .then(({ data }) => setTwitchUsername(data?.twitch_username || ''));
+
+        const userChannel = supabase
+            .channel(`settings-data-user-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `id=eq.${effectiveUid}` }, (payload) => {
+                setTwitchUsername(payload.eventType === 'DELETE' ? '' : (payload.new?.twitch_username || ''));
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(settingsChannel); supabase.removeChannel(userChannel); };
     }, [effectiveUid]);
 
     useEffect(() => {
-        if (!effectiveUid) return;
-        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        const unsub = onSnapshot(msgRef, (doc) => {
-            setActiveMessage(doc.exists() ? doc.data() : null);
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase) return;
+        const applyActiveMessage = (row) => {
+            setActiveMessage(row ? { ...row.payload, __expiresAt: row.expires_at } : null);
+        };
+        supabase.from('active_message').select('*').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => applyActiveMessage(data));
+        const channel = supabase
+            .channel(`settings-data-active-message-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_message', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                applyActiveMessage(payload.eventType === 'DELETE' ? null : payload.new);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
     const updateSetting = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
     const updateAppearanceSetting = async (key, value) => {
         updateSetting(key, value);
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
         try {
-            await setDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), { [key]: value }, { merge: true });
+            const update = buildSettingsUpdate(key, value, settingsRowRef.current?.appearance);
+            await supabase.from('settings').upsert({ user_id: effectiveUid, ...update }, { onConflict: 'user_id' });
         } catch (e) {
             console.error(`Error saving ${key}:`, e);
         }
     };
 
     const handleSave = async () => {
-        if (!user) return;
+        if (!user || !supabase) return;
         setSaving(true);
         try {
             // twitchUsername is not user-editable — it is set from the real,
             // OAuth-verified Twitch login (AuthContext.js) and only ever read
             // here, never written back.
-            await setDoc(doc(db, 'users', effectiveUid, 'settings', 'config'), settings, { merge: true });
+            const update = buildSettingsRowFromFlat(settings, settingsRowRef.current?.appearance);
+            const { error } = await supabase.from('settings').upsert({ user_id: effectiveUid, ...update }, { onConflict: 'user_id' });
+            if (error) throw error;
             if (settings.bubbleStyle && settings.bubbleStyle !== lastSyncedBubbleStyleRef.current) {
                 posthog.capture('bubble_style_changed', { style: settings.bubbleStyle });
                 lastSyncedBubbleStyleRef.current = settings.bubbleStyle;
             }
         } catch (e) {
             console.error(e);
-            alert('Error saving. Check Firestore connection.');
+            alert('Error saving. Check your connection.');
         } finally { setSaving(false); }
     };
 
     const sendTestOverlay = async (permanent = false) => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
         try {
             const testMessage = {
                 id: 'test-message-' + Date.now(),
@@ -161,10 +193,11 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
                 settings: settings
             };
 
-            if (permanent) {
-                testMessage.duration = -1;
-            }
-            await setDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'), testMessage);
+            await supabase.from('active_message').upsert({
+                user_id: effectiveUid,
+                payload: testMessage,
+                expires_at: computeExpiresAt(settings.displayDuration, permanent),
+            }, { onConflict: 'user_id' });
             console.log('Test overlay sent!');
         } catch (e) {
             console.error('Error sending test overlay:', e);
@@ -173,9 +206,9 @@ export function useSettingsData({ targetUid, isModeratorMode }) {
     };
 
     const hideOverlay = async () => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
         try {
-            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
+            await supabase.from('active_message').delete().eq('user_id', effectiveUid);
         } catch (e) {
             console.error("Error hiding overlay:", e);
         }

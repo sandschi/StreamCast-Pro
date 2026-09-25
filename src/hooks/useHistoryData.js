@@ -2,90 +2,117 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { db } from '@/lib/firebase';
-import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, addDoc, serverTimestamp, getDocs, writeBatch } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
+import { computeExpiresAt } from '@/lib/activeMessage';
 
 // Extracted verbatim from the original inline logic in components/dashboard/History.js.
 export function useHistoryData({ targetUid, userRole }) {
     const { user } = useAuth();
-    const effectiveUid = targetUid || user?.uid;
+    const effectiveUid = targetUid || user?.id;
     const [history, setHistory] = useState([]);
     const [activeMessage, setActiveMessage] = useState(null);
+    const [displayDuration, setDisplayDuration] = useState(5);
 
     useEffect(() => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
 
-        const historyRef = collection(db, 'users', effectiveUid, 'history');
-        const q = query(historyRef, orderBy('timestamp', 'desc'), limit(50));
+        const mapRow = (row) => ({ id: row.id, ...row.payload, twitchMessageId: row.twitch_message_id, login: row.login, timestamp: row.timestamp });
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const messages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setHistory(messages);
-        });
+        supabase.from('history').select('*').eq('user_id', effectiveUid)
+            .order('timestamp', { ascending: false }).limit(50)
+            .then(({ data }) => setHistory((data || []).map(mapRow)));
 
-        return () => unsubscribe();
+        // Live, not one-time: another dashboard session (a mod on a second
+        // device, or the pg_cron/trigger-driven queue promotion) can add to
+        // history while this tab is open.
+        const channel = supabase
+            .channel(`history-data-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'history', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                setHistory((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(h => h.id !== payload.old.id);
+                    if (payload.eventType === 'INSERT') return [mapRow(payload.new), ...prev].slice(0, 50);
+                    return prev.map(h => h.id === payload.new.id ? mapRow(payload.new) : h);
+                });
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
     useEffect(() => {
-        if (!effectiveUid) return;
-        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        const unsub = onSnapshot(msgRef, (doc) => {
-            setActiveMessage(doc.exists() ? doc.data() : null);
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase) return;
+        const applyActiveMessage = (row) => {
+            setActiveMessage(row ? { ...row.payload, __expiresAt: row.expires_at } : null);
+        };
+        supabase.from('active_message').select('*').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => applyActiveMessage(data));
+        const channel = supabase
+            .channel(`history-data-active-message-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_message', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                applyActiveMessage(payload.eventType === 'DELETE' ? null : payload.new);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
+    }, [effectiveUid]);
+
+    // Needed so resendToScreen below can compute a real expires_at instead
+    // of falling back to computeExpiresAt's hardcoded default.
+    useEffect(() => {
+        if (!effectiveUid || !supabase) return;
+        supabase.from('settings').select('display_duration').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => { if (typeof data?.display_duration === 'number') setDisplayDuration(data.display_duration); });
+        const channel = supabase
+            .channel(`history-data-settings-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                if (payload.eventType !== 'DELETE' && typeof payload.new?.display_duration === 'number') setDisplayDuration(payload.new.display_duration);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
     const hideOverlay = async () => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
         try {
-            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
+            await supabase.from('active_message').delete().eq('user_id', effectiveUid);
         } catch (e) { console.error("Error hiding:", e); }
     };
 
     const resendToScreen = async (msg, permanent = false) => {
-        if (!user || userRole === 'denied') return;
+        if (!user || !supabase || userRole === 'denied') return;
 
         const isViewer = userRole === 'viewer';
         const payload = {
-            ...msg,
-            timestamp: serverTimestamp(),
-            suggestedBy: user.uid,
-            suggestedByName: user.displayName,
-            fromHistory: true
+            username: msg.username, login: msg.login, avatarUrl: msg.avatarUrl, color: msg.color, fragments: msg.fragments,
+            suggestedBy: user.id,
+            suggestedByName: user.user_metadata?.name,
+            fromHistory: true,
+            twitchMessageId: msg.twitchMessageId || null,
         };
-        delete payload.id;
-
-        if (permanent) {
-            payload.duration = -1;
-        } else {
-            if (payload.duration) delete payload.duration;
-        }
 
         try {
             if (isViewer) {
-                const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
-                if (payload.duration) delete payload.duration;
-                await addDoc(suggestionsRef, payload);
+                await supabase.from('suggestions').insert({
+                    user_id: effectiveUid,
+                    submitted_by: user.id,
+                    payload,
+                });
                 console.log('History Suggestion Sent ✅');
             } else {
-                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-                await setDoc(activeMsgRef, payload);
+                await supabase.from('active_message').upsert({
+                    user_id: effectiveUid,
+                    payload,
+                    expires_at: computeExpiresAt(displayDuration, permanent),
+                }, { onConflict: 'user_id' });
                 console.log('History Sent to Screen ✅');
             }
         } catch (e) { console.error(e); }
     };
 
     const clearHistory = async () => {
-        if (!effectiveUid || (userRole !== 'broadcaster' && userRole !== 'mod')) return;
+        if (!effectiveUid || !supabase || (userRole !== 'broadcaster' && userRole !== 'mod')) return;
         try {
-            const historyRef = collection(db, 'users', effectiveUid, 'history');
-            const snapshot = await getDocs(historyRef);
-            const batch = writeBatch(db);
-            snapshot.docs.forEach(d => batch.delete(d.ref));
-            await batch.commit();
+            await supabase.from('history').delete().eq('user_id', effectiveUid);
+            setHistory([]);
         } catch (e) { console.error("Error clearing history:", e); }
     };
 

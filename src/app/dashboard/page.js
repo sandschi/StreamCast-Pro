@@ -2,10 +2,11 @@
 export const dynamic = 'force-dynamic';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, query, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
+import { mapSettingsRowToFlat, buildSettingsUpdate } from '@/lib/settingsMapping';
+import { computeExpiresAt } from '@/lib/activeMessage';
 
 import { TREATMENTS } from '@/components/dashboard-shell/treatments';
 import { NAV, ROLE_TABS } from '@/components/dashboard-shell/nav';
@@ -71,6 +72,13 @@ function DashboardContent() {
     const [suggestionsMuted, setSuggestionsMuted] = useState(false);
     const [settingsSection, setSettingsSection] = useState('dashboard');
 
+    // Last-fetched raw settings row, kept alongside the flattened
+    // `userSettings` state purely so updateAppearance below can merge a
+    // single field into the `appearance` jsonb column without clobbering the
+    // rest of it - PostgREST has no partial-jsonb-merge, so the whole column
+    // has to be sent on every update.
+    const settingsRowRef = useRef(null);
+
     // A viewer's own legibility preference (like their browser zoom level),
     // not a broadcaster-wide style choice, so it lives in localStorage rather
     // than settings/config alongside treatment/nav/density.
@@ -93,8 +101,8 @@ function DashboardContent() {
         return () => { document.documentElement.style.zoom = ''; };
     }, [uiScale]);
 
-    const targetUid = hostParam || user?.uid;
-    const isModeratorMode = hostParam && hostParam !== user?.uid;
+    const targetUid = hostParam || user?.id;
+    const isModeratorMode = hostParam && hostParam !== user?.id;
 
     const hasVerifiedAccess = isMasterAdmin ||
         (userRole === 'broadcaster' && broadcasterStatus === 'approved') ||
@@ -104,9 +112,8 @@ function DashboardContent() {
 
     // Verifying Moderator Permissions
     useEffect(() => {
-        if (!user) return;
-        let unsubscribeRole = () => { };
-        let unsubscribeBroadcasterStatus = () => { };
+        if (!user || !supabase) return;
+        let cleanup = () => { };
 
         if (isMasterAdmin) {
             console.log('Permission Check: Master Admin detected. Full Access Granted.');
@@ -119,7 +126,7 @@ function DashboardContent() {
             return;
         }
 
-        if (!isModeratorMode || !hostParam || hostParam === user.uid) {
+        if (!isModeratorMode || !hostParam || hostParam === user.id) {
             console.log('Permission Check: Broadcaster/Local detected. Access Granted.');
             setTimeout(() => {
                 setIsModAuthorized(true);
@@ -127,45 +134,55 @@ function DashboardContent() {
                 setVerifyingMod(false);
             }, 0);
 
-            unsubscribeBroadcasterStatus = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    let status = data?.status;
-                    // isSandschi here only ever feeds the auto-approval decision
-                    // below - isMasterAdmin itself comes from AuthContext's custom-
-                    // claim check (see AuthContext.js / #19), not from this
-                    // twitchUsername field. This listener used to also call
-                    // setIsMasterAdmin(isSandschi) here, which would silently
-                    // overwrite that correct claim-derived value with a stale
-                    // twitchUsername-based one on every snapshot of this user's own
-                    // doc (i.e. constantly, since it re-fires on every settings save).
-                    const isSandschi = data?.twitchUsername?.toLowerCase() === 'sandschi';
-
-                    if (!status || (isSandschi && status !== 'approved')) {
-                        status = isSandschi ? 'approved' : 'waiting';
-                    }
-                    setBroadcasterStatus(status || 'waiting');
-                } else {
-                    setBroadcasterStatus('waiting');
+            // isSandschi here only ever feeds the auto-approval decision
+            // below - isMasterAdmin itself comes from AuthContext's custom-
+            // claim check, not from this twitch_username field.
+            const applyStatus = (data) => {
+                let status = data?.status;
+                const isSandschi = data?.twitch_username?.toLowerCase() === 'sandschi';
+                if (!status || (isSandschi && status !== 'approved')) {
+                    status = isSandschi ? 'approved' : 'waiting';
                 }
-            });
+                setBroadcasterStatus(status || 'waiting');
+            };
+
+            supabase.from('users').select('status, twitch_username').eq('id', user.id).maybeSingle()
+                .then(({ data }) => applyStatus(data));
+
+            const channel = supabase
+                .channel(`dashboard-user-status-${user.id}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `id=eq.${user.id}` }, (payload) => {
+                    applyStatus(payload.eventType === 'DELETE' ? null : payload.new);
+                })
+                .subscribe();
+            cleanup = () => supabase.removeChannel(channel);
         } else {
             setTimeout(() => setVerifyingMod(true), 0);
-            const roleRef = doc(db, 'users', hostParam, 'permissions', user.uid);
-            unsubscribeRole = onSnapshot(roleRef, (doc) => {
-                const data = doc.data();
+
+            const applyRole = (data) => {
                 const role = data?.role || 'viewer';
                 setUserRole(role);
                 setIsModAuthorized(role === 'mod' || role === 'broadcaster');
                 setVerifyingMod(false);
                 console.log('Current User Role:', role);
-            });
+            };
+
+            supabase.from('permissions').select('role').eq('user_id', hostParam).eq('viewer_id', user.id).maybeSingle()
+                .then(({ data }) => applyRole(data));
+
+            const channel = supabase
+                .channel(`dashboard-user-role-${hostParam}-${user.id}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'permissions', filter: `user_id=eq.${hostParam}` }, (payload) => {
+                    const isDelete = payload.eventType === 'DELETE';
+                    const viewerId = isDelete ? payload.old?.viewer_id : payload.new?.viewer_id;
+                    if (viewerId !== user.id) return;
+                    applyRole(isDelete ? null : payload.new);
+                })
+                .subscribe();
+            cleanup = () => supabase.removeChannel(channel);
         }
 
-        return () => {
-            unsubscribeRole();
-            unsubscribeBroadcasterStatus();
-        };
+        return () => cleanup();
     }, [user, hostParam, isModeratorMode, isMasterAdmin, targetUid]);
 
     // Presence heartbeat - deliberately its own effect, not folded into the
@@ -177,18 +194,17 @@ function DashboardContent() {
     // dashboard (no ?host=) never wrote their own presence doc either;
     // targetUid covers both cases (self or hosted) the same way.
     useEffect(() => {
-        if (!user || !targetUid) return;
-        const presenceRef = doc(db, 'users', targetUid, 'online', user.uid);
+        if (!user || !targetUid || !supabase) return;
         const updatePresence = async () => {
-            const myProfile = await getDoc(doc(db, 'users', user.uid));
-            const myData = myProfile.data();
-
-            await setDoc(presenceRef, {
-                lastSeen: serverTimestamp(),
-                displayName: myData?.displayName || user.displayName,
-                photoURL: myData?.photoURL || user.photoURL,
-                twitchUsername: myData?.twitchUsername || user.displayName?.toLowerCase()
-            }, { merge: true });
+            const { data: myData } = await supabase.from('users').select('display_name, photo_url, twitch_username').eq('id', user.id).maybeSingle();
+            await supabase.from('online').upsert({
+                user_id: targetUid,
+                viewer_id: user.id,
+                last_seen: new Date().toISOString(),
+                display_name: myData?.display_name || user.user_metadata?.name,
+                photo_url: myData?.photo_url || user.user_metadata?.avatar_url,
+                twitch_username: myData?.twitch_username || user.user_metadata?.name?.toLowerCase(),
+            }, { onConflict: 'user_id,viewer_id' });
         };
         updatePresence();
         const heartbeatInterval = setInterval(updatePresence, 30000);
@@ -197,37 +213,44 @@ function DashboardContent() {
 
     // Stable Settings Listener
     useEffect(() => {
-        if (!targetUid) return;
+        if (!targetUid || !supabase) return;
 
-        const settingsRef = doc(db, 'users', targetUid, 'settings', 'config');
-        const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-            if (docSnap.exists()) {
-                setUserSettings(docSnap.data());
-            } else {
-                setUserSettings({ karafunEnabled: false, karaokeEnabled: false });
-            }
-        });
+        const applySettingsRow = (row) => {
+            settingsRowRef.current = row;
+            setUserSettings(row ? mapSettingsRowToFlat(row) : { karafunEnabled: false, karaokeEnabled: false });
+        };
 
-        // Live rather than one-time: ApiPane's apiToken display/regenerate
-        // flow otherwise only reflected a change after a manual refetch.
-        // (karafunPartyId briefly lived on this doc too - see git history -
-        // moved back to the public settings/config listener above after a
-        // mod/singer/viewer session turned out to have no read access here
-        // at all, breaking their Karaoke tab entirely.)
-        let unsubscribePrivate = () => { };
+        supabase.from('settings').select('*').eq('user_id', targetUid).maybeSingle()
+            .then(({ data }) => applySettingsRow(data));
+
+        const settingsChannel = supabase
+            .channel(`dashboard-settings-${targetUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${targetUid}` }, (payload) => {
+                applySettingsRow(payload.eventType === 'DELETE' ? null : payload.new);
+            })
+            .subscribe();
+
+        // One-time fetch, not live: unlike settings above, private_config has
+        // no independent write source while this tab is open besides this
+        // dashboard's own token-regenerate flow, which already updates
+        // `privateConfig` locally on success (see useApiSettingsData.js) - a
+        // realtime channel here would only ever echo back what this same tab
+        // just wrote.
         if (user && (isMasterAdmin || userRole === 'broadcaster')) {
-            const privateRef = doc(db, 'users', targetUid, 'private', 'config');
-            unsubscribePrivate = onSnapshot(privateRef, (docSnap) => {
-                setPrivateConfig(docSnap.exists() ? docSnap.data() : { apiToken: null });
-            }, (err) => {
-                console.error("Error subscribing to private config:", err);
-                setPrivateConfig({ apiToken: null });
-            });
+            supabase.from('private_config').select('api_token').eq('user_id', targetUid).maybeSingle()
+                .then(({ data, error }) => {
+                    if (error) {
+                        console.error('Error loading private config:', error);
+                        setPrivateConfig({ apiToken: null });
+                        return;
+                    }
+                    setPrivateConfig(data ? { apiToken: data.api_token } : { apiToken: null });
+                });
         } else {
             setPrivateConfig({ apiToken: null });
         }
 
-        return () => { unsubscribe(); unsubscribePrivate(); };
+        return () => { supabase.removeChannel(settingsChannel); };
     }, [targetUid, user, isMasterAdmin, userRole]);
 
     useEffect(() => {
@@ -241,8 +264,8 @@ function DashboardContent() {
         if (!user) return;
         const baseUrl = window.location.origin;
         const url = type === 'overlay'
-            ? `${baseUrl}/overlay/${user.uid}`
-            : `${baseUrl}/dashboard?host=${user.uid}`;
+            ? `${baseUrl}/overlay/${user.id}`
+            : `${baseUrl}/dashboard?host=${user.id}`;
 
         try {
             await navigator.clipboard.writeText(url);
@@ -314,32 +337,34 @@ function DashboardContent() {
     const conn = chat.connectionStatus === 'connected' ? 'connected' : chat.connectionStatus === 'connecting' ? 'reconnecting' : 'disconnected';
 
     const updateAppearance = async (key, value) => {
-        if (!targetUid) return;
+        if (!targetUid || !supabase) return;
         try {
-            await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { [key]: value }, { merge: true });
+            // upsert, not update: a brand-new broadcaster has no settings row
+            // yet (no DB trigger creates one on signup) - update() would
+            // silently affect 0 rows in that case.
+            const update = buildSettingsUpdate(key, value, settingsRowRef.current?.appearance);
+            await supabase.from('settings').upsert({ user_id: targetUid, ...update }, { onConflict: 'user_id' });
         } catch (e) { console.error(`Error saving ${key}:`, e); }
     };
 
     const exportHistory = async () => {
-        if (!targetUid) return;
+        if (!targetUid || !supabase) return;
         try {
-            // Page through the whole collection instead of capping at one
-            // batch — a broadcaster's history can run well past a single
-            // query's worth, and a silently truncated export is worse than a
-            // few extra round trips.
+            // Page through the whole table instead of capping at one batch —
+            // a broadcaster's history can run well past a single query's
+            // worth, and a silently truncated export is worse than a few
+            // extra round trips.
             const PAGE_SIZE = 500;
-            const historyRef = collection(db, 'users', targetUid, 'history');
             const rows = [];
-            let cursor = null;
+            let from = 0;
             for (; ;) {
-                const q = cursor
-                    ? query(historyRef, orderBy('timestamp', 'desc'), startAfter(cursor), limit(PAGE_SIZE))
-                    : query(historyRef, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
-                const snap = await getDocs(q);
-                if (snap.empty) break;
-                rows.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                if (snap.docs.length < PAGE_SIZE) break;
-                cursor = snap.docs[snap.docs.length - 1];
+                const { data, error } = await supabase.from('history').select('*').eq('user_id', targetUid)
+                    .order('timestamp', { ascending: false }).range(from, from + PAGE_SIZE - 1);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
+                rows.push(...data);
+                if (data.length < PAGE_SIZE) break;
+                from += PAGE_SIZE;
             }
             const exportPayload = { exportedAt: new Date().toISOString(), messageCount: rows.length, messages: rows };
             const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
@@ -355,14 +380,16 @@ function DashboardContent() {
     };
 
     const showLastMessage = async () => {
-        if (!targetUid) return;
+        if (!targetUid || !supabase) return;
         try {
-            const q = query(collection(db, 'users', targetUid, 'history'), orderBy('timestamp', 'desc'), limit(1));
-            const snap = await getDocs(q);
-            if (snap.empty) return;
-            const last = { ...snap.docs[0].data() };
-            delete last.id;
-            await setDoc(doc(db, 'users', targetUid, 'active_message', 'current'), { ...last, timestamp: serverTimestamp() });
+            const { data: last, error } = await supabase.from('history').select('payload').eq('user_id', targetUid)
+                .order('timestamp', { ascending: false }).limit(1).maybeSingle();
+            if (error || !last) return;
+            await supabase.from('active_message').upsert({
+                user_id: targetUid,
+                payload: last.payload,
+                expires_at: computeExpiresAt(userSettings?.displayDuration),
+            }, { onConflict: 'user_id' });
         } catch (e) { console.error('Error showing last message:', e); }
     };
 
@@ -376,7 +403,7 @@ function DashboardContent() {
             case 'Show Permanently  ∞': return chat.activeMessage && chat.sendToScreen(chat.activeMessage, true);
             case 'Hide Overlay': return chat.hideOverlay();
             case 'Send Test Message': return chat.sendToScreen({
-                username: user?.displayName || 'Test User', login: 'test', color: '#07fc03', avatarUrl: user?.photoURL || null,
+                username: userData?.display_name || user?.user_metadata?.name || 'Test User', login: 'test', color: '#07fc03', avatarUrl: userData?.photo_url || user?.user_metadata?.avatar_url || null,
                 fragments: [{ type: 'text', content: 'This is a test message from the dashboard.' }],
             });
             case 'Save Settings': return setActiveTab('settings');
@@ -416,7 +443,7 @@ function DashboardContent() {
     const isVerifying = verifyingMod && isModeratorMode && !isMasterAdmin;
     const showChrome = hasVerifiedAccess && !verifyingMod;
 
-    const navUser = { photoURL: userData?.photoURL || user?.photoURL, username: userData?.twitchUsername || user?.displayName };
+    const navUser = { photoURL: userData?.photo_url || user?.user_metadata?.avatar_url, username: userData?.twitch_username || userData?.display_name || user?.user_metadata?.name };
 
     let gate = null;
     if (!hasVerifiedAccess && !isVerifying) {

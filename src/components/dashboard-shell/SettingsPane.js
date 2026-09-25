@@ -74,7 +74,7 @@ function ScaledBubblePreview({ message, settings, boxWidth, boxHeight }) {
 }
 
 export default function SettingsPane({ t, d, targetUid, isModeratorMode, isMasterAdmin, uiScale, setUiScale, activeSection = 'dashboard' }) {
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const {
         effectiveUid, settings, updateSetting, updateAppearanceSetting,
         saving, activeMessage,
@@ -82,8 +82,8 @@ export default function SettingsPane({ t, d, targetUid, isModeratorMode, isMaste
     } = useSettingsData({ targetUid, isModeratorMode });
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-    const previewMessage = { id: 'preview', username: user?.displayName || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: user?.photoURL, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
-    const canHide = activeMessage && (user?.uid === effectiveUid || isModeratorMode);
+    const previewMessage = { id: 'preview', username: userData?.display_name || user?.user_metadata?.name || 'PreviewUser', color: 'var(--primary-500)', avatarUrl: userData?.photo_url || user?.user_metadata?.avatar_url, fragments: [{ type: 'text', content: 'Settings looks good!' }] };
+    const canHide = activeMessage && (user?.id === effectiveUid || isModeratorMode);
 
     const previewBoxRef = useRef(null);
     const [previewBoxSize, setPreviewBoxSize] = useState({ width: 0, height: 0 });

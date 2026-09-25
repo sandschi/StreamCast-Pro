@@ -1,18 +1,43 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { db } from '@/lib/firebase';
-import {
-    collection, doc, onSnapshot, addDoc, updateDoc, setDoc, runTransaction,
-    serverTimestamp, Timestamp, query, orderBy,
-} from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
-const RESPOND_WINDOW_MS = 5 * 60 * 1000;
 const PUBLIC_WINDOW_MS = 10 * 60 * 1000;
+const RESPOND_WINDOW_MS = 5 * 60 * 1000;
 // Mods and the broadcaster can sing too - scoping this to 'singer' left them
 // unable to ever show up in Rotation Order or be pickable as a request/duet
 // target, even though they can already self-add unconditionally elsewhere.
 const ELIGIBLE_ROTATION_ROLES = ['singer', 'mod', 'broadcaster'];
+
+const mapRequestRow = (row) => ({
+    id: row.id,
+    kind: row.kind,
+    songId: row.song?.songId,
+    title: row.song?.title,
+    artist: row.song?.artist,
+    requestedBy: row.requested_by,
+    requestedByName: row.requested_by_name,
+    targetSingerUid: row.target_singer_id,
+    status: row.status,
+    createdAt: row.created_at,
+    respondBy: row.respond_by,
+    publicExpireBy: row.public_expire_by,
+});
+
+const mapPresenceRow = (row) => ({
+    id: row.viewer_id, displayName: row.display_name, photoURL: row.photo_url,
+    twitchUsername: row.twitch_username, lastSeen: row.last_seen,
+});
+
+// Keeps `permissions` in the same camelCase shape the original Firestore
+// docs had (role/participating/sittingOut/displayName/photoURL/
+// twitchUsername) - KaraokePane.js and other still-unported consumers read
+// it directly in that shape.
+const mapPermissionRow = (row) => ({
+    role: row.role, participating: row.participating, sittingOut: row.sitting_out,
+    displayName: row.display_name, photoURL: row.photo_url, twitchUsername: row.twitch_username,
+});
 
 // Song requests, duet invites, and the online+participating singer list (see
 // #27). Deliberately does NOT hold songs anywhere before they hit KaraFun's
@@ -20,10 +45,7 @@ const ELIGIBLE_ROTATION_ROLES = ['singer', 'mod', 'broadcaster'];
 // callback the caller supplies (from useKaraFunData), and fairness is
 // enforced afterward by reordering that same live queue via queueMove
 // (see KaraFunPane.js's auto-sort effect), not by staging songs in our own
-// Firestore collection first. An earlier version held a separate
-// karaoke_staging_queue with a manual "push next" step; dropped per
-// feedback - moving songs around in the actual KaraFun queue is the point,
-// not a parallel holding area.
+// database first.
 export function useKaraokeData({ targetUid, user, userRole }) {
     const [requests, setRequests] = useState([]);
     const [presence, setPresence] = useState([]);
@@ -31,27 +53,76 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     const [rotationOrder, setRotationOrderState] = useState([]);
 
     useEffect(() => {
-        if (!targetUid) return;
+        if (!targetUid || !supabase) return;
 
-        const unsubRequests = onSnapshot(query(collection(db, 'users', targetUid, 'karaoke_requests'), orderBy('createdAt', 'asc')), (snap) => {
-            setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
+        supabase.from('karaoke_requests').select('*').eq('user_id', targetUid).order('created_at', { ascending: true })
+            .then(({ data }) => setRequests((data || []).map(mapRequestRow)));
 
-        const unsubPresence = onSnapshot(collection(db, 'users', targetUid, 'online'), (snap) => {
-            setPresence(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
+        const requestsChannel = supabase
+            .channel(`karaoke-data-requests-${targetUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'karaoke_requests', filter: `user_id=eq.${targetUid}` }, (payload) => {
+                setRequests((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(r => r.id !== payload.old.id);
+                    const row = mapRequestRow(payload.new);
+                    const idx = prev.findIndex(r => r.id === row.id);
+                    const next = idx === -1 ? [...prev, row] : prev.map((r, i) => i === idx ? row : r);
+                    return [...next].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                });
+            })
+            .subscribe();
 
-        const unsubPermissions = onSnapshot(collection(db, 'users', targetUid, 'permissions'), (snap) => {
-            const perms = {};
-            snap.forEach(d => { perms[d.id] = d.data(); });
-            setPermissions(perms);
-        });
+        supabase.from('online').select('*').eq('user_id', targetUid)
+            .then(({ data }) => setPresence((data || []).map(mapPresenceRow)));
 
-        const unsubSettings = onSnapshot(doc(db, 'users', targetUid, 'settings', 'config'), (snap) => {
-            setRotationOrderState(snap.exists() ? (snap.data().karaokeRotationOrder || []) : []);
-        });
+        const presenceChannel = supabase
+            .channel(`karaoke-data-online-${targetUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'online', filter: `user_id=eq.${targetUid}` }, (payload) => {
+                setPresence((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(p => p.id !== payload.old.viewer_id);
+                    const row = mapPresenceRow(payload.new);
+                    const idx = prev.findIndex(p => p.id === row.id);
+                    return idx === -1 ? [...prev, row] : prev.map((p, i) => i === idx ? row : p);
+                });
+            })
+            .subscribe();
 
-        return () => { unsubRequests(); unsubPresence(); unsubPermissions(); unsubSettings(); };
+        supabase.from('permissions').select('*').eq('user_id', targetUid)
+            .then(({ data }) => {
+                const perms = {};
+                (data || []).forEach(row => { perms[row.viewer_id] = mapPermissionRow(row); });
+                setPermissions(perms);
+            });
+
+        const permissionsChannel = supabase
+            .channel(`karaoke-data-permissions-${targetUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'permissions', filter: `user_id=eq.${targetUid}` }, (payload) => {
+                setPermissions((prev) => {
+                    if (payload.eventType === 'DELETE') {
+                        const next = { ...prev };
+                        delete next[payload.old.viewer_id];
+                        return next;
+                    }
+                    return { ...prev, [payload.new.viewer_id]: mapPermissionRow(payload.new) };
+                });
+            })
+            .subscribe();
+
+        supabase.from('settings').select('karaoke_rotation_order').eq('user_id', targetUid).maybeSingle()
+            .then(({ data }) => setRotationOrderState(data?.karaoke_rotation_order || []));
+
+        const settingsChannel = supabase
+            .channel(`karaoke-data-settings-${targetUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${targetUid}` }, (payload) => {
+                setRotationOrderState(payload.eventType === 'DELETE' ? [] : (payload.new?.karaoke_rotation_order || []));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(requestsChannel);
+            supabase.removeChannel(presenceChannel);
+            supabase.removeChannel(permissionsChannel);
+            supabase.removeChannel(settingsChannel);
+        };
     }, [targetUid]);
 
     // "now" is tracked as state (rather than called inline in the memo below)
@@ -64,57 +135,6 @@ export function useKaraokeData({ targetUid, user, userRole }) {
         return () => clearInterval(id);
     }, []);
 
-    // Sweeps timed-out requests (pending -> public after 5 min unanswered,
-    // public -> expired after 10 min unclaimed). This was originally a
-    // Cloud Scheduler function (functions/index.js's expireKaraokeRequests)
-    // so it'd fire even with no dashboard open, but that needs the project
-    // on Firebase's Blaze plan to deploy at all - not available here, so
-    // this client-driven fallback is the same pattern useChatData.js already
-    // uses for active_message expiry, with the same tradeoff: it only runs
-    // while a mod/broadcaster dashboard happens to be open. Gated to
-    // mod/broadcaster because that's the only role firestore.rules lets
-    // transition these fields (isChannelModerator) - a singer/viewer
-    // dashboard attempting this would just get permission-denied.
-    const canExpire = userRole === 'broadcaster' || userRole === 'mod';
-    useEffect(() => {
-        if (!targetUid || !canExpire) return;
-        requests.forEach(r => {
-            if (r.status === 'pending' && r.respondBy && r.respondBy.toMillis() <= now) {
-                const ref = doc(db, 'users', targetUid, 'karaoke_requests', r.id);
-                runTransaction(db, async (tx) => {
-                    const fresh = await tx.get(ref);
-                    const data = fresh.data();
-                    if (!fresh.exists() || data.status !== 'pending' || !(data.respondBy?.toMillis() <= now)) return;
-                    // A duet invite going unanswered isn't the same as a plain
-                    // request opening up to the room - there's no "room" for a
-                    // duet, just the one invitee. Route it through the same
-                    // declined state respondToDuetInvite's reject uses, so it
-                    // lands in myDeclinedDuets (Sing Solo / Drop) instead of
-                    // silently vanishing: publicRequests excludes kind==='duet'
-                    // and myPendingDuetInvites requires status==='pending', so
-                    // 'public' would match neither filter and the requester
-                    // would never see it again.
-                    if (data.kind === 'duet') {
-                        tx.update(ref, { status: 'declined', respondBy: null });
-                    } else {
-                        tx.update(ref, {
-                            status: 'public', targetSingerUid: null, respondBy: null,
-                            publicExpireBy: Timestamp.fromMillis(now + PUBLIC_WINDOW_MS),
-                        });
-                    }
-                }).catch(e => console.error('Error expiring karaoke request:', e));
-            } else if (r.status === 'public' && r.publicExpireBy && r.publicExpireBy.toMillis() <= now) {
-                const ref = doc(db, 'users', targetUid, 'karaoke_requests', r.id);
-                runTransaction(db, async (tx) => {
-                    const fresh = await tx.get(ref);
-                    const data = fresh.data();
-                    if (!fresh.exists() || data.status !== 'public' || !(data.publicExpireBy?.toMillis() <= now)) return;
-                    tx.update(ref, { status: 'expired' });
-                }).catch(e => console.error('Error expiring karaoke request:', e));
-            }
-        });
-    }, [targetUid, canExpire, requests, now]);
-
     // A stale heartbeat (see dashboard/page.js - written every 30s, no
     // onDisconnect) is the closest thing to "closed the tab" this app has;
     // treat >90s since lastSeen as effectively offline rather than waiting on
@@ -126,16 +146,16 @@ export function useKaraokeData({ targetUid, user, userRole }) {
                 const role = perm?.role || (p.id === targetUid ? 'broadcaster' : null);
                 if (!ELIGIBLE_ROTATION_ROLES.includes(role)) return false;
                 // The broadcaster defaults into their own rotation with no
-                // permissions doc at all (the common case - UsersPane never
+                // permissions row at all (the common case - UsersPane never
                 // creates one for the owner; without this default they'd
                 // silently drop out of onlineSingers entirely) - but once a
-                // doc exists (e.g. the broadcaster used their own
+                // row exists (e.g. the broadcaster used their own
                 // "Participating tonight" toggle, which writes one), its
                 // explicit value must still be respected instead of the
                 // broadcaster role unconditionally overriding it forever.
                 const participating = role === 'broadcaster' ? perm?.participating !== false : !!perm?.participating;
                 if (!participating) return false;
-                const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
+                const lastSeenMs = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
                 return now - lastSeenMs < 90_000;
             })
             .map(p => ({ id: p.id, displayName: p.displayName, twitchUsername: p.twitchUsername, photoURL: p.photoURL }));
@@ -143,31 +163,31 @@ export function useKaraokeData({ targetUid, user, userRole }) {
 
     // Session-lifetime cache of the last good name/avatar seen for each uid,
     // consulted only as a last-resort fallback below. The `online` and
-    // `permissions` collections are two independent onSnapshot listeners
-    // (see the effect above) - a brief Firestore reconnect (a network blip,
-    // or the browser tab getting backgrounded/foregrounded, common while
-    // alt-tabbing to OBS mid-stream) can have one listener's snapshot catch
-    // up a moment before the other's, or briefly redeliver an incomplete
-    // result while re-establishing. Without this, that transient gap made
-    // an already-known singer's name flash blank/"someone" in Rotation Order
-    // and everywhere else nameFor is used, even though nothing about them
-    // actually changed - reported as "really really annoying" during a live
-    // stream. Only ever updated by adding/filling in real data (the upsert
-    // below keeps whatever was already cached when the new value is blank),
-    // never by removing an entry, so it can't itself go stale into showing a
-    // wrong name for a genuinely different person - a uid's name essentially
-    // doesn't change once set as long as the browser tab stays open. Plain
-    // state rather than a ref: reading a ref during render (rotationMembers/
-    // nameFor both need this value while computing what to return) trips
-    // this project's react-hooks/refs lint rule. Merged during render
-    // itself, not in an effect (react-hooks/set-state-in-effect flags a
-    // setState call synchronously inside useEffect) - this is React's own
-    // documented "adjusting state during rendering" pattern: comparing
-    // against the last-seen inputs (also state, not a ref) and calling
-    // setState conditionally in the render body bails out and re-renders
-    // immediately without committing/painting the stale pass, and only
-    // actually runs when onlineSingers/permissions change - exactly when
-    // nameFor/rotationMembers need to recompute anyway.
+    // `permissions` tables are two independent realtime channels (see the
+    // effect above) - a brief reconnect (a network blip, or the browser tab
+    // getting backgrounded/foregrounded, common while alt-tabbing to OBS
+    // mid-stream) can have one channel catch up a moment before the other's,
+    // or briefly redeliver an incomplete result while re-establishing.
+    // Without this, that transient gap made an already-known singer's name
+    // flash blank/"someone" in Rotation Order and everywhere else nameFor is
+    // used, even though nothing about them actually changed - reported as
+    // "really really annoying" during a live stream. Only ever updated by
+    // adding/filling in real data (the upsert below keeps whatever was
+    // already cached when the new value is blank), never by removing an
+    // entry, so it can't itself go stale into showing a wrong name for a
+    // genuinely different person - a uid's name essentially doesn't change
+    // once set as long as the browser tab stays open. Plain state rather
+    // than a ref: reading a ref during render (rotationMembers/nameFor both
+    // need this value while computing what to return) trips this project's
+    // react-hooks/refs lint rule. Merged during render itself, not in an
+    // effect (react-hooks/set-state-in-effect flags a setState call
+    // synchronously inside useEffect) - this is React's own documented
+    // "adjusting state during rendering" pattern: comparing against the
+    // last-seen inputs (also state, not a ref) and calling setState
+    // conditionally in the render body bails out and re-renders immediately
+    // without committing/painting the stale pass, and only actually runs
+    // when onlineSingers/permissions change - exactly when nameFor/
+    // rotationMembers need to recompute anyway.
     const [lastKnown, setLastKnown] = useState({});
     const [mergedInputs, setMergedInputs] = useState(null);
     if (mergedInputs?.onlineSingers !== onlineSingers || mergedInputs?.permissions !== permissions) {
@@ -187,12 +207,14 @@ export function useKaraokeData({ targetUid, user, userRole }) {
         setLastKnown((prev) => {
             const next = { ...prev };
             onlineSingers.forEach((s) => upsert(next, s.id, s));
-            Object.entries(permissions).forEach(([uid, perm]) => upsert(next, uid, perm || {}));
+            Object.entries(permissions).forEach(([uid, perm]) => upsert(next, uid, {
+                twitchUsername: perm?.twitchUsername, displayName: perm?.displayName, photoURL: perm?.photoURL,
+            }));
             return next;
         });
     }
 
-    // uid -> display name, falling back to the permissions doc for a
+    // uid -> display name, falling back to the permissions row for a
     // participating singer who isn't currently online (e.g. their next-up
     // slot is showing while they're between songs). Shared by KaraFun Mod
     // and the Karaoke tab so "whose turn" is resolved the same way in both
@@ -208,8 +230,9 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     const nameFor = useCallback((uid) => {
         if (uid?.startsWith('guest:')) return uid.slice(6);
         const online = onlineSingers.find(s => s.id === uid);
+        const perm = permissions[uid];
         const cached = lastKnown[uid];
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || cached?.twitchUsername || cached?.displayName || 'someone';
+        return online?.twitchUsername || online?.displayName || perm?.twitchUsername || perm?.displayName || cached?.twitchUsername || cached?.displayName || 'someone';
     }, [onlineSingers, permissions, lastKnown]);
 
     // The persisted order, extended with any online singer it doesn't know
@@ -217,7 +240,7 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     // tab's Rotation Order panels reorder/display THIS array and persist the
     // whole thing back via setRotationOrder - swapping within an
     // online-only view would drop every temporarily offline singer (and
-    // every guest, who's never "online") from karaokeRotationOrder on the
+    // every guest, who's never "online") from karaoke_rotation_order on the
     // next reorder.
     const fullRotationOrder = useMemo(
         () => [...rotationOrder, ...onlineSingers.map(s => s.id).filter(id => !rotationOrder.includes(id))],
@@ -248,122 +271,136 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     }), [fullRotationOrder, onlineSingers, permissions, lastKnown]);
 
     const submitRequest = async (song, targetSingerUid, requestedByName) => {
-        if (!targetUid || !user) return;
+        if (!targetUid || !user || !supabase) return;
         const now = Date.now();
-        await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
-            kind: 'song', songId: song.songId, title: song.title, artist: song.artist,
-            requestedBy: user.uid, requestedByName: requestedByName || 'Someone',
-            targetSingerUid: targetSingerUid || null,
+        await supabase.from('karaoke_requests').insert({
+            user_id: targetUid,
+            kind: 'song',
+            song: { songId: song.songId, title: song.title, artist: song.artist },
+            requested_by: user.id,
+            requested_by_name: requestedByName || 'Someone',
+            target_singer_id: targetSingerUid || null,
             status: targetSingerUid ? 'pending' : 'public',
-            createdAt: serverTimestamp(),
-            respondBy: targetSingerUid ? Timestamp.fromMillis(now + RESPOND_WINDOW_MS) : null,
-            publicExpireBy: targetSingerUid ? null : Timestamp.fromMillis(now + PUBLIC_WINDOW_MS),
+            respond_by: targetSingerUid ? new Date(now + RESPOND_WINDOW_MS).toISOString() : null,
+            public_expire_by: targetSingerUid ? null : new Date(now + PUBLIC_WINDOW_MS).toISOString(),
         });
     };
 
     // Accept as the originally-targeted singer, or claim an already-public
     // request - same outcome either way. addToQueue is useKaraFunData's live
     // KaraFun emitter, passed in by the caller so this hook stays ignorant of
-    // the socket connection itself. The Firestore write happens FIRST, inside
-    // a transaction that checks the request hasn't already been resolved by
-    // someone else (a mod force-publishing it, another singer claiming a
-    // public request, etc.) - addToQueue only fires once that succeeds, so a
-    // race can no longer queue the same request's song twice.
+    // the socket connection itself. The database write happens FIRST, as a
+    // conditional update that only succeeds if the request hasn't already
+    // been resolved by someone else (a mod force-publishing it, another
+    // singer claiming a public request, etc.) - addToQueue only fires once
+    // that succeeds, so a race can no longer queue the same request's song
+    // twice.
     const acceptRequest = async (request, singerName, addToQueue) => {
-        const reqRef = doc(db, 'users', targetUid, 'karaoke_requests', request.id);
-        try {
-            await runTransaction(db, async (tx) => {
-                const snap = await tx.get(reqRef);
-                if (!snap.exists() || !['pending', 'public'].includes(snap.data().status)) {
-                    throw new Error('karaoke-request-already-resolved');
-                }
-                tx.update(reqRef, { status: 'accepted' });
-            });
-        } catch {
-            return;
-        }
+        if (!supabase) return;
+        const { data } = await supabase.from('karaoke_requests').update({ status: 'accepted' })
+            .eq('id', request.id).in('status', ['pending', 'public']).select('id');
+        if (!data || data.length === 0) return;
         addToQueue(request.songId, singerName);
     };
 
     // Only the targeted singer declining - drops to public, doesn't kill it.
     const declineAsTarget = async (requestId) => {
-        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), {
-            status: 'public', targetSingerUid: null, publicExpireBy: Timestamp.fromMillis(Date.now() + PUBLIC_WINDOW_MS), respondBy: null,
-        });
+        await supabase.from('karaoke_requests').update({
+            status: 'public', target_singer_id: null, public_expire_by: new Date(Date.now() + PUBLIC_WINDOW_MS).toISOString(), respond_by: null,
+        }).eq('id', requestId);
     };
 
     // Mod/broadcaster only - kills the request outright.
     const modDecline = async (requestId) => {
-        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { status: 'declined' });
+        await supabase.from('karaoke_requests').update({ status: 'declined' }).eq('id', requestId);
     };
 
     // Mod/broadcaster only - force straight to public regardless of timers.
     const modForcePublic = async (requestId) => {
-        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), {
-            status: 'public', targetSingerUid: null, publicExpireBy: Timestamp.fromMillis(Date.now() + PUBLIC_WINDOW_MS), respondBy: null,
-        });
+        await supabase.from('karaoke_requests').update({
+            status: 'public', target_singer_id: null, public_expire_by: new Date(Date.now() + PUBLIC_WINDOW_MS).toISOString(), respond_by: null,
+        }).eq('id', requestId);
     };
 
     // Solo self-add is a direct queueAdd - nothing to persist, there's no
     // lifecycle to track once it's already in KaraFun's real queue. A duet
-    // invite is the one case that needs Firestore first: the invitee has to
+    // invite is the one case that needs a row first: the invitee has to
     // agree before anything is actually queued, so it's recorded as a
-    // karaoke_requests doc (kind: 'duet') the same shape a viewer's request
-    // uses, just requestedBy === the asking singer themselves.
+    // karaoke_requests row (kind: 'duet') the same shape a viewer's request
+    // uses, just requested_by === the asking singer themselves.
     const selfAdd = (song, singerName, addToQueue) => addToQueue(song.songId, singerName);
 
     const inviteDuet = async (song, singerName, invitedUid) => {
-        await addDoc(collection(db, 'users', targetUid, 'karaoke_requests'), {
-            kind: 'duet', songId: song.songId, title: song.title, artist: song.artist,
-            requestedBy: user.uid, requestedByName: singerName, targetSingerUid: invitedUid,
-            // A real respondBy (same window a targeted song request gets) so an
-            // invitee who never responds doesn't leave this pending forever -
-            // expireKaraokeRequests' respondBy<=now query can't match a null
-            // field at all. The asker can also cancel it directly any time via
-            // dropDeclinedDuet, which works on a still-pending invite too.
-            status: 'pending', createdAt: serverTimestamp(),
-            respondBy: Timestamp.fromMillis(Date.now() + RESPOND_WINDOW_MS), publicExpireBy: null,
+        if (!targetUid || !user || !supabase) return;
+        await supabase.from('karaoke_requests').insert({
+            user_id: targetUid,
+            kind: 'duet',
+            song: { songId: song.songId, title: song.title, artist: song.artist },
+            requested_by: user.id,
+            requested_by_name: singerName,
+            target_singer_id: invitedUid,
+            // A real respond_by (same window a targeted song request gets) so
+            // an invitee who never responds doesn't leave this pending
+            // forever - the expiry cron's respond_by<=now query can't match
+            // a null field at all. The asker can also cancel it directly any
+            // time via dropDeclinedDuet, which works on a still-pending
+            // invite too.
+            status: 'pending',
+            respond_by: new Date(Date.now() + RESPOND_WINDOW_MS).toISOString(),
+            public_expire_by: null,
         });
     };
 
     const respondToDuetInvite = async (request, accept, myName, addToQueue) => {
+        if (!supabase) return;
         if (accept) {
-            // Firestore write first, then the command - src/lib/karafunCommands.js's
+            // Database write first, then the command - src/lib/karafunCommands.js's
             // resolveQueueSingerName requires this invite's status to already be
             // 'accepted' when it validates the duet name server-side. Queuing
             // first raced that write: if addToQueue's command reached the API
-            // before this updateDoc committed, the server saw a still-'pending'
+            // before this update committed, the server saw a still-'pending'
             // invite, rejected the duet name, and no song was queued - but this
-            // updateDoc still ran afterward and marked it accepted anyway, so
+            // update still ran afterward and marked it accepted anyway, so
             // nothing here surfaced the failure.
-            await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'accepted' });
+            await supabase.from('karaoke_requests').update({ status: 'accepted' }).eq('id', request.id);
             addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
         } else {
-            await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'declined' });
+            await supabase.from('karaoke_requests').update({ status: 'declined' }).eq('id', request.id);
         }
     };
 
     // Asker's choices once a duet invite they sent comes back declined.
     const singSoloAfterDecline = async (request, singerName, addToQueue) => {
         addToQueue(request.songId, singerName);
-        await updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', request.id), { status: 'dropped' });
+        await supabase.from('karaoke_requests').update({ status: 'dropped' }).eq('id', request.id);
     };
-    const dropDeclinedDuet = async (requestId) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), { status: 'dropped' });
-    // Resets respondBy to a fresh window - without this, re-inviting after
-    // the original deadline already passed (or after expireKaraokeRequests
-    // already cleared it to null) would either instantly time out again or
-    // never time out at all.
-    const reinviteDuet = async (requestId, newInvitedUid) => updateDoc(doc(db, 'users', targetUid, 'karaoke_requests', requestId), {
-        targetSingerUid: newInvitedUid, status: 'pending', respondBy: Timestamp.fromMillis(Date.now() + RESPOND_WINDOW_MS),
-    });
+    const dropDeclinedDuet = async (requestId) => supabase.from('karaoke_requests').update({ status: 'dropped' }).eq('id', requestId);
+    // Resets respond_by to a fresh window - without this, re-inviting after
+    // the original deadline already passed (or after the expiry cron already
+    // cleared it to null) would either instantly time out again or never
+    // time out at all.
+    const reinviteDuet = async (requestId, newInvitedUid) => supabase.from('karaoke_requests').update({
+        target_singer_id: newInvitedUid, status: 'pending', respond_by: new Date(Date.now() + RESPOND_WINDOW_MS).toISOString(),
+    }).eq('id', requestId);
 
     const setRotationOrder = async (uidArray) => {
-        await setDoc(doc(db, 'users', targetUid, 'settings', 'config'), { karaokeRotationOrder: uidArray }, { merge: true });
+        if (!targetUid || !supabase) return;
+        await supabase.from('settings').upsert({ user_id: targetUid, karaoke_rotation_order: uidArray }, { onConflict: 'user_id' });
     };
 
     const toggleParticipating = async (value) => {
-        if (!user) return;
-        await setDoc(doc(db, 'users', targetUid, 'permissions', user.uid), { participating: value }, { merge: true });
+        if (!user || !targetUid || !supabase) return;
+        // A brand-new permissions row (the broadcaster's own first-ever
+        // toggle, since UsersPane never creates one for the owner) needs a
+        // role - the column is NOT NULL. Any other case is always an UPDATE
+        // on an existing row (a mod already had to assign a real role before
+        // anyone but the owner can reach this toggle at all), so role is
+        // left out of the payload there and stays whatever it already was.
+        const isSelf = targetUid === user.id;
+        await supabase.from('permissions').upsert({
+            user_id: targetUid, viewer_id: user.id, participating: value,
+            ...(isSelf ? { role: 'mod' } : {}),
+        }, { onConflict: 'user_id,viewer_id' });
     };
 
     // Self-service only ("so the user can pass rounds if they go on a
@@ -375,8 +412,12 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     // correct: guests are always turn-eligible by default (see
     // src/lib/karafunCommands.js).
     const toggleSittingOut = async (value) => {
-        if (!user) return;
-        await setDoc(doc(db, 'users', targetUid, 'permissions', user.uid), { sittingOut: value }, { merge: true });
+        if (!user || !targetUid || !supabase) return;
+        const isSelf = targetUid === user.id;
+        await supabase.from('permissions').upsert({
+            user_id: targetUid, viewer_id: user.id, sitting_out: value,
+            ...(isSelf ? { role: 'mod' } : {}),
+        }, { onConflict: 'user_id,viewer_id' });
     };
 
     return {

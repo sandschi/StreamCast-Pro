@@ -4,29 +4,16 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import tmi from 'tmi.js';
 import { useAuth } from '@/context/AuthContext';
 import { fetchThirdPartyEmotes, parseTwitchMessage } from '@/lib/emote-engine';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, setDoc, addDoc, serverTimestamp, onSnapshot, deleteDoc, query, where, getDocs, writeBatch, orderBy, runTransaction } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
+import { computeExpiresAt } from '@/lib/activeMessage';
 import posthog from 'posthog-js';
-
-// Firestore caps a single batch at 500 writes - a prolific chatter's messages
-// spread across history/message_queue/suggestions can exceed that before a
-// mod times them out or bans them, so this chunks rather than queuing every
-// matched doc into one writeBatch (which would throw and leave the
-// Twitch-side deletion signal applied only partially, or not at all).
-async function deleteRefsInChunks(refs) {
-    for (let i = 0; i < refs.length; i += 500) {
-        const batch = writeBatch(db);
-        for (const ref of refs.slice(i, i + 500)) batch.delete(ref);
-        await batch.commit();
-    }
-}
 
 // Extracted verbatim from the original inline logic in components/dashboard/Chat.js
 // so both the classic and dashboard-shell presentations run the exact same real
-// tmi.js/Firestore wiring rather than duplicating it. No behavior changes.
+// tmi.js/Supabase wiring rather than duplicating it. No behavior changes.
 export function useChatData({ targetUid, userRole, enabled = true }) {
     const { user } = useAuth();
-    const effectiveUid = useMemo(() => (enabled ? (targetUid || user?.uid) : null), [enabled, targetUid, user?.uid]);
+    const effectiveUid = useMemo(() => (enabled ? (targetUid || user?.id) : null), [enabled, targetUid, user?.id]);
     // One explicit predicate for every queue read/write/expiry/promotion below,
     // instead of each site separately excluding just 'viewer' - that left
     // 'denied' (and any future non-moderator role) able to subscribe to and
@@ -42,7 +29,6 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     const [activeMessage, setActiveMessage] = useState(null);
     const [queuedMessages, setQueuedMessages] = useState([]);
     const [displayDuration, setDisplayDuration] = useState(5);
-    const promotingRef = useRef(false);
 
     const clientRef = useRef(null);
     const connectingRef = useRef(false);
@@ -78,19 +64,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     // it's gone here" shouldn't also mean a mod running /clear wipes a
     // streamer's entire re-air history as a side effect.
     const deleteMessagesByTwitchId = async (uid, twitchMessageId) => {
-        if (!uid || !twitchMessageId) return;
+        if (!uid || !twitchMessageId || !supabase) return;
         try {
-            const refs = [];
-            for (const col of ['history', 'message_queue', 'suggestions']) {
-                const snap = await getDocs(query(collection(db, 'users', uid, col), where('twitchMessageId', '==', twitchMessageId)));
-                snap.forEach(d => refs.push(d.ref));
+            await Promise.all([
+                supabase.from('history').delete().eq('user_id', uid).eq('twitch_message_id', twitchMessageId),
+                supabase.from('message_queue').delete().eq('user_id', uid).eq('twitch_message_id', twitchMessageId),
+                supabase.from('suggestions').delete().eq('user_id', uid).eq('payload->>twitchMessageId', twitchMessageId),
+            ]);
+            const { data: active } = await supabase.from('active_message').select('payload').eq('user_id', uid).maybeSingle();
+            if (active?.payload?.twitchMessageId === twitchMessageId) {
+                await supabase.from('active_message').delete().eq('user_id', uid);
             }
-            const activeRef = doc(db, 'users', uid, 'active_message', 'current');
-            const activeSnap = await getDoc(activeRef);
-            if (activeSnap.exists() && activeSnap.data().twitchMessageId === twitchMessageId) {
-                refs.push(activeRef);
-            }
-            await deleteRefsInChunks(refs);
         } catch (e) { console.error('Error deleting message after Twitch CLEARMSG:', e); }
     };
 
@@ -98,19 +82,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     // removes everything stored under that Twitch login, matching Twitch's
     // own "this person's messages are gone" behavior.
     const deleteMessagesByLogin = async (uid, login) => {
-        if (!uid || !login) return;
+        if (!uid || !login || !supabase) return;
         try {
-            const refs = [];
-            for (const col of ['history', 'message_queue', 'suggestions']) {
-                const snap = await getDocs(query(collection(db, 'users', uid, col), where('login', '==', login)));
-                snap.forEach(d => refs.push(d.ref));
+            await Promise.all([
+                supabase.from('history').delete().eq('user_id', uid).eq('login', login),
+                supabase.from('message_queue').delete().eq('user_id', uid).eq('login', login),
+                supabase.from('suggestions').delete().eq('user_id', uid).eq('payload->>login', login),
+            ]);
+            const { data: active } = await supabase.from('active_message').select('payload').eq('user_id', uid).maybeSingle();
+            if (active?.payload?.login === login) {
+                await supabase.from('active_message').delete().eq('user_id', uid);
             }
-            const activeRef = doc(db, 'users', uid, 'active_message', 'current');
-            const activeSnap = await getDoc(activeRef);
-            if (activeSnap.exists() && activeSnap.data().login === login) {
-                refs.push(activeRef);
-            }
-            await deleteRefsInChunks(refs);
         } catch (e) { console.error('Error deleting messages after Twitch timeout/ban:', e); }
     };
 
@@ -122,19 +104,18 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     }, [messages, thirdPartyEmotes]);
 
     useEffect(() => {
-        if (!user || !effectiveUid) return;
+        if (!user || !effectiveUid || !supabase) return;
         let active = true;
-        const fetchUserData = async (retries = 3) => {
+        const fetchUserData = async () => {
             try {
-                const userDoc = await getDoc(doc(db, 'users', effectiveUid));
-                if (!active || !userDoc.exists()) return;
-                const data = userDoc.data();
-                const name = (data.twitchUsername || data.displayName || (effectiveUid === user.uid ? user.displayName : null))?.toLowerCase().trim();
+                const { data } = await supabase.from('users').select('twitch_username, display_name, twitch_id').eq('id', effectiveUid).maybeSingle();
+                if (!active || !data) return;
+                const name = (data.twitch_username || data.display_name || (effectiveUid === user.id ? user.user_metadata?.name : null))?.toLowerCase().trim();
                 if (name && name !== channelRef.current) {
                     channelRef.current = name;
                     setChannelName(name);
                 }
-                const bId = data.twitchId || (effectiveUid === user.uid ? user.providerData[0]?.uid : null);
+                const bId = data.twitch_id || (effectiveUid === user.id ? (user.user_metadata?.provider_id || user.user_metadata?.sub) : null);
                 if (bId && lastFetchedIdRef.current !== bId) {
                     lastFetchedIdRef.current = bId;
                     const fetched = await fetchThirdPartyEmotes(bId);
@@ -235,131 +216,99 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
     }, [user, channelName, reconnectNonce]);
 
     useEffect(() => {
-        if (!effectiveUid || userRole === 'viewer') return;
+        if (!effectiveUid || !supabase || userRole === 'viewer') return;
 
-        // Listen for suggestions (Broadcaster/Mods only)
-        const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
-        const unsub = onSnapshot(suggestionsRef, (snapshot) => {
-            const list = [];
-            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-            setSuggestions(list.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
-        });
+        const mapSuggestion = (row) => ({ id: row.id, ...row.payload, submittedBy: row.submitted_by, timestamp: row.created_at });
+        const sortDesc = (list) => [...list].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-        return () => unsub();
+        supabase.from('suggestions').select('*').eq('user_id', effectiveUid)
+            .then(({ data }) => setSuggestions(sortDesc((data || []).map(mapSuggestion))));
+
+        const channel = supabase
+            .channel(`chat-data-suggestions-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'suggestions', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                setSuggestions((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(s => s.id !== payload.old.id);
+                    const row = mapSuggestion(payload.new);
+                    const idx = prev.findIndex(s => s.id === row.id);
+                    const next = idx === -1 ? [...prev, row] : prev.map((s, i) => i === idx ? row : s);
+                    return sortDesc(next);
+                });
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid, userRole]);
 
     // Listen for active message to show Hide button
     useEffect(() => {
-        if (!effectiveUid) return;
-        const msgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        const unsub = onSnapshot(msgRef, (doc) => {
-            setActiveMessage(doc.exists() ? doc.data() : null);
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase) return;
+        const applyActiveMessage = (row) => {
+            setActiveMessage(row ? { ...row.payload, __expiresAt: row.expires_at } : null);
+        };
+        supabase.from('active_message').select('*').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => applyActiveMessage(data));
+        const channel = supabase
+            .channel(`chat-data-active-message-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_message', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                applyActiveMessage(payload.eventType === 'DELETE' ? null : payload.new);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
     // Listen for the pending "show next" queue, oldest first.
     useEffect(() => {
-        if (!effectiveUid || !canManageQueue) return;
-        const q = query(collection(db, 'users', effectiveUid, 'message_queue'), orderBy('queuedAt', 'asc'));
-        const unsub = onSnapshot(q, (snapshot) => {
-            setQueuedMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase || !canManageQueue) return;
+        const mapRow = (row) => ({ id: row.id, ...row.payload, twitchMessageId: row.twitch_message_id, login: row.login, queuedAt: row.queued_at });
+        const sortAsc = (list) => [...list].sort((a, b) => new Date(a.queuedAt) - new Date(b.queuedAt));
+
+        supabase.from('message_queue').select('*').eq('user_id', effectiveUid).order('queued_at', { ascending: true })
+            .then(({ data }) => setQueuedMessages((data || []).map(mapRow)));
+
+        const channel = supabase
+            .channel(`chat-data-queue-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'message_queue', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                setQueuedMessages((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(m => m.id !== payload.old.id);
+                    const row = mapRow(payload.new);
+                    const idx = prev.findIndex(m => m.id === row.id);
+                    const next = idx === -1 ? [...prev, row] : prev.map((m, i) => i === idx ? row : m);
+                    return sortAsc(next);
+                });
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid, canManageQueue]);
 
-    // Needed to know when a timed (non-permanent) active message will
-    // naturally finish its on-screen time, so this client can expire it and
-    // advance the queue - see the two effects below.
+    // Needed to know how long a new active message should stay up - the
+    // pg_cron+trigger pair in supabase/schema/0003_cron.sql owns the actual
+    // expiry/promotion now (see 0003_cron.sql), so this hook only needs
+    // displayDuration to compute expires_at up front when writing a message,
+    // not to run its own expiry timer anymore.
     useEffect(() => {
-        if (!effectiveUid) return;
-        const ref = doc(db, 'users', effectiveUid, 'settings', 'config');
-        const unsub = onSnapshot(ref, (snap) => {
-            if (snap.exists() && typeof snap.data().displayDuration === 'number') {
-                setDisplayDuration(snap.data().displayDuration);
-            }
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase) return;
+        supabase.from('settings').select('display_duration').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => { if (typeof data?.display_duration === 'number') setDisplayDuration(data.display_duration); });
+        const channel = supabase
+            .channel(`chat-data-settings-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                if (payload.eventType !== 'DELETE' && typeof payload.new?.display_duration === 'number') setDisplayDuration(payload.new.display_duration);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
-    // Expire the active message once its on-screen time is up. The overlay
-    // has no write access (it's intentionally unauthenticated - see
-    // firestore.rules), so it can only ever hide a message locally/visually;
-    // this dashboard-side client is the only place that can actually clear
-    // active_message/current in Firestore, which is what lets the queue below
-    // know it's time to advance.
-    useEffect(() => {
-        if (!effectiveUid || !activeMessage || !canManageQueue) return;
-        const duration = activeMessage.duration !== undefined ? activeMessage.duration : displayDuration;
-        if (!(duration > 0)) return; // -1/undefined duration means "permanent" - stays until replaced or hidden
-        const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-        const expiringId = activeMessage.activeId;
-        const timer = setTimeout(async () => {
-            try {
-                // With two dashboard clients open, another client's replacement
-                // could land in the window between this timer firing and the
-                // delete committing - re-check activeId inside a transaction
-                // instead of deleting unconditionally, so a stale timer from the
-                // OLD message can never delete a message that replaced it.
-                await runTransaction(db, async (transaction) => {
-                    const snap = await transaction.get(activeMsgRef);
-                    if (snap.exists() && snap.data().activeId === expiringId) {
-                        transaction.delete(activeMsgRef);
-                    }
-                });
-            } catch (e) { console.error('Error expiring active message:', e); }
-        }, duration * 1000 + 500);
-        return () => clearTimeout(timer);
-    }, [effectiveUid, activeMessage, displayDuration, canManageQueue]);
-
-    // Promote the next queued message once the screen is clear.
-    useEffect(() => {
-        if (!effectiveUid || activeMessage || queuedMessages.length === 0 || promotingRef.current || !canManageQueue) return;
-        promotingRef.current = true;
-        const { id: queueDocId, queuedAt, ...rest } = queuedMessages[0];
-        const payload = { ...rest, activeId: crypto.randomUUID() };
-        (async () => {
-            try {
-                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-                const queueRef = doc(db, 'users', effectiveUid, 'message_queue', queueDocId);
-                // Pre-generated ref (rather than addDoc) so this write can join
-                // the same transaction as the others below.
-                const historyRef = doc(collection(db, 'users', effectiveUid, 'history'));
-
-                // With two dashboard clients open, both can see the same empty
-                // active slot and the same queued item at once and each start
-                // promoting it - re-check both inside a transaction instead of
-                // the separate setDoc/addDoc/deleteDoc calls this used to be, so
-                // only one client's promotion actually commits.
-                const promoted = await runTransaction(db, async (transaction) => {
-                    const activeSnap = await transaction.get(activeMsgRef);
-                    const queueSnap = await transaction.get(queueRef);
-                    const slotTaken = activeSnap.exists() && Object.keys(activeSnap.data()).length > 0;
-                    if (slotTaken || !queueSnap.exists()) return false;
-                    transaction.set(activeMsgRef, payload);
-                    transaction.set(historyRef, payload);
-                    transaction.delete(queueRef);
-                    return true;
-                });
-
-                if (promoted) posthog.capture('message_shown', { source: 'queue' });
-            } catch (e) {
-                console.error('Error promoting queued message:', e);
-            } finally {
-                promotingRef.current = false;
-            }
-        })();
-    }, [effectiveUid, activeMessage, queuedMessages, canManageQueue]);
-
     const hideOverlay = async () => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
         try {
-            await deleteDoc(doc(db, 'users', effectiveUid, 'active_message', 'current'));
+            await supabase.from('active_message').delete().eq('user_id', effectiveUid);
         } catch (e) { console.error("Error hiding:", e); }
     };
 
     const sendToScreen = async (msg, permanent = false) => {
-        if (!user || userRole === 'denied') return;
+        if (!user || !supabase || userRole === 'denied') return;
 
         const isViewer = userRole === 'viewer';
         const payload = {
@@ -368,9 +317,8 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             avatarUrl: msg.avatarUrl,
             color: msg.color,
             fragments: msg.fragments,
-            timestamp: serverTimestamp(),
-            suggestedBy: user.uid,
-            suggestedByName: user.displayName,
+            suggestedBy: user.id,
+            suggestedByName: user.user_metadata?.name,
             // Twitch's own message id (tags.id from the live chat event, see
             // above) - kept so a later CLEARMSG for this message can find and
             // delete every stored copy of it. Absent for anything that didn't
@@ -379,26 +327,17 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             twitchMessageId: msg.id || null,
         };
 
-        if (permanent) {
-            payload.duration = -1;
-        }
-
         try {
             if (isViewer) {
-                const suggestionsRef = collection(db, 'users', effectiveUid, 'suggestions');
-                if (payload.duration) delete payload.duration;
-                await addDoc(suggestionsRef, payload);
+                await supabase.from('suggestions').insert({ user_id: effectiveUid, submitted_by: user.id, payload });
                 console.log('Suggestion Sent ✅');
             } else {
                 // MODS/BROADCASTER: Send directly to screen
-                const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-                const historyRef = collection(db, 'users', effectiveUid, 'history');
-
                 const finalPayload = { ...payload, activeId: crypto.randomUUID() };
-                if (!permanent) delete finalPayload.duration;
+                const expiresAt = computeExpiresAt(displayDuration, permanent);
 
-                await setDoc(activeMsgRef, finalPayload);
-                await addDoc(historyRef, finalPayload);
+                await supabase.from('active_message').upsert({ user_id: effectiveUid, payload: finalPayload, expires_at: expiresAt }, { onConflict: 'user_id' });
+                await supabase.from('history').insert({ user_id: effectiveUid, twitch_message_id: finalPayload.twitchMessageId, login: finalPayload.login, payload: finalPayload });
                 posthog.capture('message_sent', { permanent });
                 console.log('Sent to Screen ✅');
             }
@@ -407,11 +346,16 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
 
     // Mods/broadcaster only (viewers already have "suggest" for the
     // not-direct-to-screen case). Adds to message_queue instead of writing
-    // active_message/current directly - the queue-advance effect above shows
-    // it immediately if nothing's currently on screen, or once the current
-    // message's time is up.
+    // active_message directly - the AFTER DELETE trigger on active_message
+    // (supabase/schema/0003_cron.sql) shows it immediately if nothing's
+    // currently on screen, or once the current message's time is up.
+    // `duration` is baked into the payload at queue time (rather than left
+    // absent, the way the old client-timer version could get away with) -
+    // the promotion trigger reads payload->>'duration' to compute the
+    // promoted message's expires_at, and treats an absent/non-positive value
+    // as permanent, so this must always carry a concrete value.
     const queueMessage = async (msg, permanent = false) => {
-        if (!user || !canManageQueue) return;
+        if (!user || !supabase || !canManageQueue) return;
 
         const payload = {
             username: msg.username,
@@ -419,53 +363,49 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
             avatarUrl: msg.avatarUrl,
             color: msg.color,
             fragments: msg.fragments,
-            timestamp: serverTimestamp(),
-            queuedAt: serverTimestamp(),
-            suggestedBy: user.uid,
-            suggestedByName: user.displayName,
+            suggestedBy: user.id,
+            suggestedByName: user.user_metadata?.name,
             twitchMessageId: msg.id || null,
+            duration: permanent ? -1 : displayDuration,
         };
-        if (permanent) payload.duration = -1;
 
         try {
-            await addDoc(collection(db, 'users', effectiveUid, 'message_queue'), payload);
+            await supabase.from('message_queue').insert({ user_id: effectiveUid, twitch_message_id: payload.twitchMessageId, login: payload.login, payload });
             posthog.capture('message_queued', { permanent });
             console.log('Queued ✅');
         } catch (e) { console.error(e); }
     };
 
     const removeFromQueue = async (queueId) => {
-        if (!effectiveUid || !canManageQueue) return;
+        if (!effectiveUid || !supabase || !canManageQueue) return;
         try {
-            await deleteDoc(doc(db, 'users', effectiveUid, 'message_queue', queueId));
+            await supabase.from('message_queue').delete().eq('id', queueId);
         } catch (e) { console.error('Error removing from queue:', e); }
     };
 
     const approveSuggestion = async (sug) => {
+        if (!supabase) return;
         try {
-            const payload = { ...sug, timestamp: serverTimestamp(), activeId: crypto.randomUUID() };
-            delete payload.id; // Remove the suggestion doc ID from payload
+            const { id, submittedBy, timestamp, ...rest } = sug;
+            const finalPayload = { ...rest, activeId: crypto.randomUUID() };
+            const expiresAt = computeExpiresAt(displayDuration, false);
 
-            const activeMsgRef = doc(db, 'users', effectiveUid, 'active_message', 'current');
-            const historyRef = collection(db, 'users', effectiveUid, 'history');
-            const sugRef = doc(db, 'users', effectiveUid, 'suggestions', sug.id);
-
-            await setDoc(activeMsgRef, payload);
-            await addDoc(historyRef, payload);
-            await deleteDoc(sugRef);
+            await supabase.from('active_message').upsert({ user_id: effectiveUid, payload: finalPayload, expires_at: expiresAt }, { onConflict: 'user_id' });
+            await supabase.from('history').insert({ user_id: effectiveUid, twitch_message_id: finalPayload.twitchMessageId || null, login: finalPayload.login || null, payload: finalPayload });
+            await supabase.from('suggestions').delete().eq('id', id);
         } catch (e) { console.error(e); }
     };
 
     const denySuggestion = async (sugId) => {
+        if (!supabase) return;
         try {
-            const sugRef = doc(db, 'users', effectiveUid, 'suggestions', sugId);
-            await deleteDoc(sugRef);
+            await supabase.from('suggestions').delete().eq('id', sugId);
         } catch (e) { console.error(e); }
     };
 
     // Local-only: the live chat log is ephemeral React state, not persisted
     // anywhere (a page reload already clears it), so clearing it needs no
-    // Firestore write.
+    // write.
     const clearMessages = () => setMessages([]);
 
     return {
