@@ -3,13 +3,13 @@
 // see docs/karafun-relay-design.md §3.1/§3.3. This is what actually closes
 // issue #29 (today's canControl is a client-side-only guard): a client can
 // only ever name one of the JS-level actions below, never a raw KaraFun wire
-// event, and turn/ownership are re-derived here from Firestore, never
+// event, and turn/ownership are re-derived here from Postgres, never
 // trusted from the request body.
 
-// Same hardcoded UID firestore.rules' isMasterAdmin() and
-// src/app/api/set-admin-claim/route.js check - kept independently here
-// rather than imported, matching how both of those already do it.
-const MASTER_ADMIN_UID = 'WPifULbh4NePmKpojiAnKwv0rWY2';
+// Same hardcoded UID is_master_admin() and src/app/api/set-admin-claim/route.js
+// check - kept independently here rather than imported, matching how both
+// of those already do it.
+const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
 
 function isFiniteNumber(v) {
     return typeof v === 'number' && Number.isFinite(v);
@@ -126,65 +126,62 @@ function getKaraFunActionSpec(action) {
     return Object.prototype.hasOwnProperty.call(KARAFUN_ACTIONS, action) ? KARAFUN_ACTIONS[action] : null;
 }
 
-// Mirrors dashboard/page.js's own role resolution (lines ~111-163): the
-// caller viewing their own dashboard is 'broadcaster'; otherwise their role
-// comes from users/{userId}/permissions/{callerUid}.role, defaulting to
-// 'viewer' when no doc exists. Master admin is resolved by the caller
-// separately (from the verified ID token's custom claim), not here.
-async function resolveRole(db, userId, callerUid) {
+// Mirrors dashboard/page.js's own role resolution: the caller viewing their
+// own dashboard is 'broadcaster'; otherwise their role comes from
+// permissions.role (user_id=userId, viewer_id=callerUid), defaulting to
+// 'viewer' when no row exists. Master admin is resolved by the caller
+// separately (from the verified access token's app_metadata claim), not here.
+async function resolveRole(supabaseAdmin, userId, callerUid) {
     if (callerUid === userId) return 'broadcaster';
-    const permSnap = await db.doc(`users/${userId}/permissions/${callerUid}`).get();
-    return permSnap.exists ? (permSnap.data().role || 'viewer') : 'viewer';
+    const { data } = await supabaseAdmin.from('permissions').select('role')
+        .eq('user_id', userId).eq('viewer_id', callerUid).maybeSingle();
+    return data?.role || 'viewer';
 }
 
 // Mirrors useKaraokeData.js's userData?.twitchUsername || user?.displayName
-// || 'Singer' fallback chain - twitchUsername lives on the caller's own
-// users/{callerUid} doc, not under the target broadcaster.
-async function resolveSingerName(db, callerUid, decodedToken) {
-    const userSnap = await db.doc(`users/${callerUid}`).get();
-    const twitchUsername = userSnap.exists ? userSnap.data()?.twitchUsername : null;
-    return twitchUsername || decodedToken?.name || 'Singer';
+// || 'Singer' fallback chain - twitch_username lives on the caller's own
+// users row, not under the target broadcaster.
+async function resolveSingerName(supabaseAdmin, callerUid, authUser) {
+    const { data } = await supabaseAdmin.from('users').select('twitch_username').eq('id', callerUid).maybeSingle();
+    return data?.twitch_username || authUser?.user_metadata?.name || 'Singer';
 }
 
-// Reads rotationOrder + the relay's mirrored karafun_state/live (queue,
-// current song, and activeSingerUid). Used to be onlineSingers/permissions/
-// nameFor too (ported from useKaraokeData.js to re-derive "who's active"
-// here) - dropped once activeSingerUid moved to being resolved once by the
-// relay and mirrored, rather than re-derived per-request. A fresh serverless
+// Reads rotationOrder + the relay's mirrored karafun_state (queue, current
+// song, and activeSingerUid). Used to be onlineSingers/permissions/nameFor
+// too (ported from useKaraokeData.js to re-derive "who's active" here) -
+// dropped once activeSingerUid moved to being resolved once by the relay and
+// mirrored, rather than re-derived per-request. A fresh serverless
 // invocation per request can't see across the gap between songs the way the
 // relay's long-lived process can (see relay/src/autoSort.js's
 // resolveActiveUid) - re-deriving it here used to default to
 // rotationOrder[0] whenever nothing was actively playing, handing turn
 // authorization back to whoever's first in rotation on every gap instead of
 // whoever's actually next.
-async function buildKaraokeContext(db, userId) {
-    const [settingsSnap, stateSnap] = await Promise.all([
-        db.doc(`users/${userId}/settings/config`).get(),
-        db.doc(`users/${userId}/karafun_state/live`).get(),
+async function buildKaraokeContext(supabaseAdmin, userId) {
+    const [{ data: settingsRow }, { data: stateRow }] = await Promise.all([
+        supabaseAdmin.from('settings').select('karaoke_rotation_order').eq('user_id', userId).maybeSingle(),
+        supabaseAdmin.from('karafun_state').select('*').eq('user_id', userId).maybeSingle(),
     ]);
 
-    const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
-    const state = stateSnap.exists ? stateSnap.data() : null;
+    const rotationOrder = settingsRow?.karaoke_rotation_order || [];
 
     // Scoped to just the rotation's own members (not a full permissions
-    // collection scan) - this is a per-request serverless read, and it's
-    // only ever consulted for sittingOut (see isMyTurn below). A guest:*
-    // pseudo-id never has a doc at this path - skipped entirely rather than
-    // passed to db.doc(), since a guest name containing '/' would otherwise
-    // make db.doc() parse it as extra path segments and throw ("Document
-    // references must have an even number of segments"); permissionsByUid
-    // just stays undefined for any guest, which is what we want anyway.
+    // table scan) - this is a per-request serverless read, and it's only
+    // ever consulted for sittingOut (see isMyTurn below). A guest:* pseudo-id
+    // never has a row at this path - skipped entirely rather than queried.
     const nonGuestRotationUids = rotationOrder.filter((uid) => !uid.startsWith('guest:'));
-    const permissionRefs = nonGuestRotationUids.map((uid) => db.doc(`users/${userId}/permissions/${uid}`));
-    const permissionSnaps = permissionRefs.length ? await db.getAll(...permissionRefs) : [];
     const permissionsByUid = {};
-    permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[nonGuestRotationUids[i]] = snap.data(); });
+    if (nonGuestRotationUids.length) {
+        const { data: permRows } = await supabaseAdmin.from('permissions').select('viewer_id, sitting_out')
+            .eq('user_id', userId).in('viewer_id', nonGuestRotationUids);
+        (permRows || []).forEach((row) => { permissionsByUid[row.viewer_id] = { sittingOut: row.sitting_out }; });
+    }
 
     return {
         rotationOrder,
-        currentSong: state?.currentSong || null,
-        upcoming: state?.upcoming || [],
-        activeSingerUid: state?.activeSingerUid || null,
+        currentSong: stateRow?.current_song || null,
+        upcoming: stateRow?.upcoming || [],
+        activeSingerUid: stateRow?.active_singer_id || null,
         permissionsByUid,
     };
 }
@@ -214,7 +211,7 @@ function resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible) {
 // order, using the relay's mirrored activeSingerUid (see buildKaraokeContext
 // above) rather than re-deriving it from currentSong alone. The "next up"
 // walk skips anyone with sittingOut:true (see useKaraokeData.js's
-// toggleSittingOut) - a guest:* id is never sitting out (no permissions doc
+// toggleSittingOut) - a guest:* id is never sitting out (no permissions row
 // exists for it), and can never BE the caller either (nobody authenticates
 // as a guest), so a guest's turn is only ever actionable by broadcaster/mod.
 function isMyTurn(context, callerUid, singerName) {
@@ -235,26 +232,22 @@ function isMyTurn(context, callerUid, singerName) {
 // another participant's name, which then feeds auto-sort's name-based
 // ownerIndexOf attribution and the turn/queue displays. A caller may only
 // name themselves solo, or themselves as the second half of a duet ("Asker &
-// Them") when they're the invitee on a karaoke_requests doc (kind: 'duet')
+// Them") when they're the invitee on a karaoke_requests row (kind: 'duet')
 // that's actually been accepted - mirroring the exact string
 // respondToDuetInvite (useKaraokeData.js) writes on accept. Broadcaster/mod
 // are never routed through this - they're exempt in authorize() below, same
 // as every other ownership check.
-async function resolveQueueSingerName(db, userId, callerUid, singerName, requestedSinger) {
+async function resolveQueueSingerName(supabaseAdmin, userId, callerUid, singerName, requestedSinger) {
     if (!requestedSinger || requestedSinger === singerName) return singerName;
 
     const parts = requestedSinger.split(/\s*&\s*/).map((s) => s.trim());
     if (parts.length !== 2 || parts[1] !== singerName) return null;
 
-    const inviteSnap = await db.collection(`users/${userId}/karaoke_requests`)
-        .where('kind', '==', 'duet')
-        .where('targetSingerUid', '==', callerUid)
-        .where('status', '==', 'accepted')
-        .where('requestedByName', '==', parts[0])
-        .limit(1)
-        .get();
+    const { data } = await supabaseAdmin.from('karaoke_requests').select('id')
+        .eq('user_id', userId).eq('kind', 'duet').eq('target_singer_id', callerUid)
+        .eq('status', 'accepted').eq('requested_by_name', parts[0]).limit(1).maybeSingle();
 
-    return inviteSnap.empty ? null : requestedSinger;
+    return data ? requestedSinger : null;
 }
 
 // Mirrors KaraokePane.js's isMine: the queue entry's singer field (split on
