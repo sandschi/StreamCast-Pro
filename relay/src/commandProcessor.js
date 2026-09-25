@@ -1,21 +1,18 @@
 'use strict';
 
-const { admin } = require('./firebaseAdmin');
-
 // Commands older than this were queued against a queue state that no longer
 // exists by the time the relay gets to them (e.g. it was down, or hadn't
 // acquired the party's lease yet) - replaying a stale skipSong/moveInQueue
 // against today's queue does more harm than skipping it silently. The
-// pending-query cutoff below just stops the relay from ever fetching these;
-// it doesn't mark them failed/expired in Firestore - see the follow-up task
-// flagged alongside this fix for that piece.
+// catch-up query cutoff below just stops the relay from ever fetching these;
+// it doesn't mark them failed/expired - see the follow-up task flagged
+// alongside this fix for that piece.
 const COMMAND_MAX_AGE_MS = 30_000;
 
-// Same hardcoded UID firestore.rules' isMasterAdmin() and
-// src/lib/karafunCommands.js check - duplicated here for the same reason
-// ACTION_TO_WIRE below is: relay/ and the Next.js app are separate
-// packages/runtimes with no shared module.
-const MASTER_ADMIN_UID = 'WPifULbh4NePmKpojiAnKwv0rWY2';
+// Same hardcoded UID is_master_admin() and src/lib/karafunCommands.js check -
+// duplicated here for the same reason ACTION_TO_WIRE below is: relay/ and
+// the Next.js app are separate packages/runtimes with no shared module.
+const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
 
 // Authorization-relevant subset of src/lib/karafunCommands.js's
 // KARAFUN_ACTIONS table (turnScoped/ownershipScoped/modOnly), used only by
@@ -52,56 +49,78 @@ const ACTION_TO_WIRE = {
     skipSong: () => ['next', null],
 };
 
-// Processes one party's users/{userId}/karafun_commands sequentially (FIFO
-// by createdAt) against the single socket this relay instance holds for
-// that party - see docs/karafun-relay-design.md §3.1 step 5. This is the
-// actual fix for the "DISABLED AGAIN" incident's suspect (a) (§0: multiple
+// Processes one party's public.karafun_commands sequentially (FIFO by
+// created_at) against the single socket this relay instance holds for that
+// party - see docs/karafun-relay-design.md §3.1 step 5. This is the actual
+// fix for the "DISABLED AGAIN" incident's suspect (a) (§0: multiple
 // independent pollers racing the same live queue) - there is structurally
 // one consumer of this queue per party, regardless of how many dashboard
 // tabs/mods/singers sent commands.
+//
+// Unlike the Firestore version's onSnapshot (which redelivers the whole
+// result set on every change), postgres_changes only ever delivers the one
+// new row - but Realtime has no initial-snapshot replay the way onSnapshot
+// gave for free, so an explicit catch-up query runs before subscribing (see
+// start() below), or a command queued while this relay was down/hadn't yet
+// acquired the lease would be silently missed forever (migration plan §5).
 class CommandProcessor {
-    constructor({ db, userId, connection }) {
-        this.db = db;
+    constructor({ supabaseAdmin, userId, connection }) {
+        this.supabaseAdmin = supabaseAdmin;
         this.userId = userId;
         this.connection = connection;
-        this.unsubscribe = null;
-        // A snapshot listener re-delivers the whole current result set on
-        // every change, not just the new doc - queuedIds is what keeps a
-        // command that's still 'pending' (still being processed, or simply
-        // still in `pending` array) from being enqueued a second time on the
-        // next snapshot.
+        this.channel = null;
         this.pending = [];
-        this.queuedIds = new Set();
+        // Guards against double-processing a command that lands in both the
+        // catch-up query and a live INSERT event during the brief overlap
+        // window between them (subscribe fires first, then the catch-up
+        // query runs - see start() below) - not redundant with Realtime's
+        // own no-redelivery guarantee, which only covers the live-event path.
+        this.processedIds = new Set();
         this.draining = false;
     }
 
     start() {
-        const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - COMMAND_MAX_AGE_MS);
-        const ref = this.db.collection('users').doc(this.userId).collection('karafun_commands')
-            .where('status', '==', 'pending')
-            .where('createdAt', '>', cutoff)
-            .orderBy('createdAt', 'asc');
-
-        this.unsubscribe = ref.onSnapshot((snap) => {
-            snap.docChanges().forEach((change) => {
-                if (change.type !== 'added') return;
-                if (this.queuedIds.has(change.doc.id)) return;
-                this.queuedIds.add(change.doc.id);
-                this.pending.push({ id: change.doc.id, data: change.doc.data() });
+        // Subscribe first, catch-up query second: if the order were
+        // reversed, a command created in the gap between the query
+        // completing and the subscription actually being live would be
+        // missed entirely.
+        this.channel = this.supabaseAdmin
+            .channel(`relay-commands-${this.userId}`)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'karafun_commands', filter: `user_id=eq.${this.userId}` }, (payload) => {
+                this._enqueue(payload.new);
+            })
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') this._catchUp();
+                if (err) console.error(`[commands:${this.userId}] subscription error:`, err.message);
             });
-            this._drain();
-        }, (err) => {
-            console.error(`[commands:${this.userId}] listener error:`, err.message);
-        });
+    }
+
+    async _catchUp() {
+        const cutoff = new Date(Date.now() - COMMAND_MAX_AGE_MS).toISOString();
+        const { data, error } = await this.supabaseAdmin.from('karafun_commands').select('*')
+            .eq('user_id', this.userId).eq('status', 'pending').gt('created_at', cutoff)
+            .order('created_at', { ascending: true });
+        if (error) {
+            console.error(`[commands:${this.userId}] catch-up query failed:`, error.message);
+            return;
+        }
+        (data || []).forEach((row) => this._enqueue(row));
     }
 
     stop() {
-        if (this.unsubscribe) {
-            this.unsubscribe();
-            this.unsubscribe = null;
+        if (this.channel) {
+            this.supabaseAdmin.removeChannel(this.channel);
+            this.channel = null;
         }
         this.pending = [];
-        this.queuedIds.clear();
+        this.processedIds.clear();
+    }
+
+    _enqueue(row) {
+        if (this.processedIds.has(row.id)) return;
+        this.processedIds.add(row.id);
+        this.pending.push(row);
+        this._drain();
     }
 
     _drain() {
@@ -112,18 +131,17 @@ class CommandProcessor {
 
     async _drainLoop() {
         while (this.pending.length > 0) {
-            const { id, data } = this.pending.shift();
-            this.queuedIds.delete(id);
-            await this._process(id, data);
+            const row = this.pending.shift();
+            await this._process(row);
         }
     }
 
-    async _process(commandId, data) {
-        const ref = this.db.collection('users').doc(this.userId).collection('karafun_commands').doc(commandId);
-        const toWire = ACTION_TO_WIRE[data.action];
+    async _process(row) {
+        const commandId = row.id;
+        const toWire = ACTION_TO_WIRE[row.action];
         if (!toWire) {
-            console.error(`[commands:${this.userId}] unknown action "${data.action}" on command ${commandId}`);
-            await ref.update({ status: 'failed', error: `unknown action: ${data.action}` }).catch(() => {});
+            console.error(`[commands:${this.userId}] unknown action "${row.action}" on command ${commandId}`);
+            await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: `unknown action: ${row.action}` }).eq('id', commandId).catch(() => {});
             return;
         }
 
@@ -135,17 +153,17 @@ class CommandProcessor {
         // System-issued commands (auto-sort's own moveInQueue) are exempt -
         // the relay generated those itself, there's no external caller to
         // re-authorize.
-        if (data.requestedByRole !== 'system') {
-            const decision = await this._reauthorize(data);
+        if (row.requested_by_role !== 'system') {
+            const decision = await this._reauthorize(row);
             if (!decision.ok) {
-                console.warn(`[commands:${this.userId}] command ${commandId} (${data.action}) failed re-authorization at execution time: ${decision.reason}`);
-                await ref.update({ status: 'failed', error: `re-authorization failed: ${decision.reason}` }).catch(() => {});
+                console.warn(`[commands:${this.userId}] command ${commandId} (${row.action}) failed re-authorization at execution time: ${decision.reason}`);
+                await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: `re-authorization failed: ${decision.reason}` }).eq('id', commandId).catch(() => {});
                 return;
             }
         }
 
         try {
-            const [wireEvent, payload] = toWire(data.params || {});
+            const [wireEvent, payload] = toWire(row.params || {});
             // KaraFun's real protocol has no per-command ack (the client
             // hook this was ported from never used one either - see
             // useKaraFunData.js's emit()). Marking 'done' right after a
@@ -153,41 +171,41 @@ class CommandProcessor {
             // app has always had (fire-and-forget), just with real
             // server-side authorization in front of it now instead of none.
             this.connection.emit(wireEvent, payload);
-            await ref.update({ status: 'done' });
+            await this.supabaseAdmin.from('karafun_commands').update({ status: 'done' }).eq('id', commandId);
         } catch (err) {
-            console.error(`[commands:${this.userId}] command ${commandId} (${data.action}) failed:`, err.message);
-            await ref.update({ status: 'failed', error: err.message }).catch(() => {});
+            console.error(`[commands:${this.userId}] command ${commandId} (${row.action}) failed:`, err.message);
+            await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: err.message }).eq('id', commandId).catch(() => {});
         }
     }
 
     // Mirrors src/lib/karafunCommands.js's authorize()/isMyTurn/
     // ownsQueueEntry, re-run here against current state rather than trusted
-    // from the command doc's stored requestedByRole. Turn/ownership read
+    // from the command row's stored requested_by_role. Turn/ownership read
     // this.connection.state directly (the freshest signal available - no
-    // Firestore round trip or mirror-write debounce) rather than the
-    // Firestore-mirrored karafun_state/live, except activeSingerUid, which
-    // only AutoSort resolves and there's no cheaper source for it.
-    async _reauthorize(data) {
-        const role = await this._resolveCurrentRole(data.requestedBy);
+    // extra round trip or mirror-write debounce) rather than the mirrored
+    // karafun_state, except activeSingerUid, which only AutoSort resolves
+    // and there's no cheaper source for it.
+    async _reauthorize(row) {
+        const role = await this._resolveCurrentRole(row.requested_by);
         if (role === 'broadcaster' || role === 'mod') return { ok: true };
-        if (role !== 'singer') return { ok: false, reason: `role "${role}" cannot perform ${data.action}` };
+        if (role !== 'singer') return { ok: false, reason: `role "${role}" cannot perform ${row.action}` };
 
-        if (MOD_ONLY_ACTIONS.has(data.action)) return { ok: false, reason: `${data.action} is broadcaster/mod only` };
+        if (MOD_ONLY_ACTIONS.has(row.action)) return { ok: false, reason: `${row.action} is broadcaster/mod only` };
 
-        if (TURN_SCOPED_ACTIONS.has(data.action)) {
-            const singerName = await this._resolveCurrentSingerName(data.requestedBy);
+        if (TURN_SCOPED_ACTIONS.has(row.action)) {
+            const singerName = await this._resolveCurrentSingerName(row.requested_by);
             const context = await this._buildTurnContext();
-            if (!isMyTurn(context, data.requestedBy, singerName)) return { ok: false, reason: 'not your turn' };
+            if (!isMyTurn(context, row.requested_by, singerName)) return { ok: false, reason: 'not your turn' };
         }
 
-        if (OWNERSHIP_SCOPED_ACTIONS.has(data.action)) {
-            const singerName = await this._resolveCurrentSingerName(data.requestedBy);
-            if (!ownsQueueEntry(this.connection.state.upcoming, data.params?.queueId, singerName)) {
+        if (OWNERSHIP_SCOPED_ACTIONS.has(row.action)) {
+            const singerName = await this._resolveCurrentSingerName(row.requested_by);
+            if (!ownsQueueEntry(this.connection.state.upcoming, row.params?.queueId, singerName)) {
                 return { ok: false, reason: 'not your queue entry' };
             }
         }
 
-        if (SINGER_ADJACENT_ONLY_ACTIONS.has(data.action) && Math.abs(data.params?.from - data.params?.to) !== 1) {
+        if (SINGER_ADJACENT_ONLY_ACTIONS.has(row.action) && Math.abs(row.params?.from - row.params?.to) !== 1) {
             return { ok: false, reason: 'can only move one slot at a time' };
         }
 
@@ -196,40 +214,38 @@ class CommandProcessor {
 
     async _resolveCurrentRole(callerUid) {
         if (callerUid === this.userId || callerUid === MASTER_ADMIN_UID) return 'broadcaster';
-        const snap = await this.db.doc(`users/${this.userId}/permissions/${callerUid}`).get();
-        return snap.exists ? (snap.data().role || 'viewer') : 'viewer';
+        const { data } = await this.supabaseAdmin.from('permissions').select('role')
+            .eq('user_id', this.userId).eq('viewer_id', callerUid).maybeSingle();
+        return data?.role || 'viewer';
     }
 
     async _resolveCurrentSingerName(callerUid) {
-        const snap = await this.db.doc(`users/${callerUid}`).get();
-        return (snap.exists && snap.data().twitchUsername) || 'Singer';
+        const { data } = await this.supabaseAdmin.from('users').select('twitch_username').eq('id', callerUid).maybeSingle();
+        return data?.twitch_username || 'Singer';
     }
 
     async _buildTurnContext() {
-        const [settingsSnap, stateSnap] = await Promise.all([
-            this.db.doc(`users/${this.userId}/settings/config`).get(),
-            this.db.doc(`users/${this.userId}/karafun_state/live`).get(),
+        const [{ data: settingsRow }, { data: stateRow }] = await Promise.all([
+            this.supabaseAdmin.from('settings').select('karaoke_rotation_order').eq('user_id', this.userId).maybeSingle(),
+            this.supabaseAdmin.from('karafun_state').select('active_singer_id').eq('user_id', this.userId).maybeSingle(),
         ]);
-        const rotationOrder = settingsSnap.exists ? (settingsSnap.data().karaokeRotationOrder || []) : [];
+        const rotationOrder = settingsRow?.karaoke_rotation_order || [];
 
         // Scoped read, same reasoning as src/lib/karafunCommands.js's
-        // buildKaraokeContext - a guest:* id never has a doc here, so it's
-        // skipped entirely rather than passed to db.doc(), since a guest
-        // name containing '/' would otherwise make db.doc() parse it as
-        // extra path segments and throw. That throw would land outside
-        // _process()'s try/catch (this method is awaited from
-        // _reauthorize(), called before the try block) as an unhandled
-        // rejection with no .catch() anywhere up the chain to _drain().
+        // buildKaraokeContext - a guest:* id never has a row here, so it's
+        // skipped entirely rather than queried.
         const nonGuestRotationUids = rotationOrder.filter((uid) => !uid.startsWith('guest:'));
-        const permissionRefs = nonGuestRotationUids.map((uid) => this.db.doc(`users/${this.userId}/permissions/${uid}`));
-        const permissionSnaps = permissionRefs.length ? await this.db.getAll(...permissionRefs) : [];
         const permissionsByUid = {};
-        permissionSnaps.forEach((snap, i) => { if (snap.exists) permissionsByUid[nonGuestRotationUids[i]] = snap.data(); });
+        if (nonGuestRotationUids.length) {
+            const { data: permRows } = await this.supabaseAdmin.from('permissions').select('viewer_id, sitting_out')
+                .eq('user_id', this.userId).in('viewer_id', nonGuestRotationUids);
+            (permRows || []).forEach((r) => { permissionsByUid[r.viewer_id] = { sittingOut: r.sitting_out }; });
+        }
 
         return {
             rotationOrder,
             currentSong: this.connection.state.currentSong,
-            activeSingerUid: stateSnap.exists ? (stateSnap.data().activeSingerUid || null) : null,
+            activeSingerUid: stateRow?.active_singer_id || null,
             permissionsByUid,
         };
     }

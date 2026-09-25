@@ -1,62 +1,63 @@
 # StreamCast KaraFun Relay
 
 Persistent single-authority relay: one real `socket.io` connection to KaraFun per actively-used
-party, mirroring the live queue/status into Firestore and processing the authenticated command
+party, mirroring the live queue/status into Supabase and processing the authenticated command
 queue against it. Design rationale, architecture, and the full plan live in
 [`../docs/karafun-relay-design.md`](../docs/karafun-relay-design.md) — read that first.
 
-## Status: shipped
+## Status: ported to Supabase
 
 This implements **state mirroring, the per-party lease, the command queue, and the auto-sort
-port** (design doc §3.1/§3.2/§4/§5) — the dashboard and overlay no longer hold any direct KaraFun
-connection of their own; every read comes from `users/{userId}/karafun_state/live` and every
-mutation goes through `/api/karafun/[userId]/command` into `users/{userId}/karafun_commands`,
-which this relay is the sole consumer of.
-
-**Verified against a real KaraFun party and production Firestore**, including live two-account
-testing (broadcaster + a second singer-role account) of the command queue's authorization and the
-turn-tracking logic — see PR #30.
+port** (design doc §3.1/§3.2/§4/§5) — the dashboard and overlay hold no direct KaraFun connection
+of their own; every read comes from `public.karafun_state` and every mutation goes through
+`/api/karafun/[userId]/command` into `public.karafun_commands`, which this relay is the sole
+consumer of.
 
 ## How it works
 
 - `src/partyManager.js` polls (every 30s) for broadcasters with a recent presence heartbeat
-  (`users/{userId}/online`, the same signal `useKaraokeData.js` already uses, >90s = stale) who
-  also have `karafunEnabled` + a saved `karafunPartyId`. For each, it takes a Firestore-transaction
-  lease (`karafun_relay/{userId}`) and opens one `KaraFunConnection`.
+  (`public.online`, the same signal `useKaraokeData.js` already uses, >90s = stale) who also have
+  `karafun_enabled` + a saved `karafun_party_id`. For each, it acquires a Postgres advisory lock
+  (`src/lease.js`) and opens one `KaraFunConnection`.
 - `src/karafunConnection.js` is the actual socket - connects to `https://www.karafun.com`,
   authenticates, listens for `queue`/`status`, and writes a debounced (max ~2/sec) mirror to
-  `users/{userId}/karafun_state/live`. The connect/transform logic is ported from
-  `src/hooks/useKaraFunData.js`, not reinvented.
-- `src/commandProcessor.js` is the one consumer of a party's `users/{userId}/karafun_commands`
-  queue - it processes pending commands FIFO against the same `KaraFunConnection` socket, which is
-  what actually closes issue #29 (the API route authorizes; this executes).
-- `src/autoSort.js` is the opt-in (`karafunAutoSortEnabled`, off by default) round-robin queue
-  reordering, ported into the relay so there's structurally one process issuing moves per party -
-  see design doc §5/§9.
-- `src/lease.js` is the per-party lock - see the design doc §4 for why it matters even with one
-  instance (deploy overlap).
-- `src/firebaseAdmin.js` ports the same defensive `FIREBASE_PRIVATE_KEY` PEM-reconstruction
-  `src/lib/firebase-admin.js` has in the main app, since this runs as its own process outside
-  Next.js's build.
+  `public.karafun_state`. The connect/transform logic is ported from `src/hooks/useKaraFunData.js`,
+  not reinvented.
+- `src/commandProcessor.js` is the one consumer of a party's `public.karafun_commands` queue - it
+  subscribes to `postgres_changes` INSERTs (plus an explicit catch-up query on start, since
+  Realtime has no initial-snapshot replay) and processes pending commands FIFO against the same
+  `KaraFunConnection` socket, which is what actually closes issue #29 (the API route authorizes;
+  this executes).
+- `src/autoSort.js` is the opt-in (`karafunAutoSortEnabled`, off by default, stored in
+  `settings.appearance`) round-robin queue reordering, ported into the relay so there's
+  structurally one process issuing moves per party - see design doc §5/§9.
+- `src/lease.js` holds one long-lived direct Postgres connection per active party and uses
+  `pg_try_advisory_lock` for mutual exclusion between relay instances - see the design doc §4 for
+  why this matters even with one instance (deploy overlap). Strictly better than the old
+  Firestore-transaction/TTL-lease design: the lock releases the instant its connection dies
+  (crash, network drop), not after some expiry window.
+- `src/supabaseAdmin.js` is a plain service-role client (PostgREST + Realtime), ported from
+  `src/lib/supabase-admin.js` - duplicated, not shared, since this is a separate package/runtime.
 
 ## Requires
 
 Before this can mirror anything for real:
 
-1. **The `firestore.indexes.json` change in this same change set deployed** — the presence query
-   is a `collectionGroup('online')` range query on `lastSeen`, which needs the field override
-   added there (`firebase deploy --only firestore:indexes`). Without it, the discovery query will
-   fail outright the first time it runs.
-2. **A Firebase service account** with Firestore access - same three env vars as the main app
-   (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`), set directly in
-   Dokploy's environment config, or in a local `relay/.env` (copy `.env.example`) for dev.
+1. **A Supabase service-role key** (PostgREST/Realtime access) - `NEXT_PUBLIC_SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, set directly in Dokploy's environment config (or a local
+   `relay/.env` for dev).
+2. **A direct Postgres connection** (for `lease.js`'s advisory locks) - `SUPABASE_DB_HOST`,
+   `SUPABASE_DB_PORT` (Supavisor's **session-mode** pooler, not transaction-mode - advisory locks
+   need a stable backend session across queries), `SUPABASE_DB_USER` (Supavisor's
+   `postgres.<tenant_id>` tenant-suffixed format), `SUPABASE_DB_PASSWORD`, `SUPABASE_DB_NAME`
+   (usually `postgres`).
 
 ## Local dev
 
 ```bash
 cd relay
 npm install
-cp .env.example .env   # fill in the three Firebase Admin values
+cp .env.example .env   # fill in the Supabase values above
 npm start
 ```
 

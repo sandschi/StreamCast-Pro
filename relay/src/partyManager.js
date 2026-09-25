@@ -1,7 +1,7 @@
 'use strict';
 
-const { getDb, admin } = require('./firebaseAdmin');
-const { acquireLease, renewLease, releaseLease, LEASE_RENEW_INTERVAL_MS } = require('./lease');
+const { getSupabaseAdmin } = require('./supabaseAdmin');
+const { acquireLease } = require('./lease');
 const { KaraFunConnection } = require('./karafunConnection');
 const { CommandProcessor } = require('./commandProcessor');
 const { AutoSort } = require('./autoSort');
@@ -18,36 +18,29 @@ const PRESENCE_STALE_MS = 90_000;
 // isn't live, per docs/karafun-relay-design.md §4.
 const IDLE_CLOSE_MS = 10 * 60_000;
 
-const instanceId = `${process.env.HOSTNAME || 'relay'}-${process.pid}-${Date.now()}`;
-
 class PartyManager {
     constructor() {
-        this.db = getDb();
-        // userId -> { conn: KaraFunConnection, renewTimer, lastPresenceAt }
+        this.supabaseAdmin = getSupabaseAdmin();
+        // userId -> { conn: KaraFunConnection, lease, lastPresenceAt }
         this.connections = new Map();
         // userId -> in-flight _stopParty() promise. _stopParty removes its
         // entry from this.connections before it finishes tearing down (see
         // that method's own comment) - a concurrent discovery tick would
-        // otherwise see no entry and start a replacement while the old one's
-        // releaseLease() call is still pending. Since releaseLease only
-        // checks the lease doc's instanceId (this whole relay PROCESS, not
-        // the specific connection that asked for it), the replacement's own
-        // fresh acquireLease() (which trivially succeeds against a lease
-        // this same process still holds) can then get its lease deleted out
-        // from under it by the original call arriving late - freeing the
-        // lease for a different relay instance to acquire while this
-        // process's replacement connection is still running, exactly the
-        // multi-consumer race this relay exists to prevent. Tracked here so
-        // _tick() can wait for a teardown to fully finish before starting a
-        // replacement for the same user.
+        // otherwise see no entry and start a replacement while the old
+        // lease's connection is still closing. Each acquireLease() call opens
+        // its own independent Postgres connection/advisory lock now (unlike
+        // the old TTL-lease design, there's no shared instanceId-keyed row a
+        // late release could delete out from under a fresh acquire), but
+        // waiting for a teardown to fully finish before starting a
+        // replacement is still worth doing to avoid two connections briefly
+        // existing for the same user. Tracked here so _tick() can wait.
         this.stopping = new Map();
         this._discoveryTimer = null;
         this._ticking = false;
         // Set only while a tick is actually in flight - stop() awaits this
         // instead of racing an in-progress _tick() that could still call
-        // _maybeStartParty (Firestore round trips can easily outlast
-        // shutdown) and start a connection nothing ever gets around to
-        // stopping.
+        // _maybeStartParty (DB round trips can easily outlast shutdown) and
+        // start a connection nothing ever gets around to stopping.
         this._tickPromise = null;
     }
 
@@ -78,13 +71,13 @@ class PartyManager {
     }
 
     async tick() {
-        // A Firestore round trip inside a tick can outlast
-        // DISCOVERY_INTERVAL_MS - setInterval doesn't wait for the previous
-        // call, so without this guard two overlapping ticks can both see
-        // the same userId as untracked and both call _maybeStartParty,
-        // leaking the first KaraFunConnection/CommandProcessor (and its
-        // still-live socket) when the second overwrites this.connections -
-        // reintroducing the multi-consumer race this relay exists to close.
+        // A DB round trip inside a tick can outlast DISCOVERY_INTERVAL_MS -
+        // setInterval doesn't wait for the previous call, so without this
+        // guard two overlapping ticks can both see the same userId as
+        // untracked and both call _maybeStartParty, leaking the first
+        // KaraFunConnection/CommandProcessor (and its still-live socket)
+        // when the second overwrites this.connections - reintroducing the
+        // multi-consumer race this relay exists to close.
         if (this._ticking) return;
         this._ticking = true;
         this._tickPromise = this._tick().finally(() => {
@@ -133,21 +126,21 @@ class PartyManager {
         }
     }
 
-    // Broadcasters with a fresh presence heartbeat under their own
-    // users/{userId}/online subcollection (written by anyone with that
-    // broadcaster's dashboard open - see dashboard/page.js), cross-checked
-    // against karafunEnabled + a saved party ID. Returns a Map so tick() can
-    // reuse the resolved config instead of re-deriving it.
+    // Broadcasters with a fresh presence heartbeat in public.online (written
+    // by anyone with that broadcaster's dashboard open - see
+    // dashboard/page.js), cross-checked against karafun_enabled + a saved
+    // party ID. Returns a Map so tick() can reuse the resolved config
+    // instead of re-deriving it. Real column (online.user_id), no
+    // collectionGroup-style workaround needed - see migration plan §5.
     async _findActiveBroadcasters() {
-        const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - PRESENCE_STALE_MS);
-        const snap = await this.db.collectionGroup('online').where('lastSeen', '>', cutoff).get();
-
-        const candidateUserIds = new Set();
-        for (const doc of snap.docs) {
-            // doc.ref shape: users/{userId}/online/{onlineId}
-            const userId = doc.ref.parent.parent?.id;
-            if (userId) candidateUserIds.add(userId);
+        const cutoff = new Date(Date.now() - PRESENCE_STALE_MS).toISOString();
+        const { data, error } = await this.supabaseAdmin.from('online').select('user_id').gt('last_seen', cutoff);
+        if (error) {
+            console.error('[partyManager] failed to query active presence:', error.message);
+            return new Map();
         }
+
+        const candidateUserIds = new Set((data || []).map((row) => row.user_id));
 
         const active = new Map();
         await Promise.all([...candidateUserIds].map(async (userId) => {
@@ -157,18 +150,20 @@ class PartyManager {
         return active;
     }
 
-    // Both fields live on the public settings/config doc - karafunPartyId
-    // briefly moved to private/config (see git history) but that broke a
-    // mod/singer/viewer session's Karaoke tab entirely (private/config is
-    // owner-only by rule, so a non-owner session had no way to read it at
-    // all), for a security premise that didn't hold anyway: a KaraFun party
-    // ID is public-by-design, and the real fix for issue #29 was routing
+    // karafun_enabled/karafun_party_id are first-class columns on `settings`
+    // (RLS/column-grant reasons - see supabase/schema/0001_schema.sql), not
+    // buried in the appearance jsonb blob - a plain column read, no merge
+    // logic needed. karafunPartyId briefly moved to private_config in the
+    // Firestore version (see git history) but that broke a mod/singer/
+    // viewer session's Karaoke tab entirely (private config is owner-only by
+    // policy, so a non-owner session had no way to read it at all), for a
+    // security premise that didn't hold anyway: a KaraFun party ID is
+    // public-by-design, and the real fix for issue #29 was routing
     // mutations through this relay's command queue, not hiding the ID.
     async _getKaraFunConfig(userId) {
-        const settingsSnap = await this.db.collection('users').doc(userId).collection('settings').doc('config').get();
-        const cfg = settingsSnap.data();
-        if (cfg?.karafunEnabled && cfg?.karafunPartyId) {
-            return { partyId: cfg.karafunPartyId };
+        const { data } = await this.supabaseAdmin.from('settings').select('karafun_enabled, karafun_party_id').eq('user_id', userId).maybeSingle();
+        if (data?.karafun_enabled && data?.karafun_party_id) {
+            return { partyId: data.karafun_party_id };
         }
         return null;
     }
@@ -177,13 +172,19 @@ class PartyManager {
         const cfg = await this._getKaraFunConfig(userId);
         if (!cfg) return;
 
-        const gotLease = await acquireLease(this.db, userId, instanceId, cfg.partyId);
-        if (!gotLease) {
+        // onLost fires if the lease's health check ever finds its connection
+        // (and therefore its advisory lock) has died out from under it - the
+        // direct replacement for the old TTL-lease's renewal-failure path.
+        const lease = await acquireLease(userId, cfg.partyId, (err) => {
+            console.error(`[partyManager] lost lease for ${userId}, stopping connection:`, err.message);
+            this._stopParty(userId).catch(() => {});
+        });
+        if (!lease) {
             console.log(`[partyManager] lease held by another instance for ${userId}, skipping`);
             return;
         }
 
-        const conn = new KaraFunConnection({ db: this.db, userId, partyId: cfg.partyId });
+        const conn = new KaraFunConnection({ supabaseAdmin: this.supabaseAdmin, userId, partyId: cfg.partyId });
         conn.start();
 
         // One consumer of this party's command queue - see
@@ -191,24 +192,17 @@ class PartyManager {
         // relay/src/commandProcessor.js's own comment for why this is what
         // actually fixes the "DISABLED AGAIN" incident's multiple-poller
         // suspect (§0).
-        const cmdProcessor = new CommandProcessor({ db: this.db, userId, connection: conn });
+        const cmdProcessor = new CommandProcessor({ supabaseAdmin: this.supabaseAdmin, userId, connection: conn });
         cmdProcessor.start();
 
         // Only ever acts while karafunAutoSortEnabled is set (checked every
         // tick, off by default) - see docs/karafun-relay-design.md §5/§9.
         // Started unconditionally alongside the connection like
         // cmdProcessor above; it no-ops when the toggle is off.
-        const autoSort = new AutoSort({ db: this.db, userId, connection: conn });
+        const autoSort = new AutoSort({ supabaseAdmin: this.supabaseAdmin, userId, connection: conn });
         autoSort.start();
 
-        const renewTimer = setInterval(() => {
-            renewLease(this.db, userId, instanceId).catch(async (err) => {
-                console.error(`[partyManager] lost lease for ${userId}, stopping connection:`, err.message);
-                await this._stopParty(userId);
-            });
-        }, LEASE_RENEW_INTERVAL_MS);
-
-        this.connections.set(userId, { conn, cmdProcessor, autoSort, renewTimer, lastPresenceAt: Date.now() });
+        this.connections.set(userId, { conn, cmdProcessor, autoSort, lease, lastPresenceAt: Date.now() });
         console.log(`[partyManager] started party ${cfg.partyId} for user ${userId}`);
     }
 
@@ -243,23 +237,22 @@ class PartyManager {
     }
 
     async _teardown(userId, entry) {
-        clearInterval(entry.renewTimer);
         entry.autoSort.stop();
         entry.cmdProcessor.stop();
         try {
-            // Awaited: conn.stop()'s final Firestore flush must land before
-            // the lease below frees up, or a newly-started instance's own
-            // writes could be overwritten by this stale one arriving late.
+            // Awaited: conn.stop()'s final flush must land before the lease
+            // below frees up, or a newly-started instance's own writes
+            // could be overwritten by this stale one arriving late.
             await entry.conn.stop();
         } catch (err) {
             console.error(`[partyManager] error stopping KaraFun connection for ${userId}:`, err.message);
         }
 
-        await releaseLease(this.db, userId, instanceId).catch((err) => {
+        await entry.lease.release().catch((err) => {
             console.error(`[partyManager] failed to release lease for ${userId}:`, err.message);
         });
         console.log(`[partyManager] stopped party for user ${userId}`);
     }
 }
 
-module.exports = { PartyManager, instanceId };
+module.exports = { PartyManager };
