@@ -2,8 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { AnimatePresence } from 'framer-motion';
 import { useParams } from 'next/navigation';
 import MessageBubble from '@/components/overlay/MessageBubble';
@@ -32,7 +31,7 @@ export default function OverlayPage() {
     const [karafunNowPlaying, setKarafunNowPlaying] = useState(null);
     const [karafunPlayState, setKarafunPlayState] = useState('stop');
     // Mirrors relay/src/karafunConnection.js's own `connected` flag - the
-    // relay keeps the last-known queue/song in Firestore across a socket
+    // relay keeps the last-known queue/song in karafun_state across a socket
     // drop (so a brief blip doesn't blank the overlay), but that means this
     // page must check connectivity itself before rendering stale data during
     // a real outage, rather than trusting queue/song presence alone.
@@ -100,49 +99,86 @@ export default function OverlayPage() {
         return () => { try { document.head.removeChild(link); } catch (e) { } };
     }, [settings.karafunFontFamily]);
 
+    // settings + active_message: both public/anon-readable (RLS), streamed
+    // via Realtime postgres_changes. Realtime has no initial-snapshot replay
+    // the way onSnapshot gave for free, so each is fetched once up front
+    // before subscribing to further changes - same "catch-up query" pattern
+    // the relay needs (plan §5).
     useEffect(() => {
-        if (!userId) return;
-        const settingsRef = doc(db, 'users', userId, 'settings', 'config');
-        const unsubscribeSettings = onSnapshot(settingsRef, (doc) => {
-            if (doc.exists()) setSettings(prev => ({ ...prev, ...doc.data() }));
+        if (!supabase || !userId) return;
+        let cancelled = false;
+
+        // cosmetic settings live in the appearance JSONB blob; karafun_enabled
+        // and display_duration are first-class columns (RLS/column-grant
+        // reasons - see supabase/schema/0001_schema.sql) so they're merged in
+        // under the same camelCase names the rest of this page expects.
+        const applySettings = (row) => {
+            if (!row) return;
+            setSettings(prev => ({
+                ...prev,
+                ...(row.appearance || {}),
+                karafunEnabled: row.karafun_enabled,
+                displayDuration: row.display_duration,
+            }));
+        };
+
+        // Mirrors active_message/current directly: any change (a new Send, a
+        // queued message getting promoted, a delete) replaces or clears what's
+        // showing immediately. There is deliberately no local queueing here -
+        // the overlay has no write access (it's unauthenticated by design), so
+        // it can't own queue state; that lives in useChatData.js on the
+        // dashboard side, which is the only client that can advance it.
+        const applyActiveMessage = (row) => {
+            if (!row || !row.payload || Object.keys(row.payload).length === 0) {
+                setActiveMessage(null);
+                return;
+            }
+            // expires_at is computed server-side at write time (NULL =
+            // permanent) - the authoritative expiry, replacing the old
+            // Firestore doc's client-trusted `duration` field entirely.
+            setActiveMessage({ ...row.payload, id: row.payload.id || row.created_at, __expiresAt: row.expires_at });
+        };
+
+        Promise.all([
+            supabase.from('settings').select('*').eq('user_id', userId).maybeSingle(),
+            supabase.from('active_message').select('*').eq('user_id', userId).maybeSingle(),
+        ]).then(([{ data: settingsRow }, { data: activeMsgRow }]) => {
+            if (cancelled) return;
+            applySettings(settingsRow);
+            applyActiveMessage(activeMsgRow);
         });
 
-        // Directly mirror active_message/current: any change (a new Send, a
-        // queued message getting promoted, a delete) replaces or clears
-        // what's showing immediately. There is deliberately no local queueing
-        // here - the overlay has no write access (it's unauthenticated by
-        // design), so it can't own queue state; that lives in useChatData.js
-        // on the dashboard side, which is the only client that can advance it.
-        const activeMsgRef = doc(db, 'users', userId, 'active_message', 'current');
-        const unsubscribeMessage = onSnapshot(activeMsgRef, (doc) => {
-            setActiveMessage(doc.exists() && Object.keys(doc.data()).length > 0 ? doc.data() : null);
-        });
-        return () => { unsubscribeSettings(); unsubscribeMessage(); };
+        const channel = supabase
+            .channel(`overlay-core-${userId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${userId}` },
+                (payload) => applySettings(payload.eventType === 'DELETE' ? null : payload.new))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_message', filter: `user_id=eq.${userId}` },
+                (payload) => applyActiveMessage(payload.eventType === 'DELETE' ? null : payload.new))
+            .subscribe();
+
+        return () => { cancelled = true; supabase.removeChannel(channel); };
     }, [userId]);
 
     // Listen for manual "show now playing" triggers written via the API
     useEffect(() => {
-        if (!userId) return;
-        const triggerRef = doc(db, 'users', userId, 'overlay_triggers', 'now_playing');
-        let hasSeenInitialSnapshot = false;
-        const unsubscribeTrigger = onSnapshot(triggerRef, (snap) => {
-            const isInitialSnapshot = !hasSeenInitialSnapshot;
-            hasSeenInitialSnapshot = true;
+        if (!supabase || !userId) return;
+        let cancelled = false;
 
-            if (snap.exists()) {
-                const data = snap.data();
-                const triggerTime = data.triggeredAt ? new Date(data.triggeredAt).getTime() : 0;
+        const applyTrigger = (row, { isInitial }) => {
+            if (row?.now_playing_triggered_at) {
+                const triggerTime = new Date(row.now_playing_triggered_at).getTime();
 
-                // Update ref immediately to prevent replaying this specific trigger doc later
+                // Only replay this specific trigger once.
                 if (triggerTime > lastManualTriggerRef.current) {
                     lastManualTriggerRef.current = triggerTime;
 
-                    // Only guard against staleness on the very first snapshot after mount
-                    // (a leftover trigger from a previous session). The dashboard and the
-                    // overlay can run on different machines with skewed clocks, so a live
-                    // click here always shows immediately — it's never rejected as "stale".
-                    if (isInitialSnapshot && (Date.now() - triggerTime) > 10000) {
-                        console.log("[Trigger] Ignoring stale manual trigger on page load");
+                    // Only guard against staleness on the initial fetch (a
+                    // leftover trigger from a previous session). The dashboard
+                    // and the overlay can run on different machines with
+                    // skewed clocks, so a live Realtime event always shows
+                    // immediately - it's never rejected as "stale".
+                    if (isInitial && (Date.now() - triggerTime) > 10000) {
+                        console.log('[Trigger] Ignoring stale manual trigger on page load');
                     } else {
                         setTimeout(() => setShowNowPlaying(true), 0);
                         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -153,26 +189,37 @@ export default function OverlayPage() {
                 if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
                 setShowNowPlaying(false);
             }
-        });
+        };
+
+        supabase.from('overlay_triggers').select('*').eq('user_id', userId).maybeSingle()
+            .then(({ data }) => { if (!cancelled) applyTrigger(data, { isInitial: true }); });
+
+        const channel = supabase
+            .channel(`overlay-trigger-${userId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay_triggers', filter: `user_id=eq.${userId}` },
+                (payload) => applyTrigger(payload.eventType === 'DELETE' ? null : payload.new, { isInitial: false }))
+            .subscribe();
+
         return () => {
-            unsubscribeTrigger();
+            cancelled = true;
+            supabase.removeChannel(channel);
             if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         };
     }, [userId]);
 
-    // Local, cosmetic-only auto-hide: stop rendering the active message after
-    // its on-screen time is up. This does NOT touch Firestore (the overlay
-    // can't - see above), so it's a visual safety net that works even if the
-    // dashboard that sent this message is closed; the dashboard separately
-    // deletes the Firestore doc itself once expired, which is what actually
-    // advances the queue for the next viewer/session.
+    // Local, cosmetic-only auto-hide: stop rendering the active message once
+    // its server-computed expires_at has passed. This does NOT touch the
+    // database (the overlay can't - see above), so it's a visual safety net
+    // that works even if the dashboard that sent this message is closed; the
+    // dashboard's pg_cron job separately deletes the row itself once expired,
+    // which is what actually advances the queue for the next viewer/session.
     useEffect(() => {
         if (!activeMessage) return;
-        const duration = activeMessage.duration !== undefined ? activeMessage.duration : settings.displayDuration;
-        if (!(duration > 0)) return; // -1/undefined duration means "permanent"
-        const timer = setTimeout(() => setActiveMessage(null), duration * 1000 + 500);
+        if (!activeMessage.__expiresAt) return; // NULL expires_at means "permanent"
+        const msLeft = new Date(activeMessage.__expiresAt).getTime() - Date.now();
+        const timer = setTimeout(() => setActiveMessage(null), Math.max(msLeft, 0) + 500);
         return () => clearTimeout(timer);
-    }, [activeMessage, settings.displayDuration]);
+    }, [activeMessage]);
 
     // Play the notification sound whenever a new message appears.
     useEffect(() => {
@@ -186,48 +233,54 @@ export default function OverlayPage() {
         }
     }, [activeMessage, settings.soundEnabled, settings.soundType, settings.soundVolume]);
 
-    // 4. KaraFun Integration - reads users/{userId}/karafun_state/live,
-    // mirrored by relay/ (the one process that still holds a real KaraFun
-    // socket) instead of opening its own connection. This overlay used to
-    // dial KaraFun directly with its own public, unauthenticated socket -
-    // see docs/karafun-relay-design.md §0/§2/§7 for why that's gone: it was
-    // one of up to three simultaneous direct sockets per broadcaster
-    // (alongside every verified dashboard session), and karafunPartyId
-    // (previously read here from the public settings/config) has moved to
-    // owner-only private/config, which this unauthenticated page can't read
+    // 4. KaraFun Integration - reads karafun_state, mirrored by relay/ (the
+    // one process that still holds a real KaraFun socket) instead of opening
+    // its own connection. This overlay used to dial KaraFun directly with its
+    // own public, unauthenticated socket - see docs/karafun-relay-design.md
+    // §0/§2/§7 for why that's gone: it was one of up to three simultaneous
+    // direct sockets per broadcaster (alongside every verified dashboard
+    // session), and the KaraFun party ID this unauthenticated page can't read
     // anyway - it doesn't need to anymore.
     useEffect(() => {
-        if (!userId || !settings.karafunEnabled || (!settings.karafunOverlayQueueEnabled && !settings.karafunOverlayNowPlayingEnabled)) {
+        if (!supabase || !userId || !settings.karafunEnabled || (!settings.karafunOverlayQueueEnabled && !settings.karafunOverlayNowPlayingEnabled)) {
             return;
         }
 
-        const stateRef = doc(db, 'users', userId, 'karafun_state', 'live');
-        const unsubscribe = onSnapshot(stateRef, (snap) => {
-            if (!snap.exists()) {
+        const applyState = (row) => {
+            if (!row) {
                 setKarafunQueue([]);
                 setKarafunNowPlaying(null);
                 setKarafunPlayState('stop');
                 setKarafunConnected(false);
                 return;
             }
-            const data = snap.data();
-            // Idle/infoscreen/stop ambiguity is already resolved by the
-            // relay before it writes this doc (see karafunConnection.js's
-            // own 'status' handler) - currentSong here is only ever a real
-            // song or null, nothing left to re-derive client-side.
-            const transformed = (data.upcoming || []).map((item, idx) => ({
+            // Idle/infoscreen/stop ambiguity is already resolved by the relay
+            // before it writes this row (see karafunConnection.js's own
+            // 'status' handler) - current_song here is only ever a real song
+            // or null, nothing left to re-derive client-side.
+            const transformed = (row.upcoming || []).map((item, idx) => ({
                 id: item.queueId || `${item.title}-${item.artist}-${idx}`,
                 title: item.title || 'Unknown',
                 artist: item.artist || '',
                 singer: item.singer || '',
             })).slice(0, 5); // next 5 songs only
             setKarafunQueue(transformed);
-            setKarafunNowPlaying(data.currentSong || null);
-            setKarafunPlayState(data.playState || 'stop');
-            setKarafunConnected(!!data.connected);
-        });
+            setKarafunNowPlaying(row.current_song || null);
+            setKarafunPlayState(row.play_state || 'stop');
+            setKarafunConnected(!!row.connected);
+        };
 
-        return () => unsubscribe();
+        let cancelled = false;
+        supabase.from('karafun_state').select('*').eq('user_id', userId).maybeSingle()
+            .then(({ data }) => { if (!cancelled) applyState(data); });
+
+        const channel = supabase
+            .channel(`overlay-karafun-${userId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'karafun_state', filter: `user_id=eq.${userId}` },
+                (payload) => applyState(payload.eventType === 'DELETE' ? null : payload.new))
+            .subscribe();
+
+        return () => { cancelled = true; supabase.removeChannel(channel); };
     }, [userId, settings.karafunEnabled, settings.karafunOverlayQueueEnabled, settings.karafunOverlayNowPlayingEnabled]);
 
     // Trigger Now Playing animation ONLY when a genuinely new song starts playing.
@@ -278,7 +331,7 @@ export default function OverlayPage() {
         >
             <AnimatePresence mode="wait">
                 {activeMessage && (
-                    <MessageBubble key={activeMessage.id || activeMessage.timestamp?.seconds || 'default-message-key'} message={activeMessage} settings={effectiveSettings} />
+                    <MessageBubble key={activeMessage.id} message={activeMessage} settings={effectiveSettings} />
                 )}
             </AnimatePresence>
 
