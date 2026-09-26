@@ -1,7 +1,9 @@
 -- StreamCast Pro: RLS hardening from the PR #36 CodeRabbit review
 --
 -- Four independent fixes, safe to apply in one go (and idempotent - every
--- policy/function is dropped-if-exists and recreated):
+-- policy/function is dropped-if-exists and recreated). Amended 2026-09-27
+-- after first being applied: karaoke_requests_requester_duet's WITH CHECK
+-- now also restricts status (re-applied live on its own, see section 3).
 --
 -- 1. users_insert: remove 0007's username-based bootstrap branch. It trusted
 --    the client-supplied twitch_username, so any new account could insert
@@ -109,12 +111,16 @@ create policy karaoke_requests_claim_public on public.karaoke_requests for updat
               and (target_singer_id is null or target_singer_id = auth.uid())
               and (is_channel_moderator(user_id) or is_participating_singer(user_id)));
 
--- Requester's own duet invite (drop / reinvite after decline) - USING
--- already describes a valid result row here, made explicit for clarity.
+-- Requester's own duet invite. The requester only ever drops it
+-- (dropDeclinedDuet / singSoloAfterDecline -> 'dropped') or re-invites
+-- (reinviteDuet -> 'pending' with a new target). 'accepted'/'declined' are
+-- the invitee's answer (target_responds above) - letting the requester
+-- write 'accepted' would let them queue a duet under someone's name without
+-- that person ever agreeing (resolveQueueSingerName trusts the status).
 drop policy if exists karaoke_requests_requester_duet on public.karaoke_requests;
 create policy karaoke_requests_requester_duet on public.karaoke_requests for update to authenticated
   using (requested_by = auth.uid() and kind = 'duet')
-  with check (requested_by = auth.uid() and kind = 'duet');
+  with check (requested_by = auth.uid() and kind = 'duet' and status in ('pending', 'dropped'));
 
 -- ============================================================
 -- 4. get_broadcaster_profile (+ twitch_id)

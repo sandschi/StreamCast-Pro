@@ -21,8 +21,12 @@ services" decision for the full reasoning.
   compatibility).
 - `volumes/db/*.sql` - Postgres init scripts run once on first boot (realtime,
   webhooks, roles, JWT settings, `_supabase` schema, logs, pooler support).
-- `volumes/db/data/` - Postgres's actual data directory. Gitignored, created at
-  runtime, never committed.
+- `schema/` - this app's own numbered migrations (tables, RLS, pg_cron jobs,
+  realtime publication, later fixes). **Not** run by the compose file - see
+  post-deploy step 2.
+- Postgres's actual data lives in the Docker-managed named volume `db-data`
+  (not a path in this repo - a bind mount inside the git checkout got wiped on
+  every Dokploy redeploy, since each deploy re-clones the repo).
 - `volumes/pooler/pooler.exs` - Supavisor (connection pooler) config.
 - `volumes/snippets/`, `volumes/functions/` - empty, kept only so Studio's
   snippet-management UI has somewhere to mount; no edge functions actually run.
@@ -39,7 +43,13 @@ what each one is for.
    bundled in the `supabase/postgres` image, just needs enabling. Keep
    `POSTGRES_DB=postgres` (the default) - pg_cron is documented to break on
    self-hosted instances when it's renamed (supabase/supabase#42413).
-2. Configure the Twitch provider's redirect URI
+2. Apply every file in `schema/` in numeric order (`0001_…` first), after
+   step 1 - `0003_cron.sql` registers the pg_cron jobs that expire active
+   messages and karaoke requests (pending duet invites, public requests), so
+   without it those rows never time out. Every later file assumes the earlier
+   ones. Verify with `select jobname, active from cron.job;` (expect 5 active
+   jobs).
+3. Configure the Twitch provider's redirect URI
    (`https://base.sandschi.xyz/auth/v1/callback`) as a second redirect URI on
    the existing Twitch Developer Console app (same Client ID Firebase already
    uses) - do not create a new Twitch app.
