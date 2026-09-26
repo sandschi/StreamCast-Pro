@@ -2,9 +2,9 @@
 
 const io = require('socket.io-client');
 
-// How long to coalesce rapid queue/status events into a single Firestore
-// write - KaraFun can emit 'queue' faster than the UI (or Firestore's own
-// write quota) needs. See docs/karafun-relay-design.md §3.2.
+// How long to coalesce rapid queue/status events into a single write -
+// KaraFun can emit 'queue' faster than the UI needs. See
+// docs/karafun-relay-design.md §3.2.
 const STATE_WRITE_DEBOUNCE_MS = 500;
 
 // 'serverUnreacheable' is KaraFun telling us the party channel isn't open
@@ -32,25 +32,25 @@ const UNREACHABLE_RETRY_MS = 5_000;
 // multi-hour stream.
 const HARD_REFRESH_INTERVAL_MS = 60_000;
 
-// Mirrors one KaraFun party's live queue/status into
-// users/{userId}/karafun_state/live, replacing the direct client-side
-// socket.io connections previously opened independently by
-// useKaraFunData.js (dashboard) and overlay/[userId]/page.js (overlay).
-// The connect/authenticate handshake and the queue/status transform logic
-// below are ported as-is from useKaraFunData.js - not reinvented - since
-// that shape was already verified live against KaraFun's real protocol
-// (see issue #27, cited in docs/karafun-relay-design.md §0/§3.1).
+// Mirrors one KaraFun party's live queue/status into public.karafun_state
+// (user_id=userId), replacing the direct client-side socket.io connections
+// previously opened independently by useKaraFunData.js (dashboard) and
+// overlay/[userId]/page.js (overlay). The connect/authenticate handshake and
+// the queue/status transform logic below are ported as-is from
+// useKaraFunData.js - not reinvented - since that shape was already verified
+// live against KaraFun's real protocol (see issue #27, cited in
+// docs/karafun-relay-design.md §0/§3.1).
 class KaraFunConnection {
-    constructor({ db, userId, partyId }) {
-        this.db = db;
+    constructor({ supabaseAdmin, userId, partyId }) {
+        this.supabaseAdmin = supabaseAdmin;
         this.userId = userId;
         this.partyId = partyId;
         this.socket = null;
         // In-memory accumulator - all merge logic below runs synchronously
-        // against this on each event, so only the actual Firestore write is
-        // debounced. Keeps merge logic free of the read-modify-write race a
-        // "read current doc, merge, write" approach would have if two
-        // flushes ever overlapped.
+        // against this on each event, so only the actual write is debounced.
+        // Keeps merge logic free of the read-modify-write race a "read
+        // current row, merge, write" approach would have if two flushes ever
+        // overlapped.
         this.state = { upcoming: [], currentSong: null, playState: null };
         this.writeTimer = null;
         this.dirty = false;
@@ -157,7 +157,6 @@ class KaraFunConnection {
             // useKaraFunData.js's own comment identifies as the fix for
             // that race. Ported verbatim, not reinvented.
             if (upcoming.length === 0) this.state.currentSong = null;
-            this.state.timestamp = Date.now();
             this._scheduleWrite();
         });
 
@@ -215,16 +214,22 @@ class KaraFunConnection {
         if (!this.dirty) return;
         this.dirty = false;
 
-        const ref = this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live');
-        // merge:true - a plain set() here would replace the whole doc and
-        // silently drop activeSingerUid, which AutoSort owns and writes
-        // separately (see autoSort.js's own mirror write) - this fires far
-        // more often (every queue/status event) than that write, so without
-        // merge it would erase the field on almost every mirror tick.
+        // Only ever touches these 4 columns - never active_singer_id, which
+        // AutoSort owns and writes separately (see autoSort.js's own mirror
+        // write). This fires far more often (every queue/status event) than
+        // that write, so upsert only sending these columns (matching
+        // Firestore's old merge:true) is what keeps AutoSort's field intact.
         // currentSong/upcoming are always assigned null/[] explicitly by the
-        // handlers above rather than omitted, so merge:true never leaves a
-        // stale value behind for those two fields.
-        await ref.set({ ...this.state, connected: this.connected, updatedAt: Date.now() }, { merge: true });
+        // handlers above rather than omitted, so this never leaves a stale
+        // value behind for those two.
+        const { error } = await this.supabaseAdmin.from('karafun_state').upsert({
+            user_id: this.userId,
+            current_song: this.state.currentSong,
+            upcoming: this.state.upcoming,
+            play_state: this.state.playState,
+            connected: this.connected,
+        }, { onConflict: 'user_id' });
+        if (error) console.error(`[karafun:${this.userId}] state write failed:`, error.message);
     }
 
     // Awaited by PartyManager._stopParty before it releases this party's

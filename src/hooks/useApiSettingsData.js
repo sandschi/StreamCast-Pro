@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 export const REMOTE_ACTIONS = [
     { group: 'KaraFun Queue', tone: '#3b82f6', items: [
@@ -38,15 +37,20 @@ export function useApiSettingsData({ targetUid, user, privateConfig, setPrivateC
     const handleGenerateToken = async () => {
         if (!user || (!isMasterAdmin && userRole !== 'broadcaster')) return;
 
-        const effectiveUid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
+        const effectiveUid = isMasterAdmin ? (targetUid || user.id) : user.id;
 
         setGeneratingToken(true);
         setError(null);
         try {
             const token = crypto.randomUUID();
-            await setDoc(doc(db, 'users', effectiveUid, 'private', 'config'), {
-                apiToken: token
-            }, { merge: true });
+            // upsert, not update: a broadcaster who has never generated a
+            // token yet has no private_config row at all (no DB trigger
+            // creates one on signup).
+            const { error: upsertError } = await supabase.from('private_config').upsert({
+                user_id: effectiveUid,
+                api_token: token,
+            }, { onConflict: 'user_id' });
+            if (upsertError) throw upsertError;
             if (setPrivateConfig) {
                 setPrivateConfig(prev => ({ ...prev, apiToken: token }));
             }
@@ -61,7 +65,7 @@ export function useApiSettingsData({ targetUid, user, privateConfig, setPrivateC
     const copyApiCommand = async (action) => {
         if (!user || !privateConfig?.apiToken) return;
         const baseUrl = window.location.origin;
-        const uid = isMasterAdmin ? (targetUid || user.uid) : user.uid;
+        const uid = isMasterAdmin ? (targetUid || user.id) : user.id;
 
         const url = `${baseUrl}/api/overlay/${uid}?action=${encodeURIComponent(action)}&token=${encodeURIComponent(privateConfig.apiToken)}`;
 

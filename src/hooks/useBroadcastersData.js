@@ -1,9 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, runTransaction } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import posthog from 'posthog-js';
+
+// BroadcastersPane.js reads the classic Firestore-shaped camelCase fields
+// (twitchUsername/displayName/photoURL) - map the raw snake_case row once
+// here rather than touching that component.
+const mapBroadcasterRow = (row) => ({
+    id: row.id,
+    twitchUsername: row.twitch_username,
+    displayName: row.display_name,
+    photoURL: row.photo_url,
+    status: row.status,
+    lastLogin: row.last_login,
+    createdAt: row.created_at,
+});
 
 // Extracted verbatim from the original inline logic in components/dashboard/Broadcasters.js.
 export function useBroadcastersData() {
@@ -13,46 +25,64 @@ export function useBroadcastersData() {
     const [testingWebhook, setTestingWebhook] = useState(false);
 
     useEffect(() => {
-        const usersRef = collection(db, 'users');
-        const unsubscribe = onSnapshot(usersRef, (snapshot) => {
-            const list = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(u => u.twitchUsername);
-            setBroadcasters(list);
+        if (!supabase) return;
+
+        const load = async () => {
+            const { data, error: fetchError } = await supabase.from('users').select('*');
+            if (fetchError) {
+                console.error('Failed to load broadcasters:', fetchError);
+                setError(fetchError.message || 'Failed to load broadcasters.');
+                setLoading(false);
+                return;
+            }
+            setBroadcasters((data || []).filter(u => u.twitch_username).map(mapBroadcasterRow));
             setError(null);
             setLoading(false);
-        }, (err) => {
-            console.error('Failed to load broadcasters:', err);
-            setError(err.message || 'Failed to load broadcasters.');
-            setLoading(false);
-        });
-        return () => unsubscribe();
+        };
+        load();
+
+        // RLS only lets this table-wide (no filter) subscription see every
+        // row for the master admin - see users_select in
+        // supabase/schema/0002_rls.sql - which is who this pane is gated to.
+        const channel = supabase
+            .channel('broadcasters-data-users')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+                setBroadcasters((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(u => u.id !== payload.old.id);
+                    if (!payload.new.twitch_username) return prev.filter(u => u.id !== payload.new.id);
+                    const row = mapBroadcasterRow(payload.new);
+                    const idx = prev.findIndex(u => u.id === row.id);
+                    if (idx === -1) return [...prev, row];
+                    const next = [...prev];
+                    next[idx] = row;
+                    return next;
+                });
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     }, []);
 
-    // Plain updateDoc had no protection against two admin sessions (two tabs,
+    // Plain update() had no protection against two admin sessions (two tabs,
     // two devices) racing on the same broadcaster's status - whichever write
     // landed last silently won. expectedCurrentStatus is whatever this
-    // session's own snapshot last saw for this broadcaster; the transaction
-    // re-reads the doc and aborts instead of overwriting if that's gone stale,
-    // rather than trusting a value that might be seconds or minutes old.
+    // session's own snapshot last saw for this broadcaster; a conditional
+    // update (WHERE status = expected) is Postgres's equivalent of Firestore's
+    // transaction re-read - it just affects zero rows instead of overwriting
+    // if that's gone stale, rather than trusting a value that might be
+    // seconds or minutes old.
     const setStatus = async (userId, status, expectedCurrentStatus) => {
-        const userRef = doc(db, 'users', userId);
-        let statusActuallyChanged = false;
         try {
-            await runTransaction(db, async (transaction) => {
-                const snap = await transaction.get(userRef);
-                // Match BroadcastersPane's own display fallback (b.status || 'waiting')
-                // so an absent status field compares equal to the 'waiting' the UI
-                // showed, instead of a false stale-rejection on every first decision.
-                const currentStatus = snap.data()?.status || 'waiting';
-                if (expectedCurrentStatus !== undefined && currentStatus !== expectedCurrentStatus) {
-                    throw new Error("This broadcaster's status changed since your list last updated — refresh and try again.");
-                }
-                statusActuallyChanged = currentStatus !== status;
-                transaction.update(userRef, { status });
-            });
+            let query = supabase.from('users').update({ status }).eq('id', userId);
+            if (expectedCurrentStatus !== undefined) query = query.eq('status', expectedCurrentStatus);
+            const { data, error: updateError } = await query.select('status');
+            if (updateError) throw updateError;
+            if (expectedCurrentStatus !== undefined && (!data || data.length === 0)) {
+                throw new Error("This broadcaster's status changed since your list last updated — refresh and try again.");
+            }
             // Re-clicking Approve on an already-approved broadcaster shouldn't
             // fire the event again - only a real transition is worth counting.
+            const statusActuallyChanged = expectedCurrentStatus === undefined || expectedCurrentStatus !== status;
             if (statusActuallyChanged) {
                 if (status === 'approved') posthog.capture('broadcaster_approved', { userId });
                 else if (status === 'denied') posthog.capture('broadcaster_denied', { userId });

@@ -85,12 +85,12 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
 
     const isMod = userRole === 'broadcaster' || userRole === 'mod';
     const isSinger = userRole === 'singer';
-    const myPerm = permissions[user?.uid];
+    const myPerm = permissions[user?.id];
     const iAmParticipating = !!myPerm?.participating;
-    // Twitch OIDC never populates the Firebase Auth user's displayName (see
-    // AuthContext.js) - the real handle lives on the Firestore user doc.
+    // Twitch OIDC never populates a top-level displayName on the auth user
+    // (see AuthContext.js) - the real handle lives on the public.users row.
     const { userData } = useAuth();
-    const singerName = userData?.twitchUsername || user?.displayName || 'Singer';
+    const singerName = userData?.twitch_username || user?.user_metadata?.name || 'Singer';
     // Broadcaster/mod can always add for themselves - the participating gate
     // only exists for the singer role (opting in/out of being pickable).
     const canSelfAdd = isMod || (isSinger && iAmParticipating);
@@ -122,16 +122,16 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // emptied instead of lagging a render behind.
     const visibleResults = searchTerm ? results : [];
 
-    const myRequests = requests.filter(r => r.kind !== 'duet' && r.targetSingerUid === user?.uid && r.status === 'pending');
+    const myRequests = requests.filter(r => r.kind !== 'duet' && r.targetSingerUid === user?.id && r.status === 'pending');
     const publicRequests = requests.filter(r => r.kind !== 'duet' && r.status === 'public');
-    const myDuetInvites = requests.filter(r => r.kind === 'duet' && r.targetSingerUid === user?.uid && r.status === 'pending');
+    const myDuetInvites = requests.filter(r => r.kind === 'duet' && r.targetSingerUid === user?.id && r.status === 'pending');
     // Duets I asked for that came back declined - my move now: solo, drop, or ask someone else.
-    const myDeclinedDuets = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'declined');
+    const myDeclinedDuets = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.id && r.status === 'declined');
     // A duet invite I sent that's still waiting on the other singer - shown so
     // it can be cancelled directly instead of only ever timing out on its own
-    // (5 min to expireKaraokeRequests, invisible to the invitee's UI as a
-    // duet the whole time either way).
-    const myPendingDuetInvites = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.uid && r.status === 'pending');
+    // (5 min to the expiry cron, invisible to the invitee's UI as a duet the
+    // whole time either way).
+    const myPendingDuetInvites = requests.filter(r => r.kind === 'duet' && r.requestedBy === user?.id && r.status === 'pending');
 
     // Best-effort correlation: KaraFun's own queue has no id we get back from
     // queueAdd, so "am I on air" is inferred from the display name we sent
@@ -171,7 +171,7 @@ export default function KaraokePane({ t, d, targetUid, userRole, user, userSetti
     // KaraFun's own status event confirms something is already playing -
     // otherwise the one person who'd actually need Play (to start their own
     // turn) is exactly the one person who never sees it.
-    const isMyTurn = onAirNames.includes(singerName) || nextSingerUid === user?.uid;
+    const isMyTurn = onAirNames.includes(singerName) || nextSingerUid === user?.id;
 
     const [pitch, setPitch] = useState(0);
     const [tempo, setTempo] = useState(0);

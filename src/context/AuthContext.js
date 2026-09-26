@@ -1,15 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-    onAuthStateChanged,
-    signInWithPopup,
-    signOut,
-    OAuthProvider,
-    getAdditionalUserInfo
-} from 'firebase/auth';
-import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import posthog from 'posthog-js';
 
 const AuthContext = createContext();
@@ -20,78 +12,130 @@ export function AuthProvider({ children }) {
     const [twitchToken, setTwitchToken] = useState(null);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
+    // supabase.auth.refreshSession() itself fires a new onAuthStateChange
+    // event unconditionally, every time it's called - without this guard,
+    // step 3 below calls refreshSession() on every fire, which fires a new
+    // event, which calls refreshSession() again, forever. Only needs to run
+    // once per browser session (the claim doesn't change again after that),
+    // so a ref (not React state, which is stale inside this closure) tracks
+    // whether it already ran.
+    const masterAdminClaimResolved = useRef(false);
 
     useEffect(() => {
-        if (!auth || !auth.onAuthStateChanged) {
+        if (!supabase) {
             setTimeout(() => setLoading(false), 0);
             return;
         }
 
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        // Supabase-js deadlocks if any supabase.auth.* method (getSession,
+        // refreshSession, etc.) is awaited synchronously inside this callback -
+        // it internally serializes auth state-change processing, and a nested
+        // call blocks on a lock the SDK itself is still holding. Deferring the
+        // whole body with setTimeout(0) is the documented workaround (this
+        // handler calls getSession()/refreshSession() below).
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          setTimeout(async () => {
+            const currentUser = session?.user ?? null;
             if (currentUser) {
-                console.log('Auth State: Active', currentUser.uid);
+                console.log('Auth State: Active', currentUser.id);
 
-                // 1. Sync User Metadata (always update on session start)
-                const userRef = doc(db, 'users', currentUser.uid);
-                const userSnapshot = await getDoc(userRef);
-                const existingData = userSnapshot.data();
+                // 1. Resolve whether this is a brand-new signup. Firebase's
+                // signInWithPopup gave this for free via getAdditionalUserInfo;
+                // the redirect flow (confirmed plan decision) has no equivalent,
+                // so it's re-derived from whether a users row already exists -
+                // see migration plan §3.
+                const { data: existingRow } = await supabase
+                    .from('users')
+                    .select('status, twitch_username')
+                    .eq('id', currentUser.id)
+                    .maybeSingle();
+                const isNewUser = !existingRow;
 
-                // Determine initial status. isSandschi (twitchUsername-based) only
-                // ever drives the auto-approval decision below, not the client
-                // isMasterAdmin flag (see the custom-claims block further down) -
-                // twitchUsername is populated once from the raw OAuth response at
-                // login (loginWithTwitch) and locked from further client writes in
-                // firestore.rules, so it's stale-but-safe to trust for this one
-                // purpose: a returning already-approved user's status is left alone
-                // regardless (see the condition below), so a stale twitchUsername
-                // here can only ever affect a not-yet-approved account.
-                let status = existingData?.status;
-                const isSandschi = existingData?.twitchUsername?.toLowerCase() === 'sandschi';
+                // Twitch identity fields live under different keys than
+                // Firebase's OIDC integration used (profile.login /
+                // preferred_username) - Supabase's built-in Twitch provider
+                // maps them to name/slug/nickname instead (verified directly
+                // against a real login's identity_data).
+                const twitchUsername = (currentUser.user_metadata?.name
+                    || currentUser.user_metadata?.slug
+                    || currentUser.user_metadata?.nickname
+                    || '').toLowerCase();
+                // Only ever set status for a brand-new user - a returning
+                // broadcaster's status is left alone. The one exception is
+                // the master admin, but only once their JWT actually carries
+                // the is_master_admin claim (granted server-side by
+                // /api/set-admin-claim from their verified Twitch identity,
+                // step 3 below): RLS only lets a non-'waiting' status through
+                // for that claim, never for a client-side username match. On
+                // a first-ever login the row starts 'waiting' and flips to
+                // 'approved' on the re-entry that refreshSession() triggers
+                // right after the claim is granted.
+                const hasAdminClaim = currentUser.app_metadata?.is_master_admin === true;
+                let status = existingRow?.status || 'waiting';
+                if (hasAdminClaim) status = 'approved';
 
-                if (!status || (isSandschi && status !== 'approved')) {
-                    status = isSandschi ? 'approved' : 'waiting';
-                }
-
-                // Master-admin UI/rules detection: a Firebase custom claim, set
-                // server-side by this same account after login, instead of the
-                // twitchUsername field above — claims survive a Twitch handle
-                // rename (twitchUsername freezes at whatever it was on first
-                // write; see #19), and are never client-writable at all, unlike a
-                // Firestore field that's merely rules-locked from update.
-                // Safe/cheap to call every session: the route is a no-op for
-                // every UID except the one hardcoded master-admin account.
-                try {
-                    const idToken = await currentUser.getIdToken();
-                    await fetch('/api/set-admin-claim', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${idToken}` },
-                    });
-                    const tokenResult = await currentUser.getIdTokenResult(true); // force refresh to pick up a just-set claim
-                    setIsMasterAdmin(tokenResult.claims.isMasterAdmin === true);
-                } catch (e) {
-                    console.error('Error resolving master-admin claim:', e);
-                    setIsMasterAdmin(false);
-                }
-                const updateData = {
-                    twitchId: currentUser.providerData[0].uid,
-                    lastLogin: new Date().toISOString(),
-                    status: status // Persist approval status
+                // 2. Upsert profile. The UNIQUE constraint on twitch_username
+                // (schema) replaces Firestore's separate usernames/{username}
+                // lookup collection entirely - no create-then-check dance
+                // needed. twitch_username is only ever included for a brand
+                // new row; RLS's enforce_users_update trigger locks it (and
+                // status) from a non-admin's later updates, matching
+                // firestore.rules' old lock.
+                const upsertData = {
+                    id: currentUser.id,
+                    twitch_id: currentUser.user_metadata?.provider_id || currentUser.user_metadata?.sub,
+                    display_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name,
+                    last_login: new Date().toISOString(),
+                    status,
                 };
-                if (currentUser.photoURL) {
-                    updateData.photoURL = currentUser.photoURL;
+                const photoURL = currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture;
+                if (photoURL) upsertData.photo_url = photoURL;
+                if (isNewUser) upsertData.twitch_username = twitchUsername;
+
+                // supabase-js resolves with { error } on a PostgREST/RLS
+                // rejection instead of throwing - the catch only covers
+                // network-level failures.
+                try {
+                    const { error: upsertError } = await supabase.from('users').upsert(upsertData);
+                    if (upsertError) console.error('Error syncing user profile:', upsertError);
+                } catch (e) {
+                    console.error('Error syncing user profile:', e);
                 }
 
-                await setDoc(userRef, updateData, { merge: true });
+                // 3. Master-admin claim resolution: same "safe every login,
+                // no-op for everyone else" shape as before - see
+                // /api/set-admin-claim. Only ever attempted once per browser
+                // session (see masterAdminClaimResolved above) - otherwise
+                // refreshSession()'s own resulting event re-enters this whole
+                // handler and calls refreshSession() again indefinitely.
+                if (!masterAdminClaimResolved.current) {
+                    masterAdminClaimResolved.current = true;
+                    try {
+                        const { data: { session: currentSession } } = await supabase.auth.getSession();
+                        await fetch('/api/set-admin-claim', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${currentSession.access_token}` },
+                        });
+                        // Force-refresh to pick up a just-set app_metadata claim -
+                        // same reasoning as Firebase's getIdTokenResult(true).
+                        const { data: refreshed } = await supabase.auth.refreshSession();
+                        setIsMasterAdmin(refreshed?.session?.user?.app_metadata?.is_master_admin === true);
+                    } catch (e) {
+                        console.error('Error resolving master-admin claim:', e);
+                        setIsMasterAdmin(false);
+                    }
+                } else {
+                    setIsMasterAdmin(currentUser.app_metadata?.is_master_admin === true);
+                }
 
-                // 2. Resolve Twitch Token (private, encrypted at rest - see
-                // /api/twitch-token). Goes through that route rather than a
-                // direct Firestore read: firestore.rules denies the client
-                // SDK access to this document, so the Admin-SDK-backed route
-                // is the only way to get the decrypted value back.
+                // 4. Resolve Twitch token (private, encrypted at rest - see
+                // /api/twitch-token). RLS denies the client any access to
+                // private_twitch_tokens at all, so this route (service-role
+                // backed) is the only way to get the decrypted value back.
                 try {
-                    const tokenIdToken = await currentUser.getIdToken();
+                    const { data: { session: tokenSession } } = await supabase.auth.getSession();
                     const tokenRes = await fetch('/api/twitch-token', {
-                        headers: { Authorization: `Bearer ${tokenIdToken}` },
+                        headers: { Authorization: `Bearer ${tokenSession.access_token}` },
                     });
                     const tokenJson = await tokenRes.json();
                     if (tokenJson.accessToken) setTwitchToken(tokenJson.accessToken);
@@ -99,14 +143,55 @@ export function AuthProvider({ children }) {
                     console.error('Error resolving Twitch token:', e);
                 }
 
-                const userDoc = await getDoc(userRef);
-                console.log('User Profile:', userDoc.data()?.twitchUsername || 'NO_USERNAME');
-                setUserData(userDoc.data());
+                // 5. Store the Twitch OAuth provider token. Only present on
+                // the SIGNED_IN event right after a fresh redirect back from
+                // Twitch, not on later session restores/refreshes - mirrors
+                // Firebase's credential-only-on-signIn behavior.
+                if (event === 'SIGNED_IN' && session?.provider_token) {
+                    setTwitchToken(session.provider_token);
+                    try {
+                        await fetch('/api/twitch-token', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                            body: JSON.stringify({ accessToken: session.provider_token }),
+                        });
+                    } catch (e) {
+                        console.error('Error storing Twitch token:', e);
+                    }
+                }
+
+                // Discord notification for new signups. The username match
+                // only suppresses a notification here - it grants nothing.
+                if (isNewUser && twitchUsername !== 'sandschi') {
+                    try {
+                        await fetch('/api/notify-signup', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                userId: currentUser.id,
+                                userData: {
+                                    twitchUsername,
+                                    displayName: upsertData.display_name,
+                                    photoURL: upsertData.photo_url,
+                                    lastLogin: upsertData.last_login,
+                                    status,
+                                },
+                            }),
+                        });
+                    } catch (notifyError) {
+                        console.error('Failed to send Discord notification:', notifyError);
+                        // Don't block login if notification fails
+                    }
+                }
+
+                const { data: freshRow } = await supabase.from('users').select('*').eq('id', currentUser.id).single();
+                console.log('User Profile:', freshRow?.twitch_username || 'NO_USERNAME');
+                setUserData(freshRow);
                 setUser(currentUser);
                 // Ties every event this session sends to a real person instead of an
                 // anonymous browser distinct_id - runs on every session restore, not
-                // just an interactive login, since onAuthStateChanged fires for both.
-                posthog.identify(currentUser.uid);
+                // just an interactive login, since onAuthStateChange fires for both.
+                posthog.identify(currentUser.id);
             } else {
                 setIsMasterAdmin(false);
                 setUser(null);
@@ -114,111 +199,32 @@ export function AuthProvider({ children }) {
                 setTwitchToken(null);
             }
             setLoading(false);
+          }, 0);
         });
 
-        return () => unsubscribe();
+        return () => subscription.unsubscribe();
     }, []);
 
     const loginWithTwitch = async () => {
-        const provider = new OAuthProvider('oidc.twitch');
-        // Note: Twitch OIDC requires configuration in Firebase Console
-        provider.addScope('chat:read');
-        provider.addScope('chat:edit');
-        provider.addScope('channel:read:redemptions');
-        provider.addScope('moderator:read:chatters');
-
+        // Redirect flow (confirmed plan decision, not a popup like Firebase's
+        // signInWithPopup) - this navigates away immediately. All post-login
+        // logic lives in onAuthStateChange above, which fires once the user
+        // is redirected back with a session.
         try {
-            const result = await signInWithPopup(auth, provider);
-            const additionalInfo = getAdditionalUserInfo(result);
-            const username = additionalInfo?.profile?.login || additionalInfo?.profile?.preferred_username;
-            const isNewUser = additionalInfo?.isNewUser;
-            const extractedPhotoURL = result.user.photoURL || additionalInfo?.profile?.picture || additionalInfo?.profile?.profile_image_url || null;
-
-            if (username) {
-                const cleanUsername = username.toLowerCase();
-                console.log('Syncing Identity:', cleanUsername);
-                // cleanUsername comes straight from the raw Twitch OAuth response
-                // (profile.login), not currentUser.displayName — Firebase's OIDC
-                // integration never populates displayName for this provider, so
-                // checking it here would always be false.
-                const isSandschi = cleanUsername === 'sandschi';
-                // isMasterAdmin itself is no longer set here — onAuthStateChanged
-                // (which signInWithPopup triggers right after this resolves) derives
-                // the authoritative value from the custom claim instead.
-
-                const userData = {
-                    twitchUsername: cleanUsername,
-                    displayName: result.user.displayName,
-                    photoURL: extractedPhotoURL,
-                };
-                // Only ever set status for a brand-new user (isNewUser, below) or the
-                // real master admin — a returning broadcaster's status was previously
-                // recomputed here on every login with no regard for an existing
-                // approval, silently resetting already-approved broadcasters back to
-                // "waiting" (racing with the correct, preserving logic in
-                // onAuthStateChanged above, so the outcome was non-deterministic).
-                if (isNewUser || isSandschi) {
-                    userData.status = isSandschi ? 'approved' : 'waiting';
-                }
-
-                await setDoc(doc(db, 'users', result.user.uid), userData, { merge: true });
-
-                // Public username -> uid lookup for karaoke.sandschi.xyz/{username}
-                // (see #27). Checked-then-written rather than gated on isNewUser:
-                // the mapping doc is create-only in firestore.rules (a username
-                // can't be reassigned once claimed, matching twitchUsername itself
-                // being locked after creation) so a blind setDoc would fail every
-                // login for anyone who already has one - but this also needs to
-                // self-backfill for every account that signed up before this
-                // lookup existed, which isNewUser alone could never catch.
-                try {
-                    const usernameRef = doc(db, 'usernames', cleanUsername);
-                    if (!(await getDoc(usernameRef)).exists()) {
-                        await setDoc(usernameRef, { uid: result.user.uid });
-                    }
-                } catch (usernameError) {
-                    console.error('Failed to write username lookup:', usernameError);
-                }
-
-                // Send Discord notification for new signups
-                if (isNewUser && !isSandschi) {
-                    try {
-                        await fetch('/api/notify-signup', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                userId: result.user.uid,
-                                userData: {
-                                    ...userData,
-                                    lastLogin: new Date().toISOString()
-                                }
-                            })
-                        });
-                    } catch (notifyError) {
-                        console.error('Failed to send Discord notification:', notifyError);
-                        // Don't block login if notification fails
-                    }
-                }
-            }
-
-            // Capture & Persist Token to Cloud - encrypted at rest via
-            // /api/twitch-token rather than a direct Firestore write (see
-            // firestore.rules: the client SDK no longer has write access to
-            // this document at all).
-            const credential = OAuthProvider.credentialFromResult(result);
-            if (credential?.accessToken) {
-                setTwitchToken(credential.accessToken);
-                try {
-                    const idToken = await result.user.getIdToken();
-                    await fetch('/api/twitch-token', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-                        body: JSON.stringify({ accessToken: credential.accessToken }),
-                    });
-                } catch (e) {
-                    console.error('Error storing Twitch token:', e);
-                }
-            }
+            // GoTrue's built-in Twitch provider has no server-side scope
+            // config at all (checked its actual Go source - no Scopes field
+            // exists on the provider config struct), unlike Firebase's
+            // OAuthProvider.addScope() which configured this per-call. The
+            // true equivalent here is signInWithOAuth's own per-call
+            // `scopes` option, which Supabase does support and forwards
+            // straight through to the provider's OAuth request.
+            await supabase.auth.signInWithOAuth({
+                provider: 'twitch',
+                options: {
+                    redirectTo: window.location.origin,
+                    scopes: 'chat:read chat:edit channel:read:redemptions moderator:read:chatters',
+                },
+            });
         } catch (error) {
             console.error('Login error:', error);
         }
@@ -228,7 +234,7 @@ export function AuthProvider({ children }) {
         // Otherwise the next person to sign in on this device/browser would
         // keep getting merged into the previous user's PostHog identity.
         posthog.reset();
-        return signOut(auth);
+        return supabase.auth.signOut();
     };
 
     return (

@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -51,6 +52,10 @@ server.log
 # karafun relay (see relay/README.md)
 relay/node_modules
 relay/.env
+
+# self-hosted supabase (see supabase/ - migration plan §7): runtime Postgres
+# data directory, never committed
+supabase/volumes/db/data
 
 # design system source (local reference only, not part of the app)
 /Designsystem

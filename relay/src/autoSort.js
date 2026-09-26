@@ -1,7 +1,5 @@
 'use strict';
 
-const { admin } = require('./firebaseAdmin');
-
 // Same constants/reasoning as the original client-side v2 algorithm (see git
 // history / docs/karafun-relay-design.md §5) - not re-derived, just relocated.
 const TICK_INTERVAL_MS = 5_000;
@@ -13,38 +11,37 @@ const PRESENCE_STALE_MS = 90_000;
 // there's no shared module between this package and the Next.js app's src/
 // (same pattern as commandProcessor.js's own wire-protocol table). Only
 // nameFor is actually needed here, not the rest of that hook's surface.
-async function buildNameFor(db, userId) {
-    const [presenceSnap, permsSnap] = await Promise.all([
-        db.collection('users').doc(userId).collection('online').get(),
-        db.collection('users').doc(userId).collection('permissions').get(),
+async function buildNameFor(supabaseAdmin, userId) {
+    const [{ data: presenceRows }, { data: permRows }] = await Promise.all([
+        supabaseAdmin.from('online').select('viewer_id, display_name, twitch_username, last_seen').eq('user_id', userId),
+        supabaseAdmin.from('permissions').select('viewer_id, role, participating, sitting_out, display_name, twitch_username').eq('user_id', userId),
     ]);
 
     const permissions = {};
-    permsSnap.forEach((d) => { permissions[d.id] = d.data(); });
+    (permRows || []).forEach((r) => { permissions[r.viewer_id] = r; });
 
     const now = Date.now();
     const onlineSingers = [];
-    presenceSnap.forEach((d) => {
-        const p = d.data();
-        const perm = permissions[d.id];
-        const role = perm?.role || (d.id === userId ? 'broadcaster' : null);
+    (presenceRows || []).forEach((p) => {
+        const perm = permissions[p.viewer_id];
+        const role = perm?.role || (p.viewer_id === userId ? 'broadcaster' : null);
         if (!ELIGIBLE_ROTATION_ROLES.includes(role)) return;
         const participating = role === 'broadcaster' ? perm?.participating !== false : !!perm?.participating;
         if (!participating) return;
-        const lastSeenMs = p.lastSeen?.toMillis ? p.lastSeen.toMillis() : 0;
+        const lastSeenMs = p.last_seen ? new Date(p.last_seen).getTime() : 0;
         if (now - lastSeenMs >= PRESENCE_STALE_MS) return;
-        onlineSingers.push({ id: d.id, displayName: p.displayName, twitchUsername: p.twitchUsername });
+        onlineSingers.push({ id: p.viewer_id, displayName: p.display_name, twitchUsername: p.twitch_username });
     });
 
     // guest:{name} entries (see src/hooks/useKaraokeData.js) have no
-    // presence/permissions doc at all - their "name" is the id itself. This
+    // presence/permissions row at all - their "name" is the id itself. This
     // has to match the client-side nameFor's own guest: branch exactly,
     // since it's what lets ownerIndexOf (below) and resolveActiveUid
     // recognize a guest's queued song as theirs.
     const nameFor = (uid) => {
         if (uid?.startsWith('guest:')) return uid.slice(6);
         const online = onlineSingers.find((s) => s.id === uid);
-        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitchUsername || permissions[uid]?.displayName || 'someone';
+        return online?.twitchUsername || online?.displayName || permissions[uid]?.twitch_username || permissions[uid]?.display_name || 'someone';
     };
     return { nameFor, permissionsByUid: permissions };
 }
@@ -73,8 +70,8 @@ function resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible) {
 // and hand priority back to whoever's first in rotation, on every gap, not
 // just cold start. Found by live-testing a skip against a real two-singer
 // rotation. This is the one place that resolves it - both the queue-
-// reordering logic below and (via the mirrored karafun_state/live.
-// activeSingerUid field) the dashboard's turn display and the command
+// reordering logic below and (via the mirrored karafun_state.
+// active_singer_id column) the dashboard's turn display and the command
 // route's isMyTurn authorization all read the same answer instead of each
 // re-deriving their own.
 function resolveActiveUid({ currentSong, rotationOrder, nameFor, lastActiveUid }) {
@@ -115,7 +112,7 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, act
     // relay/src/commandProcessor.js), so on the -1 "everyone's sitting out"
     // edge case this falls back to the old naive cursor rather than
     // producing an unusable index.
-    const isEligible = (uid) => permissionsByUid?.[uid]?.sittingOut !== true;
+    const isEligible = (uid) => permissionsByUid?.[uid]?.sitting_out !== true;
     const nextIdx = resolveNextEligibleIdx(rotationOrder, activeIdx, isEligible);
     const cursorIdx = nextIdx === -1 ? (activeIdx === -1 ? 0 : (activeIdx + 1) % rotationOrder.length) : nextIdx;
 
@@ -147,7 +144,7 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, act
 
 // Runs on a fixed interval for every party the relay holds a lease for,
 // regardless of the karafunAutoSortEnabled toggle - it always resolves and
-// mirrors activeSingerUid (see resolveActiveUid above; the dashboard's turn
+// mirrors active_singer_id (see resolveActiveUid above; the dashboard's turn
 // display and the command route's isMyTurn both depend on this being
 // correct even when nobody has opted into actual reordering). The queue-
 // reordering part below stays gated on the toggle (see
@@ -157,8 +154,8 @@ function computeDesiredMove({ upcoming, currentSong, rotationOrder, nameFor, act
 // an auto-sort pass are two producers into one FIFO queue on one consumer,
 // never two sockets racing each other.
 class AutoSort {
-    constructor({ db, userId, connection }) {
-        this.db = db;
+    constructor({ supabaseAdmin, userId, connection }) {
+        this.supabaseAdmin = supabaseAdmin;
         this.userId = userId;
         this.connection = connection;
         this.timer = null;
@@ -188,7 +185,7 @@ class AutoSort {
         // resolved value is null and happens to equal the fresh
         // lastActiveUid=null above - without this, a restart while nothing
         // is playing skips the write entirely and leaves whatever
-        // activeSingerUid the previous relay process last wrote in place.
+        // active_singer_id the previous relay process last wrote in place.
         this.mirroredOnce = false;
     }
 
@@ -203,11 +200,10 @@ class AutoSort {
     }
 
     async _tick() {
-        const settingsSnap = await this.db.collection('users').doc(this.userId).collection('settings').doc('config').get();
-        const settings = settingsSnap.data();
-        const rotationOrder = settings?.karaokeRotationOrder || [];
+        const { data: settingsRow } = await this.supabaseAdmin.from('settings').select('karaoke_rotation_order, appearance').eq('user_id', this.userId).maybeSingle();
+        const rotationOrder = settingsRow?.karaoke_rotation_order || [];
         const { upcoming, currentSong } = this.connection.state;
-        const { nameFor, permissionsByUid } = await buildNameFor(this.db, this.userId);
+        const { nameFor, permissionsByUid } = await buildNameFor(this.supabaseAdmin, this.userId);
 
         // Always resolved and mirrored, independent of the toggle below -
         // see the class comment for why the turn display/authorization need
@@ -216,12 +212,15 @@ class AutoSort {
         if (!this.mirroredOnce || activeUid !== this.lastActiveUid) {
             this.mirroredOnce = true;
             this.lastActiveUid = activeUid;
-            await this.db.collection('users').doc(this.userId).collection('karafun_state').doc('live')
-                .set({ activeSingerUid: activeUid }, { merge: true })
-                .catch((err) => console.error(`[autosort:${this.userId}] failed to mirror activeSingerUid:`, err.message));
+            const { error } = await this.supabaseAdmin.from('karafun_state').upsert({
+                user_id: this.userId, active_singer_id: activeUid,
+            }, { onConflict: 'user_id' });
+            if (error) console.error(`[autosort:${this.userId}] failed to mirror activeSingerUid:`, error.message);
         }
 
-        if (!settings?.karafunAutoSortEnabled) {
+        // karafunAutoSortEnabled lives in the appearance jsonb blob, not a
+        // first-class settings column - see src/lib/settingsMapping.js.
+        if (!settingsRow?.appearance?.karafunAutoSortEnabled) {
             this.pendingSignature = null;
             return;
         }
@@ -243,7 +242,7 @@ class AutoSort {
             this.stallCount += 1;
             if (this.stallCount >= MAX_STALLED_ATTEMPTS) {
                 console.error(`[autosort:${this.userId}] same move keeps being proposed without the queue ever reflecting it - disabling:`, signature);
-                await this._disable(`Stopped after the same reorder (${signature}) didn't take effect ${MAX_STALLED_ATTEMPTS} times in a row.`);
+                await this._disable(settingsRow, `Stopped after the same reorder (${signature}) didn't take effect ${MAX_STALLED_ATTEMPTS} times in a row.`);
                 return;
             }
         } else {
@@ -255,13 +254,18 @@ class AutoSort {
     }
 
     async _issue({ queueId, from, to }) {
-        await this.db.collection('users').doc(this.userId).collection('karafun_commands').add({
+        // requested_by is null (not a sentinel string like the old
+        // Firestore 'auto-sort') - the column is a real uuid FK to
+        // public.users, and requested_by_role: 'system' is what
+        // commandProcessor.js's _process() actually checks to skip
+        // re-authorization, not this field.
+        await this.supabaseAdmin.from('karafun_commands').insert({
+            user_id: this.userId,
             action: 'moveInQueue',
             params: { queueId, from, to },
-            requestedBy: 'auto-sort',
-            requestedByRole: 'system',
+            requested_by: null,
+            requested_by_role: 'system',
             status: 'pending',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
     }
 
@@ -269,12 +273,13 @@ class AutoSort {
     // re-enabling from the dashboard is the only way back on - not a silent
     // self-heal - and writes a reason a human can actually read (see
     // docs/karafun-relay-design.md §5's own complaint that today's disable
-    // is a comment nobody but a developer ever sees).
-    async _disable(reason) {
-        await this.db.collection('users').doc(this.userId).collection('settings').doc('config').set({
-            karafunAutoSortEnabled: false,
-            karafunAutoSortDisabledReason: reason,
-        }, { merge: true });
+    // is a comment nobody but a developer ever sees). Both fields live in
+    // the appearance jsonb blob (see src/lib/settingsMapping.js) - merged in
+    // manually here since this is a separate package with no access to that
+    // helper.
+    async _disable(settingsRow, reason) {
+        const appearance = { ...(settingsRow?.appearance || {}), karafunAutoSortEnabled: false, karafunAutoSortDisabledReason: reason };
+        await this.supabaseAdmin.from('settings').update({ appearance }).eq('user_id', this.userId);
     }
 }
 

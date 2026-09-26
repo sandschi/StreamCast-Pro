@@ -1,56 +1,76 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 // Extracted verbatim from the original inline logic in components/dashboard/Users.js.
 export function useUsersData({ targetUid, user }) {
     const [presence, setPresence] = useState([]);
     const [permissions, setPermissions] = useState({});
-    const effectiveUid = targetUid || user?.uid;
+    const effectiveUid = targetUid || user?.id;
 
     useEffect(() => {
-        if (!effectiveUid) return;
+        if (!effectiveUid || !supabase) return;
 
-        const presenceRef = collection(db, 'users', effectiveUid, 'online');
-        const unsubPresence = onSnapshot(presenceRef, (snapshot) => {
-            const users = [];
-            snapshot.forEach((doc) => {
-                users.push({ id: doc.id, ...doc.data() });
-            });
-            setPresence(users);
+        const mapPresenceRow = (row) => ({
+            id: row.viewer_id, displayName: row.display_name, photoURL: row.photo_url,
+            twitchUsername: row.twitch_username, lastSeen: row.last_seen,
         });
 
-        const permissionsRef = collection(db, 'users', effectiveUid, 'permissions');
-        const unsubPermissions = onSnapshot(permissionsRef, (snapshot) => {
-            const perms = {};
-            snapshot.forEach((doc) => {
-                perms[doc.id] = doc.data();
-            });
-            setPermissions(perms);
-        });
+        supabase.from('online').select('*').eq('user_id', effectiveUid)
+            .then(({ data }) => setPresence((data || []).map(mapPresenceRow)));
 
-        return () => {
-            unsubPresence();
-            unsubPermissions();
-        };
+        const presenceChannel = supabase
+            .channel(`users-data-online-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'online', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                setPresence((prev) => {
+                    if (payload.eventType === 'DELETE') return prev.filter(p => p.id !== payload.old.viewer_id);
+                    const row = mapPresenceRow(payload.new);
+                    const idx = prev.findIndex(p => p.id === row.id);
+                    if (idx === -1) return [...prev, row];
+                    const next = [...prev];
+                    next[idx] = row;
+                    return next;
+                });
+            })
+            .subscribe();
+
+        supabase.from('permissions').select('*').eq('user_id', effectiveUid)
+            .then(({ data }) => {
+                const perms = {};
+                (data || []).forEach(row => { perms[row.viewer_id] = row; });
+                setPermissions(perms);
+            });
+
+        const permissionsChannel = supabase
+            .channel(`users-data-permissions-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'permissions', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                setPermissions((prev) => {
+                    if (payload.eventType === 'DELETE') {
+                        const next = { ...prev };
+                        delete next[payload.old.viewer_id];
+                        return next;
+                    }
+                    return { ...prev, [payload.new.viewer_id]: payload.new };
+                });
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(presenceChannel); supabase.removeChannel(permissionsChannel); };
     }, [effectiveUid]);
 
     const setRole = async (userId, role) => {
         try {
             const pData = presence.find(p => p.id === userId);
             const existingPerm = permissions[userId] || {};
-            const roleRef = doc(db, 'users', effectiveUid, 'permissions', userId);
-
-            await setDoc(roleRef, {
+            await supabase.from('permissions').upsert({
+                user_id: effectiveUid,
+                viewer_id: userId,
                 role,
-                updatedAt: serverTimestamp(),
-                updatedBy: user.uid,
-                displayName: pData?.displayName || existingPerm.displayName || userId,
-                photoURL: pData?.photoURL || existingPerm.photoURL || null,
-                twitchUsername: pData?.twitchUsername || existingPerm.twitchUsername || null
-            }, { merge: true });
+                display_name: pData?.displayName || existingPerm.display_name || userId,
+                photo_url: pData?.photoURL || existingPerm.photo_url || null,
+                twitch_username: pData?.twitchUsername || existingPerm.twitch_username || null,
+            }, { onConflict: 'user_id,viewer_id' });
         } catch (e) {
             console.error('Failed to set role:', e);
         }
@@ -58,8 +78,7 @@ export function useUsersData({ targetUid, user }) {
 
     const removePermission = async (userId) => {
         try {
-            const roleRef = doc(db, 'users', effectiveUid, 'permissions', userId);
-            await deleteDoc(roleRef);
+            await supabase.from('permissions').delete().eq('user_id', effectiveUid).eq('viewer_id', userId);
         } catch (e) {
             console.error('Failed to remove permission:', e);
         }
@@ -71,9 +90,9 @@ export function useUsersData({ targetUid, user }) {
         const permData = permissions[id];
         return {
             id,
-            displayName: pData?.displayName || permData?.displayName || id,
-            twitchUsername: pData?.twitchUsername || permData?.twitchUsername || null,
-            photoURL: pData?.photoURL || permData?.photoURL || null,
+            displayName: pData?.displayName || permData?.display_name || id,
+            twitchUsername: pData?.twitchUsername || permData?.twitch_username || null,
+            photoURL: pData?.photoURL || permData?.photo_url || null,
             role: permData?.role || 'viewer',
             isOnline: !!pData,
             lastSeen: pData?.lastSeen

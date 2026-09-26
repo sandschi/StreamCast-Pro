@@ -1,37 +1,44 @@
 import { NextResponse } from 'next/server';
-import { getAdminAuth } from '@/lib/firebase-admin';
-
-// Same hardcoded UID firestore.rules' isMasterAdmin() checks - see the rules
-// file for why this stays hardcoded rather than moving to any client-supplied
-// or Firestore-field value.
-const MASTER_ADMIN_UID = 'WPifULbh4NePmKpojiAnKwv0rWY2';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { hasMasterAdminTwitchIdentity } from '@/lib/masterAdmin';
 
 // Safe to call on every login for every user: the caller's identity comes
-// only from their own verified ID token (never a client-supplied uid), and
-// the claim is only ever granted to the one hardcoded UID above. Everyone
-// else gets a no-op 200, not an error - this isn't a permission check on the
-// caller, it's just "am I the one account this claim ever applies to."
+// only from their own verified access token (never a client-supplied uid),
+// and the claim is only ever granted to the account linked to the master
+// admin's Twitch user ID (see src/lib/masterAdmin.js). Keyed off the Twitch
+// ID rather than the Supabase UUID because the UUID changes on every
+// auth.users wipe - which used to leave a fresh post-reset login unable to
+// get the claim at all. Everyone else gets a no-op 200, not an error - this
+// isn't a permission check on the caller, it's just "am I the one account
+// this claim ever applies to."
 export async function POST(request) {
     try {
         const authHeader = request.headers.get('authorization') || '';
-        const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-        if (!idToken) {
-            return NextResponse.json({ success: false, error: 'Missing ID token' }, { status: 401 });
+        const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+        if (!accessToken) {
+            return NextResponse.json({ success: false, error: 'Missing access token' }, { status: 401 });
         }
 
-        const adminAuth = await getAdminAuth();
-        const decoded = await adminAuth.verifyIdToken(idToken);
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(accessToken);
+        if (error || !user) {
+            return NextResponse.json({ success: false, error: 'Invalid access token' }, { status: 401 });
+        }
 
-        if (decoded.uid !== MASTER_ADMIN_UID) {
+        if (!hasMasterAdminTwitchIdentity(user)) {
             return NextResponse.json({ success: true, granted: false });
         }
 
-        if (decoded.isMasterAdmin === true) {
+        if (user.app_metadata?.is_master_admin === true) {
             // Already set from a previous login - avoid an unnecessary write.
             return NextResponse.json({ success: true, granted: true, alreadySet: true });
         }
 
-        await adminAuth.setCustomUserClaims(MASTER_ADMIN_UID, { isMasterAdmin: true });
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+            app_metadata: { is_master_admin: true },
+        });
+        if (updateError) throw updateError;
+
         return NextResponse.json({ success: true, granted: true });
     } catch (error) {
         console.error('Error setting admin claim:', error);

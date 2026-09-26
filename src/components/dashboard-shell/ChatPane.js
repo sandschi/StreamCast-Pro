@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { MessageSquare, RefreshCw, XCircle, HandHelping, Zap, Send, ScreenShare, EyeOff, ExternalLink, Link as LinkIcon, ListOrdered, X } from 'lucide-react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
+import { mapSettingsRowToFlat } from '@/lib/settingsMapping';
 import { useAuth } from '@/context/AuthContext';
 import Pane from './Pane';
 import ToolBtn from './ToolBtn';
@@ -26,7 +26,7 @@ const ACTION_BTN = (t) => ({ display: 'flex', alignItems: 'center', gap: 9, heig
 // mounted, just hidden, exactly like the classic Chat.js was) and so the
 // title/status bar chrome can show the same real connection state.
 export default function ChatPane({ t, d, userRole, chat, hidden = false, muted = false }) {
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const {
         effectiveUid,
         displayMessages,
@@ -46,12 +46,16 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
 
     const [overlaySettings, setOverlaySettings] = useState(DEFAULT_SETTINGS);
     useEffect(() => {
-        if (!effectiveUid) return;
-        const ref = doc(db, 'users', effectiveUid, 'settings', 'config');
-        const unsub = onSnapshot(ref, (snap) => {
-            if (snap.exists()) setOverlaySettings({ ...DEFAULT_SETTINGS, ...snap.data() });
-        });
-        return () => unsub();
+        if (!effectiveUid || !supabase) return;
+        supabase.from('settings').select('*').eq('user_id', effectiveUid).maybeSingle()
+            .then(({ data }) => { if (data) setOverlaySettings({ ...DEFAULT_SETTINGS, ...mapSettingsRowToFlat(data) }); });
+        const channel = supabase
+            .channel(`chat-pane-settings-${effectiveUid}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings', filter: `user_id=eq.${effectiveUid}` }, (payload) => {
+                if (payload.eventType !== 'DELETE') setOverlaySettings({ ...DEFAULT_SETTINGS, ...mapSettingsRowToFlat(payload.new) });
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
     }, [effectiveUid]);
 
     const conn = connectionStatus === 'connected' ? 'connected' : connectionStatus === 'connecting' ? 'reconnecting' : 'disconnected';
@@ -64,7 +68,7 @@ export default function ChatPane({ t, d, userRole, chat, hidden = false, muted =
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
     const sendTestMessage = () => sendToScreen({
-        username: user?.displayName || 'Test User', login: 'test', color: '#07fc03', avatarUrl: user?.photoURL || null,
+        username: userData?.display_name || user?.user_metadata?.name || 'Test User', login: 'test', color: '#07fc03', avatarUrl: userData?.photo_url || user?.user_metadata?.avatar_url || null,
         fragments: [{ type: 'text', content: 'This is a test message from the dashboard.' }],
     });
 
