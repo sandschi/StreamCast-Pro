@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { decryptToken } from '@/lib/tokenCrypto';
-
-// Same hardcoded UID is_master_admin() effectively checks (via
-// app_metadata.is_master_admin, set in /api/set-admin-claim) - self-deleting
-// this account would strand the app, so it's blocked here rather than
-// relying on the caller's own good judgment in the UI.
-const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
+import { isMasterAdminUser } from '@/lib/masterAdmin';
 
 // Best-effort: tells Twitch itself to forget this app's authorization, so a
 // deleted account doesn't silently skip Twitch's consent screen on a future
@@ -60,7 +55,9 @@ export async function POST(request) {
         }
         const uid = user.id;
 
-        if (uid === MASTER_ADMIN_UID) {
+        // Self-deleting the master admin would strand the app, so it's
+        // blocked here rather than relying on the UI hiding the button.
+        if (isMasterAdminUser(user)) {
             return NextResponse.json({ success: false, error: 'The master admin account cannot be self-deleted.' }, { status: 403 });
         }
 

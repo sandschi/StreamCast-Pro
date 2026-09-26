@@ -6,10 +6,9 @@
 // event, and turn/ownership are re-derived here from Postgres, never
 // trusted from the request body.
 
-// Same hardcoded UID is_master_admin() and src/app/api/set-admin-claim/route.js
-// check - kept independently here rather than imported, matching how both
-// of those already do it.
-const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
+// Fallback next to the app_metadata.is_master_admin claim (the primary check,
+// which is what is_master_admin() in SQL reads) - see src/lib/masterAdmin.js.
+import { MASTER_ADMIN_UID } from './masterAdmin';
 
 function isFiniteNumber(v) {
     return typeof v === 'number' && Number.isFinite(v);

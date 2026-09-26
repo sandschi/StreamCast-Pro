@@ -136,7 +136,7 @@ export default function OverlayPage() {
             // expires_at is computed server-side at write time (NULL =
             // permanent) - the authoritative expiry, replacing the old
             // Firestore doc's client-trusted `duration` field entirely.
-            setActiveMessage({ ...row.payload, id: row.payload.id || row.created_at, __expiresAt: row.expires_at });
+            setActiveMessage({ ...row.payload, id: row.payload.activeId || row.payload.id || row.created_at, __expiresAt: row.expires_at });
         };
 
         Promise.all([

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { buildSettingsUpdate, extractAppearanceFromFlat } from '@/lib/settingsMapping';
+import { buildSettingsUpdate, extractAppearanceFromFlat, saveSettingsFields } from '@/lib/settingsMapping';
 
 // Public, unauthenticated - identical to what the real karafun.com/{partyId}
 // remote client itself calls, confirmed by driving that page directly and
@@ -60,9 +60,9 @@ export function useKaraFunData({ targetUid, userSettings }) {
         if (!targetUid || !tempPartyId || !supabase) return;
         setIsSavingId(true);
         try {
-            // upsert, not update: a broadcaster who has never set a party ID
-            // yet may have no settings row at all.
-            await supabase.from('settings').upsert({ user_id: targetUid, karafun_party_id: tempPartyId }, { onConflict: 'user_id' });
+            // Mods save this too - see saveSettingsFields for why it isn't a
+            // plain upsert.
+            await saveSettingsFields(supabase, targetUid, { karafun_party_id: tempPartyId });
         } catch (err) {
             console.error("Error saving Party ID:", err);
         } finally {
@@ -74,7 +74,7 @@ export function useKaraFunData({ targetUid, userSettings }) {
         if (!targetUid || !supabase) return;
         try {
             const update = buildSettingsUpdate(field, value, extractAppearanceFromFlat(userSettings));
-            await supabase.from('settings').upsert({ user_id: targetUid, ...update }, { onConflict: 'user_id' });
+            await saveSettingsFields(supabase, targetUid, update);
         } catch (err) {
             console.error(`Error saving ${field}:`, err);
         }

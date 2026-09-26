@@ -1,27 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-// Same hardcoded UID the RLS policies' is_master_admin() effectively checks
-// against (via app_metadata.is_master_admin, set here) - see supabase/schema
-// for why this stays hardcoded rather than moving to any client-supplied or
-// table-field value. Firebase's UID doesn't carry over to Supabase's UUIDs
-// (see migration plan §8), so this is the new value from the master admin's
-// real Twitch login against the new stack.
-//
-// This value changes every time auth.users gets wiped and the master admin
-// logs in fresh (has happened repeatedly during this migration - see the
-// db-data named-volume fix in supabase/docker-compose.yml, which should
-// stop future wipes, plus project memory for the incident history). If
-// logins ever silently stop granting the claim again, check this value
-// against `select id from auth.users where raw_user_meta_data->>'name' =
-// 'sandschi'` before assuming anything else is broken.
-const MASTER_ADMIN_UID = 'ad462962-938e-467f-9bd1-993a0e3e0ba9';
+import { hasMasterAdminTwitchIdentity } from '@/lib/masterAdmin';
 
 // Safe to call on every login for every user: the caller's identity comes
 // only from their own verified access token (never a client-supplied uid),
-// and the claim is only ever granted to the one hardcoded UID above. Everyone
-// else gets a no-op 200, not an error - this isn't a permission check on the
-// caller, it's just "am I the one account this claim ever applies to."
+// and the claim is only ever granted to the account linked to the master
+// admin's Twitch user ID (see src/lib/masterAdmin.js). Keyed off the Twitch
+// ID rather than the Supabase UUID because the UUID changes on every
+// auth.users wipe - which used to leave a fresh post-reset login unable to
+// get the claim at all. Everyone else gets a no-op 200, not an error - this
+// isn't a permission check on the caller, it's just "am I the one account
+// this claim ever applies to."
 export async function POST(request) {
     try {
         const authHeader = request.headers.get('authorization') || '';
@@ -36,7 +25,7 @@ export async function POST(request) {
             return NextResponse.json({ success: false, error: 'Invalid access token' }, { status: 401 });
         }
 
-        if (user.id !== MASTER_ADMIN_UID) {
+        if (!hasMasterAdminTwitchIdentity(user)) {
             return NextResponse.json({ success: true, granted: false });
         }
 
@@ -45,7 +34,7 @@ export async function POST(request) {
             return NextResponse.json({ success: true, granted: true, alreadySet: true });
         }
 
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(MASTER_ADMIN_UID, {
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
             app_metadata: { is_master_admin: true },
         });
         if (updateError) throw updateError;

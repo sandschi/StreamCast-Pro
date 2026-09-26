@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { saveSettingsFields } from '@/lib/settingsMapping';
 
 const PUBLIC_WINDOW_MS = 10 * 60 * 1000;
 const RESPOND_WINDOW_MS = 5 * 60 * 1000;
@@ -68,6 +69,12 @@ export function useKaraokeData({ targetUid, user, userRole }) {
                     const next = idx === -1 ? [...prev, row] : prev.map((r, i) => i === idx ? row : r);
                     return [...next].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
                 });
+            })
+            // DELETE payloads only carry the primary key (id), so the
+            // user_id filter above can never match them - removal needs its
+            // own unfiltered listener. Ids from other channels are no-ops.
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'karaoke_requests' }, (payload) => {
+                setRequests((prev) => prev.filter(r => r.id !== payload.old.id));
             })
             .subscribe();
 
@@ -362,7 +369,18 @@ export function useKaraokeData({ targetUid, user, userRole }) {
             // invite, rejected the duet name, and no song was queued - but this
             // update still ran afterward and marked it accepted anyway, so
             // nothing here surfaced the failure.
-            await supabase.from('karaoke_requests').update({ status: 'accepted' }).eq('id', request.id);
+            //
+            // Only queue if the update actually took: an RLS rejection comes
+            // back as { error } (not a throw), and an invite that's no longer
+            // pending (expired, dropped by the asker) matches 0 rows - either
+            // way the server would reject the duet name anyway.
+            const { data, error } = await supabase.from('karaoke_requests').update({ status: 'accepted' })
+                .eq('id', request.id).eq('status', 'pending').select('id');
+            if (error) {
+                console.error('Error accepting duet invite:', error);
+                return;
+            }
+            if (!data || data.length === 0) return;
             addToQueue(request.songId, `${request.requestedByName} & ${myName}`);
         } else {
             await supabase.from('karaoke_requests').update({ status: 'declined' }).eq('id', request.id);
@@ -385,22 +403,30 @@ export function useKaraokeData({ targetUid, user, userRole }) {
 
     const setRotationOrder = async (uidArray) => {
         if (!targetUid || !supabase) return;
-        await supabase.from('settings').upsert({ user_id: targetUid, karaoke_rotation_order: uidArray }, { onConflict: 'user_id' });
+        try {
+            await saveSettingsFields(supabase, targetUid, { karaoke_rotation_order: uidArray });
+        } catch (e) { console.error('Error saving rotation order:', e); }
+    };
+
+    // A brand-new permissions row (the broadcaster's own first-ever toggle,
+    // since UsersPane never creates one for the owner) needs a role - the
+    // column is NOT NULL - so the owner upserts with role 'mod'. Everyone
+    // else always has an existing row (a mod had to assign a real role
+    // before anyone but the owner can reach these toggles at all) and must
+    // use a plain UPDATE: an upsert is checked against the mod-only INSERT
+    // policy and rewrites user_id/viewer_id (no column grant), so it was
+    // rejected for every singer.
+    const saveOwnPermissionFlag = async (fields) => {
+        const isSelf = targetUid === user.id;
+        const { error } = isSelf
+            ? await supabase.from('permissions').upsert({ user_id: targetUid, viewer_id: user.id, role: 'mod', ...fields }, { onConflict: 'user_id,viewer_id' })
+            : await supabase.from('permissions').update(fields).eq('user_id', targetUid).eq('viewer_id', user.id);
+        if (error) console.error('Error saving karaoke participation:', error);
     };
 
     const toggleParticipating = async (value) => {
         if (!user || !targetUid || !supabase) return;
-        // A brand-new permissions row (the broadcaster's own first-ever
-        // toggle, since UsersPane never creates one for the owner) needs a
-        // role - the column is NOT NULL. Any other case is always an UPDATE
-        // on an existing row (a mod already had to assign a real role before
-        // anyone but the owner can reach this toggle at all), so role is
-        // left out of the payload there and stays whatever it already was.
-        const isSelf = targetUid === user.id;
-        await supabase.from('permissions').upsert({
-            user_id: targetUid, viewer_id: user.id, participating: value,
-            ...(isSelf ? { role: 'mod' } : {}),
-        }, { onConflict: 'user_id,viewer_id' });
+        await saveOwnPermissionFlag({ participating: value });
     };
 
     // Self-service only ("so the user can pass rounds if they go on a
@@ -413,11 +439,7 @@ export function useKaraokeData({ targetUid, user, userRole }) {
     // src/lib/karafunCommands.js).
     const toggleSittingOut = async (value) => {
         if (!user || !targetUid || !supabase) return;
-        const isSelf = targetUid === user.id;
-        await supabase.from('permissions').upsert({
-            user_id: targetUid, viewer_id: user.id, sitting_out: value,
-            ...(isSelf ? { role: 'mod' } : {}),
-        }, { onConflict: 'user_id,viewer_id' });
+        await saveOwnPermissionFlag({ sitting_out: value });
     };
 
     return {

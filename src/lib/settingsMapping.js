@@ -45,6 +45,21 @@ export function buildSettingsRowFromFlat(flat, currentAppearance) {
     return update;
 }
 
+// Writes a partial settings row for a channel that may belong to someone
+// else (a mod on ?host=). Update first, upsert only when no row exists yet:
+// PostgREST's upsert is INSERT ... ON CONFLICT DO UPDATE, which Postgres
+// checks against the owner-only INSERT policy and which also rewrites
+// user_id (no column grant) - so a mod's upsert is always rejected, even
+// though the equivalent plain UPDATE is allowed. Only the owner can create
+// the row, which is exactly when the upsert fallback is needed.
+export async function saveSettingsFields(supabase, userId, fields) {
+    const { data, error } = await supabase.from('settings').update(fields).eq('user_id', userId).select('user_id');
+    if (error) throw error;
+    if (data && data.length > 0) return;
+    const { error: upsertError } = await supabase.from('settings').upsert({ user_id: userId, ...fields }, { onConflict: 'user_id' });
+    if (upsertError) throw upsertError;
+}
+
 // For a consumer that only has the already-flattened settings object (e.g.
 // useKaraFunData, which receives `userSettings` as a prop rather than
 // subscribing to the raw row itself) - reconstructs a best-effort

@@ -308,15 +308,22 @@ services:
     container_name: supabase-pooler
     image: supabase/supavisor:2.9.12
     restart: unless-stopped
-    # Host ports deliberately decoupled from POSTGRES_PORT/POOLER_PROXY_PORT_TRANSACTION
-    # (which stay 5432/6543 for internal service-to-service use) - the
-    # standard 5432 host port was already taken by an unrelated project's own
-    # Postgres on this shared box. SUPAVISOR_HOST_PORT/SUPAVISOR_HOST_POOLER_PORT
-    # are what the relay's direct-Postgres-connection advisory-lock design
-    # (migration plan §5) will actually connect to.
+    # The relay (a Dokploy Swarm service on dokploy-network) reaches this
+    # directly as supabase-pooler:5432 over dokploy-network - the database
+    # password never leaves the box, and no TLS is needed. Swarm services
+    # can only join overlay networks, not this compose project's own
+    # default network, hence dokploy-network rather than the reverse.
+    networks:
+      - default
+      - dokploy-network
+    # Host ports bound to loopback only: reachable from the server itself
+    # (e.g. an SSH tunnel for ad-hoc psql), never from the internet - they
+    # used to be published on all interfaces, which exposed Postgres auth to
+    # anyone. Host port numbers stay decoupled from 5432/6543 because the
+    # standard 5432 host port is taken by an unrelated project on this box.
     ports:
-      - ${SUPAVISOR_HOST_PORT:-5433}:5432
-      - ${SUPAVISOR_HOST_POOLER_PORT:-6544}:6543
+      - 127.0.0.1:${SUPAVISOR_HOST_PORT:-5433}:5432
+      - 127.0.0.1:${SUPAVISOR_HOST_POOLER_PORT:-6544}:6543
     volumes:
       - ./volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:
@@ -358,3 +365,9 @@ services:
 volumes:
   db-config:
   db-data:
+
+networks:
+  # Dokploy's shared overlay network (it attaches api-gw here itself for
+  # Traefik routing; supavisor above joins it explicitly for the relay).
+  dokploy-network:
+    external: true

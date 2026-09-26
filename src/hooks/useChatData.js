@@ -108,7 +108,12 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
         let active = true;
         const fetchUserData = async () => {
             try {
-                const { data } = await supabase.from('users').select('twitch_username, display_name, twitch_id').eq('id', effectiveUid).maybeSingle();
+                // RPC, not a direct users select: RLS only lets a user read
+                // their own users row, so a mod/viewer/singer on ?host= would
+                // get null here and never connect chat at all.
+                const { data: rows, error } = await supabase.rpc('get_broadcaster_profile', { target_id: effectiveUid });
+                if (error) console.error('Error resolving broadcaster profile:', error);
+                const data = rows?.[0];
                 if (!active || !data) return;
                 const name = (data.twitch_username || data.display_name || (effectiveUid === user.id ? user.user_metadata?.name : null))?.toLowerCase().trim();
                 if (name && name !== channelRef.current) {
@@ -235,6 +240,12 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
                     return sortDesc(next);
                 });
             })
+            // DELETE payloads only carry the primary key (id), so the
+            // user_id filter above can never match them - removal needs its
+            // own unfiltered listener. Ids from other channels are no-ops.
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'suggestions' }, (payload) => {
+                setSuggestions((prev) => prev.filter(s => s.id !== payload.old.id));
+            })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
@@ -276,6 +287,10 @@ export function useChatData({ targetUid, userRole, enabled = true }) {
                     const next = idx === -1 ? [...prev, row] : prev.map((m, i) => i === idx ? row : m);
                     return sortAsc(next);
                 });
+            })
+            // Same DELETE-payload limitation as the suggestions listener above.
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_queue' }, (payload) => {
+                setQueuedMessages((prev) => prev.filter(m => m.id !== payload.old.id));
             })
             .subscribe();
 

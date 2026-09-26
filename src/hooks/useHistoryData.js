@@ -34,6 +34,12 @@ export function useHistoryData({ targetUid, userRole }) {
                     return prev.map(h => h.id === payload.new.id ? mapRow(payload.new) : h);
                 });
             })
+            // DELETE payloads only carry the primary key (id), so the
+            // user_id filter above can never match them - removal needs its
+            // own unfiltered listener. Ids from other channels are no-ops.
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'history' }, (payload) => {
+                setHistory((prev) => prev.filter(h => h.id !== payload.old.id));
+            })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
@@ -100,7 +106,10 @@ export function useHistoryData({ targetUid, userRole }) {
             } else {
                 await supabase.from('active_message').upsert({
                     user_id: effectiveUid,
-                    payload,
+                    // Fresh activeId per display - the overlay keys its
+                    // enter/exit animation off it (created_at survives the
+                    // upsert, so it can't tell two messages apart).
+                    payload: { ...payload, activeId: crypto.randomUUID() },
                     expires_at: computeExpiresAt(displayDuration, permanent),
                 }, { onConflict: 'user_id' });
                 console.log('History Sent to Screen ✅');

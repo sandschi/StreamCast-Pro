@@ -50,7 +50,13 @@ Before this can mirror anything for real:
    `SUPABASE_DB_PORT` (Supavisor's **session-mode** pooler, not transaction-mode - advisory locks
    need a stable backend session across queries), `SUPABASE_DB_USER` (Supavisor's
    `postgres.<tenant_id>` tenant-suffixed format), `SUPABASE_DB_PASSWORD`, `SUPABASE_DB_NAME`
-   (usually `postgres`).
+   (usually `postgres`), and `SUPABASE_DB_SSL=false`. The deployed relay reaches Supavisor
+   privately as `supabase-pooler:5432` over Dokploy's `dokploy-network` - the connection is
+   plaintext, so it must never point at the public hostname. The pooler's host ports are bound
+   to `127.0.0.1` on the server, so a local relay needs an SSH tunnel
+   (`ssh -L 5433:127.0.0.1:5433 <server>`, then `SUPABASE_DB_HOST=127.0.0.1`,
+   `SUPABASE_DB_PORT=5433`). Leaving `SUPABASE_DB_SSL` unset means TLS, which this Supavisor
+   doesn't serve - the connection fails instead of leaking the password.
 
 ## Local dev
 

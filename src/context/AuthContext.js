@@ -60,16 +60,19 @@ export function AuthProvider({ children }) {
                     || currentUser.user_metadata?.slug
                     || currentUser.user_metadata?.nickname
                     || '').toLowerCase();
-                const isSandschi = (existingRow?.twitch_username || twitchUsername) === 'sandschi';
-
-                // Same status-preservation logic as before: only ever set
-                // status for a brand-new user or the real master admin - a
-                // returning already-approved broadcaster's status is left
-                // alone regardless.
-                let status = existingRow?.status;
-                if (!status || (isSandschi && status !== 'approved')) {
-                    status = isSandschi ? 'approved' : 'waiting';
-                }
+                // Only ever set status for a brand-new user - a returning
+                // broadcaster's status is left alone. The one exception is
+                // the master admin, but only once their JWT actually carries
+                // the is_master_admin claim (granted server-side by
+                // /api/set-admin-claim from their verified Twitch identity,
+                // step 3 below): RLS only lets a non-'waiting' status through
+                // for that claim, never for a client-side username match. On
+                // a first-ever login the row starts 'waiting' and flips to
+                // 'approved' on the re-entry that refreshSession() triggers
+                // right after the claim is granted.
+                const hasAdminClaim = currentUser.app_metadata?.is_master_admin === true;
+                let status = existingRow?.status || 'waiting';
+                if (hasAdminClaim) status = 'approved';
 
                 // 2. Upsert profile. The UNIQUE constraint on twitch_username
                 // (schema) replaces Firestore's separate usernames/{username}
@@ -89,8 +92,12 @@ export function AuthProvider({ children }) {
                 if (photoURL) upsertData.photo_url = photoURL;
                 if (isNewUser) upsertData.twitch_username = twitchUsername;
 
+                // supabase-js resolves with { error } on a PostgREST/RLS
+                // rejection instead of throwing - the catch only covers
+                // network-level failures.
                 try {
-                    await supabase.from('users').upsert(upsertData);
+                    const { error: upsertError } = await supabase.from('users').upsert(upsertData);
+                    if (upsertError) console.error('Error syncing user profile:', upsertError);
                 } catch (e) {
                     console.error('Error syncing user profile:', e);
                 }
@@ -153,8 +160,9 @@ export function AuthProvider({ children }) {
                     }
                 }
 
-                // Discord notification for new signups
-                if (isNewUser && !isSandschi) {
+                // Discord notification for new signups. The username match
+                // only suppresses a notification here - it grants nothing.
+                if (isNewUser && twitchUsername !== 'sandschi') {
                     try {
                         await fetch('/api/notify-signup', {
                             method: 'POST',

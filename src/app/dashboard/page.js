@@ -134,19 +134,14 @@ function DashboardContent() {
                 setVerifyingMod(false);
             }, 0);
 
-            // isSandschi here only ever feeds the auto-approval decision
-            // below - isMasterAdmin itself comes from AuthContext's custom-
-            // claim check, not from this twitch_username field.
+            // No username-based override here: the master admin is handled
+            // by the claim-based isMasterAdmin branch above, and a
+            // twitch_username match alone must never unlock the dashboard.
             const applyStatus = (data) => {
-                let status = data?.status;
-                const isSandschi = data?.twitch_username?.toLowerCase() === 'sandschi';
-                if (!status || (isSandschi && status !== 'approved')) {
-                    status = isSandschi ? 'approved' : 'waiting';
-                }
-                setBroadcasterStatus(status || 'waiting');
+                setBroadcasterStatus(data?.status || 'waiting');
             };
 
-            supabase.from('users').select('status, twitch_username').eq('id', user.id).maybeSingle()
+            supabase.from('users').select('status').eq('id', user.id).maybeSingle()
                 .then(({ data }) => applyStatus(data));
 
             const channel = supabase
@@ -387,7 +382,7 @@ function DashboardContent() {
             if (error || !last) return;
             await supabase.from('active_message').upsert({
                 user_id: targetUid,
-                payload: last.payload,
+                payload: { ...last.payload, activeId: crypto.randomUUID() },
                 expires_at: computeExpiresAt(userSettings?.displayDuration),
             }, { onConflict: 'user_id' });
         } catch (e) { console.error('Error showing last message:', e); }

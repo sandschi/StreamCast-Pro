@@ -9,10 +9,10 @@
 // alongside this fix for that piece.
 const COMMAND_MAX_AGE_MS = 30_000;
 
-// Same hardcoded UID is_master_admin() and src/lib/karafunCommands.js check -
-// duplicated here for the same reason ACTION_TO_WIRE below is: relay/ and
-// the Next.js app are separate packages/runtimes with no shared module.
-const MASTER_ADMIN_UID = '4a0c4f9e-2f6c-49e7-a8b1-815fc0b6ad3d';
+// Copy of src/lib/masterAdmin.js's MASTER_ADMIN_UID - duplicated here for the
+// same reason ACTION_TO_WIRE below is: relay/ and the Next.js app are
+// separate packages/runtimes with no shared module. Update both together.
+const MASTER_ADMIN_UID = 'ad462962-938e-467f-9bd1-993a0e3e0ba9';
 
 // Authorization-relevant subset of src/lib/karafunCommands.js's
 // KARAFUN_ACTIONS table (turnScoped/ownershipScoped/modOnly), used only by
@@ -129,10 +129,32 @@ class CommandProcessor {
         this._drainLoop().finally(() => { this.draining = false; });
     }
 
+    // Per-row try/catch: an unexpected throw (network error in
+    // _reauthorize, etc.) must neither escape as an unhandled rejection -
+    // which would take the whole relay down, every party included - nor
+    // strand the rest of the pending queue behind it.
     async _drainLoop() {
         while (this.pending.length > 0) {
             const row = this.pending.shift();
-            await this._process(row);
+            try {
+                await this._process(row);
+            } catch (err) {
+                console.error(`[commands:${this.userId}] unexpected error processing command ${row.id}:`, err);
+                await this._markFailed(row.id, `relay error: ${err.message}`);
+            }
+        }
+    }
+
+    // Supabase query builders are thenables with no .catch() method (calling
+    // one throws a TypeError before the query even runs), and they resolve
+    // with { error } rather than rejecting on a PostgREST error - so both
+    // failure shapes are handled here, and this never throws.
+    async _markFailed(commandId, message) {
+        try {
+            const { error } = await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: message }).eq('id', commandId);
+            if (error) console.error(`[commands:${this.userId}] failed to mark command ${commandId} as failed:`, error.message);
+        } catch (err) {
+            console.error(`[commands:${this.userId}] failed to mark command ${commandId} as failed:`, err.message);
         }
     }
 
@@ -141,7 +163,7 @@ class CommandProcessor {
         const toWire = ACTION_TO_WIRE[row.action];
         if (!toWire) {
             console.error(`[commands:${this.userId}] unknown action "${row.action}" on command ${commandId}`);
-            await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: `unknown action: ${row.action}` }).eq('id', commandId).catch(() => {});
+            await this._markFailed(commandId, `unknown action: ${row.action}`);
             return;
         }
 
@@ -157,7 +179,7 @@ class CommandProcessor {
             const decision = await this._reauthorize(row);
             if (!decision.ok) {
                 console.warn(`[commands:${this.userId}] command ${commandId} (${row.action}) failed re-authorization at execution time: ${decision.reason}`);
-                await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: `re-authorization failed: ${decision.reason}` }).eq('id', commandId).catch(() => {});
+                await this._markFailed(commandId, `re-authorization failed: ${decision.reason}`);
                 return;
             }
         }
@@ -171,11 +193,15 @@ class CommandProcessor {
             // app has always had (fire-and-forget), just with real
             // server-side authorization in front of it now instead of none.
             this.connection.emit(wireEvent, payload);
-            await this.supabaseAdmin.from('karafun_commands').update({ status: 'done' }).eq('id', commandId);
         } catch (err) {
             console.error(`[commands:${this.userId}] command ${commandId} (${row.action}) failed:`, err.message);
-            await this.supabaseAdmin.from('karafun_commands').update({ status: 'failed', error: err.message }).eq('id', commandId).catch(() => {});
+            await this._markFailed(commandId, err.message);
+            return;
         }
+        // Outside the try above: the wire emit already happened, so a failed
+        // status write must not relabel an executed command as 'failed'.
+        const { error: doneError } = await this.supabaseAdmin.from('karafun_commands').update({ status: 'done' }).eq('id', commandId);
+        if (doneError) console.error(`[commands:${this.userId}] failed to mark command ${commandId} done:`, doneError.message);
     }
 
     // Mirrors src/lib/karafunCommands.js's authorize()/isMyTurn/
