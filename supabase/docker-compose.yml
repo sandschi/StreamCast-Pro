@@ -251,6 +251,12 @@ services:
     container_name: supabase-db
     image: supabase/postgres:17.6.1.136
     restart: unless-stopped
+    # No functional effect - only here to change this service's config hash
+    # so a redeploy is forced to recreate this container, as a deliberate
+    # one-time test that the db-data named volume above actually survives
+    # a real recreation (not just a redeploy that leaves db untouched).
+    labels:
+      - "volume-fix-verified=2026-09-26"
     volumes:
       - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
       - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
