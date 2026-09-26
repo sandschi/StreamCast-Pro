@@ -256,7 +256,18 @@ services:
       - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
       - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
-      - ./volumes/db/data:/var/lib/postgresql/data:Z
+      # Named volume, not a relative bind mount, deliberately - the old
+      # `./volumes/db/data` bind mount lived inside this repo's own git
+      # checkout, and `supabase/volumes/db/data` is (correctly) gitignored,
+      # so it never actually existed in git. Every redeploy re-clones the
+      # repo into a fresh working directory, Docker then auto-creates the
+      # missing bind-mount source as an empty dir, and Postgres happily
+      # initdb's a brand-new empty cluster there - a guaranteed, 100%
+      # reproducible full data wipe on every single deploy (confirmed root
+      # cause of 4 separate incidents, see project memory). A Docker-managed
+      # named volume (matching the already-working db-config pattern below)
+      # lives outside the git checkout entirely, so a fresh clone can't touch it.
+      - db-data:/var/lib/postgresql/data:Z
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
       - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
@@ -340,3 +351,4 @@ services:
 
 volumes:
   db-config:
+  db-data:
