@@ -137,10 +137,6 @@ export function useKaraFunData({ targetUid, userSettings }) {
     // just logs a warning here; the UI's own role-based control hiding
     // (isMyTurn etc., still computed client-side for UX) is what normally
     // keeps a disallowed call from ever being made in the first place.
-    //
-    // NOTE: /api/karafun/[userId]/command itself is still Firebase-backed
-    // (migration plan Phase 5, not yet ported) - this Supabase access token
-    // will be rejected server-side until that route is ported too.
     const sendCommand = async (action, params = {}) => {
         if (!targetUid || !supabase) return;
         try {

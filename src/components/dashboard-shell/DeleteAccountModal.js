@@ -27,9 +27,6 @@ export default function DeleteAccountModal({ t, open, onClose }) {
         setDeleting(true);
         setError(null);
         try {
-            // NOTE: /api/delete-account is still Firebase-backed (migration
-            // plan Phase 5, not yet ported) - this Supabase access token will
-            // be rejected server-side until that route is ported too.
             const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch('/api/delete-account', {
                 method: 'POST',
